@@ -87,6 +87,10 @@ export default function ComptageCaisse() {
     setSelectedDate(getDateFromUrl());
   }, [getDateFromUrl]);
 
+  useEffect(() => {
+    setActionFeedback(null);
+  }, [selectedDate]);
+
   const dateStr = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
 
   const { data: allOrders = [], isLoading: isLoadingOrders } = useQuery({
@@ -106,7 +110,6 @@ export default function ComptageCaisse() {
         const bTime = parseSupabaseDate(b?.updated_date || b?.created_date || b?.date_cloture)?.getTime() || 0;
         return bTime - aTime;
       });
-      window.alert(`Journee du ${format(selectedDate, 'dd/MM/yyyy')} cloturee avec succes.`);
       return sortedClotures.find((cloture) => {
         return getDateKey(cloture?.date_cloture) === dateStr;
       }) || null;
