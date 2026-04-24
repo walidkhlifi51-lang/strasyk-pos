@@ -100,7 +100,12 @@ export default function ComptageCaisse() {
     queryKey: ['clotureForDate', dateStr, currentTenant?.id],
     queryFn: async () => {
       const existingClotures = await appClient.entities.ClotureCaisse.filter(filterByTenant(), '-date_cloture', 200);
-      return (existingClotures || []).find((cloture) => {
+      const sortedClotures = [...(existingClotures || [])].sort((a, b) => {
+        const aTime = parseSupabaseDate(a?.updated_date || a?.created_date || a?.date_cloture)?.getTime() || 0;
+        const bTime = parseSupabaseDate(b?.updated_date || b?.created_date || b?.date_cloture)?.getTime() || 0;
+        return bTime - aTime;
+      });
+      return sortedClotures.find((cloture) => {
         return getDateKey(cloture?.date_cloture) === dateStr;
       }) || null;
     },
@@ -468,6 +473,38 @@ export default function ComptageCaisse() {
     };
   };
 
+  const upsertClotureForDay = async (payloadWithTenant, statut) => {
+    const finalPayload = { ...payloadWithTenant, statut };
+
+    if (clotureDuJour?.id) {
+      return appClient.entities.ClotureCaisse.update(clotureDuJour.id, finalPayload);
+    }
+
+    try {
+      return await appClient.entities.ClotureCaisse.create(finalPayload);
+    } catch (error) {
+      const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+      const duplicateDayError = error?.code === '23505'
+        || message.includes('duplicate key')
+        || message.includes('uq_cloture_caisse_tenant_day');
+
+      if (!duplicateDayError) throw error;
+
+      const existingClotures = await appClient.entities.ClotureCaisse.filter(filterByTenant(), '-date_cloture', 200);
+      const existingForDay = [...(existingClotures || [])]
+        .sort((a, b) => {
+          const aTime = parseSupabaseDate(a?.updated_date || a?.created_date || a?.date_cloture)?.getTime() || 0;
+          const bTime = parseSupabaseDate(b?.updated_date || b?.created_date || b?.date_cloture)?.getTime() || 0;
+          return bTime - aTime;
+        })
+        .find((cloture) => getDateKey(cloture?.date_cloture) === dateStr);
+
+      if (!existingForDay?.id) throw error;
+
+      return appClient.entities.ClotureCaisse.update(existingForDay.id, finalPayload);
+    }
+  };
+
   const handleSaveComptage = async () => {
     setIsSaving(true);
     const payload = buildPayload();
@@ -481,11 +518,7 @@ export default function ComptageCaisse() {
 
       const payloadWithTenant = withTenant(payload);
 
-      if (clotureDuJour) {
-        await appClient.entities.ClotureCaisse.update(clotureDuJour.id, { ...payloadWithTenant, statut: 'en_cours' });
-      } else {
-        await appClient.entities.ClotureCaisse.create({ ...payloadWithTenant, statut: 'en_cours' });
-      }
+      await upsertClotureForDay(payloadWithTenant, 'en_cours');
       toast({
         title: "Succès",
         description: "Comptage enregistré avec succès !",
@@ -497,7 +530,7 @@ export default function ComptageCaisse() {
       console.error("Erreur lors de l'enregistrement du comptage", error);
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue lors de l'enregistrement.",
+        description: error?.message || "Une erreur est survenue lors de l'enregistrement.",
         variant: "destructive",
       });
     }
@@ -531,11 +564,7 @@ export default function ComptageCaisse() {
 
       const payloadWithTenant = withTenant(payload);
 
-      if (clotureDuJour) {
-        await appClient.entities.ClotureCaisse.update(clotureDuJour.id, { ...payloadWithTenant, statut: 'cloturee' });
-      } else {
-        await appClient.entities.ClotureCaisse.create({ ...payloadWithTenant, statut: 'cloturee' });
-      }
+      await upsertClotureForDay(payloadWithTenant, 'cloturee');
 
       toast({
         title: "Succès",
@@ -555,7 +584,7 @@ export default function ComptageCaisse() {
       console.error("Erreur lors de la clôture de caisse", error);
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue lors de la clôture.",
+        description: error?.message || "Une erreur est survenue lors de la clôture.",
         variant: "destructive",
       });
     } finally {
