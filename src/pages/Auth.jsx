@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { appClient } from '@/api/appClient';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,6 @@ const panels = [
 ];
 
 export default function Auth() {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const redirectTo = params.get('redirect') || '/';
@@ -59,9 +57,9 @@ export default function Auth() {
 
     try {
       setLoading(true);
-      await appClient.auth.login({ email, password });
-      navigate(redirectTo);
-      window.location.reload();
+      const normalizedEmail = email.trim().toLowerCase();
+      await appClient.auth.login({ email: normalizedEmail, password });
+      window.location.assign(redirectTo);
     } catch (error) {
       toast({
         title: 'Connexion impossible',
