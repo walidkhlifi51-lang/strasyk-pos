@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-labelledby="title">
+  <title id="title">Strasyk</title>
+  <rect width="420" height="120" rx="18" fill="#ffffff"/>
+  <g transform="translate(28 23)">
+    <rect x="0" y="0" width="74" height="74" rx="16" fill="#06b6d4"/>
+    <path d="M18 24h38M18 37h38M18 50h25" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <text x="122" y="67" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800">Strasyk</text>
+  <text x="125" y="94" fill="#06b6d4" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700">Expert Caisse</text>
+</svg>
