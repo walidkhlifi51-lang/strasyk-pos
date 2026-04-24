@@ -474,7 +474,8 @@ export default function ComptageCaisse() {
   };
 
   const upsertClotureForDay = async (payloadWithTenant, statut) => {
-    const finalPayload = { ...payloadWithTenant, statut };
+    const preservedStatut = clotureDuJour?.statut === 'cloturee' ? 'cloturee' : statut;
+    const finalPayload = { ...payloadWithTenant, statut: preservedStatut };
 
     if (clotureDuJour?.id) {
       return appClient.entities.ClotureCaisse.update(clotureDuJour.id, finalPayload);
@@ -518,7 +519,7 @@ export default function ComptageCaisse() {
 
       const payloadWithTenant = withTenant(payload);
 
-      await upsertClotureForDay(payloadWithTenant, 'en_cours');
+      await upsertClotureForDay(payloadWithTenant, clotureDuJour?.statut === 'cloturee' ? 'cloturee' : 'en_cours');
       toast({
         title: "Succès",
         description: "Comptage enregistré avec succès !",

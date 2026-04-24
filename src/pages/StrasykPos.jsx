@@ -190,10 +190,25 @@ export default function StrasykPos() {
       }).filter(Boolean)
     )];
 
+    const latestClotureByDay = new Map();
+    (cloture || [])
+      .filter(c => c && c.date_cloture)
+      .sort((a, b) => {
+        const aTime = parseSupabaseDate(a?.updated_date || a?.created_date || a?.date_cloture)?.getTime() || 0;
+        const bTime = parseSupabaseDate(b?.updated_date || b?.created_date || b?.date_cloture)?.getTime() || 0;
+        return bTime - aTime;
+      })
+      .forEach((entry) => {
+        const key = getDateKey(entry.date_cloture);
+        if (key && !latestClotureByDay.has(key)) {
+          latestClotureByDay.set(key, entry);
+        }
+      });
+
     const closedDates = new Set(
-      (cloture || []).filter(c => c && c.statut === 'cloturee' && c.date_cloture).map(c => {
-        return getDateKey(c.date_cloture);
-      }).filter(Boolean)
+      [...latestClotureByDay.entries()]
+        .filter(([, entry]) => entry?.statut === 'cloturee')
+        .map(([key]) => key)
     );
 
     const unclosedDays = allUniqueOrderDates.filter(date => date < todayStr && !closedDates.has(date)).sort();
