@@ -78,6 +78,7 @@ export default function ComptageCaisse() {
   const [isSaving, setIsSaving] = useState(false);
   const [includeAllDeliveries, setIncludeAllDeliveries] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [actionFeedback, setActionFeedback] = useState(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -519,7 +520,14 @@ export default function ComptageCaisse() {
 
       const payloadWithTenant = withTenant(payload);
 
-      await upsertClotureForDay(payloadWithTenant, clotureDuJour?.statut === 'cloturee' ? 'cloturee' : 'en_cours');
+      const savedCloture = await upsertClotureForDay(payloadWithTenant, clotureDuJour?.statut === 'cloturee' ? 'cloturee' : 'en_cours');
+      queryClient.setQueryData(['clotureForDate', dateStr, currentTenant?.id], savedCloture);
+      queryClient.setQueryData(['lastCloture', currentTenant?.id], savedCloture);
+      setActionFeedback({
+        type: 'success',
+        title: 'Comptage enregistre',
+        description: `Le comptage du ${format(selectedDate, 'dd/MM/yyyy')} a bien ete enregistre.`,
+      });
       toast({
         title: "Succès",
         description: "Comptage enregistré avec succès !",
@@ -529,6 +537,11 @@ export default function ComptageCaisse() {
       queryClient.invalidateQueries({ queryKey: ['lastCloture', currentTenant?.id] });
     } catch (error) {
       console.error("Erreur lors de l'enregistrement du comptage", error);
+      setActionFeedback({
+        type: 'error',
+        title: 'Echec de l enregistrement',
+        description: error?.message || "Une erreur est survenue lors de l'enregistrement.",
+      });
       toast({
         title: "Erreur",
         description: error?.message || "Une erreur est survenue lors de l'enregistrement.",
@@ -565,7 +578,14 @@ export default function ComptageCaisse() {
 
       const payloadWithTenant = withTenant(payload);
 
-      await upsertClotureForDay(payloadWithTenant, 'cloturee');
+      const savedCloture = await upsertClotureForDay(payloadWithTenant, 'cloturee');
+      queryClient.setQueryData(['clotureForDate', dateStr, currentTenant?.id], savedCloture);
+      queryClient.setQueryData(['lastCloture', currentTenant?.id], savedCloture);
+      setActionFeedback({
+        type: 'success',
+        title: 'Journee cloturee',
+        description: `La journee du ${format(selectedDate, 'dd/MM/yyyy')} a bien ete cloturee.`,
+      });
 
       toast({
         title: "Succès",
@@ -583,6 +603,11 @@ export default function ComptageCaisse() {
       await queryClient.refetchQueries({ queryKey: ['posData'] });
     } catch (error) {
       console.error("Erreur lors de la clôture de caisse", error);
+      setActionFeedback({
+        type: 'error',
+        title: 'Echec de la cloture',
+        description: error?.message || "Une erreur est survenue lors de la clôture.",
+      });
       toast({
         title: "Erreur",
         description: error?.message || "Une erreur est survenue lors de la clôture.",
@@ -630,6 +655,19 @@ export default function ComptageCaisse() {
             </PopoverContent>
           </Popover>
         </div>
+
+        {actionFeedback && (
+          <Card className={`shadow-lg border ${actionFeedback.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <CardContent className="p-4">
+              <p className={`font-semibold ${actionFeedback.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                {actionFeedback.title}
+              </p>
+              <p className={`text-sm mt-1 ${actionFeedback.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                {actionFeedback.description}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Interrupteur pour inclure les livraisons */}
         <div className="bg-blue-50 border-2 border-blue-200/50 rounded-xl p-4 shadow-sm">
