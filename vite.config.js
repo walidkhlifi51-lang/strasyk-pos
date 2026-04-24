@@ -5,6 +5,9 @@ import path from 'node:path'
 // https://vite.dev/config/
 export default defineConfig({
   logLevel: 'error', // Suppress warnings, only show errors
+  build: {
+    outDir: 'dist',
+  },
   resolve: {
     alias: {
       '@': path.resolve(process.cwd(), 'src'),
