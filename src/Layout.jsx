@@ -39,7 +39,7 @@ import { appClient } from "@/api/appClient";
 import { Toaster } from "@/components/ui/toaster";
 
 const navItems = [
-  { name: "Accueil", icon: Home, page: "Dashboard", roles: ['owner', 'manager', 'employee'], resellerRoles: ['reseller_owner', 'reseller_manager', 'reseller_sales', 'reseller_support'] },
+  { name: "Accueil", icon: Home, page: "Dashboard", roles: ['owner', 'manager', 'employee'] },
   { name: "Caisse", icon: Calculator, page: "Pos", roles: ['owner', 'manager', 'employee'] },
   { name: "Plan de Tables", icon: LayoutGrid, page: "PlanDeTables", roles: ['owner', 'manager', 'employee'] },
   { name: "Livraisons", icon: Truck, page: "Livraisons", roles: ['owner', 'manager', 'employee'] },
