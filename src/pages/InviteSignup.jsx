@@ -28,6 +28,7 @@ export default function InviteSignup() {
         const resellerId = params.get('reseller');
         const email = normalizeEmail(params.get('email'));
         const role = params.get('role') || (resellerId ? 'manager' : 'employee');
+        const label = params.get('label') || '';
 
         if (!email || (!tenantId && !resellerId)) {
           setLoading(false);
@@ -35,25 +36,17 @@ export default function InviteSignup() {
         }
 
         if (tenantId) {
-          const allTenants = await appClient.entities.Tenant.list();
-          const tenant = allTenants.find((item) => item.id === tenantId);
-
-          if (!tenant) {
-            setLoading(false);
-            return;
-          }
-
           localStorage.setItem('pending_tenant_invite', JSON.stringify({
             tenant_id: tenantId,
-            owner_email: tenant.owner_email,
             expected_email: email,
             role,
+            label,
             timestamp: Date.now(),
           }));
 
           setContextInfo({
             type: 'tenant',
-            title: tenant.nom_commercial,
+            title: label || 'Commerce invite',
             description: 'Invitation commerce',
             icon: Store,
             email,
@@ -64,24 +57,17 @@ export default function InviteSignup() {
           return;
         }
 
-        const resellers = await appClient.entities.Reseller.list();
-        const reseller = resellers.find((item) => item.id === resellerId);
-
-        if (!reseller) {
-          setLoading(false);
-          return;
-        }
-
         localStorage.setItem('pending_reseller_invite', JSON.stringify({
           reseller_id: resellerId,
           expected_email: email,
           role,
+          label,
           timestamp: Date.now(),
         }));
 
         setContextInfo({
           type: 'reseller',
-          title: reseller.name,
+          title: label || 'Revendeur invite',
           description: 'Invitation revendeur',
           icon: Handshake,
           email,

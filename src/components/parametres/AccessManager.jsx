@@ -36,7 +36,7 @@ export default function AccessManager() {
   const appUrl = getAppBaseUrl();
   
   const getInviteLink = (email, role) => {
-    return `${appUrl}${createPageUrl('InviteSignup')}?tenant=${currentTenant.id}&email=${encodeURIComponent(email)}&role=${role}`;
+    return `${appUrl}${createPageUrl('InviteSignup')}?tenant=${currentTenant.id}&email=${encodeURIComponent(email)}&role=${role}&label=${encodeURIComponent(currentTenant.nom_commercial || '')}`;
   };
 
   const copyInviteLink = (email, role) => {

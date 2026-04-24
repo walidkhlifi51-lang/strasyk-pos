@@ -87,8 +87,8 @@ export default function ResellersPlatform() {
   const [tenantToAttach, setTenantToAttach] = React.useState('');
 
   const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
-    return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}`;
-  }, []);
+    return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}&label=${encodeURIComponent(selectedReseller?.name || '')}`;
+  }, [selectedReseller?.name]);
 
   const copyResellerInviteLink = React.useCallback(async (email, role, resellerId) => {
     const link = getResellerInviteLink(email, role, resellerId);
