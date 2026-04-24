@@ -106,6 +106,7 @@ export default function ComptageCaisse() {
         const bTime = parseSupabaseDate(b?.updated_date || b?.created_date || b?.date_cloture)?.getTime() || 0;
         return bTime - aTime;
       });
+      window.alert(`Journee du ${format(selectedDate, 'dd/MM/yyyy')} cloturee avec succes.`);
       return sortedClotures.find((cloture) => {
         return getDateKey(cloture?.date_cloture) === dateStr;
       }) || null;
@@ -251,6 +252,16 @@ export default function ComptageCaisse() {
       setCaisseCount({especes: '', carte_bancaire: '', cheque: '', ticket_restaurant: ''});
     }
   }, [clotureDuJour]);
+
+  useEffect(() => {
+    if (!actionFeedback?.title) return;
+    if (actionFeedback.title === 'Journee cloturee') {
+      window.alert(actionFeedback.description);
+    }
+    if (actionFeedback.title === 'Echec de la cloture') {
+      window.alert(actionFeedback.description);
+    }
+  }, [actionFeedback]);
 
   const isLoading = isLoadingOrders || isLoadingCloture || isLoadingLastCloture;
 
@@ -573,6 +584,11 @@ export default function ComptageCaisse() {
     }
 
     setIsClosing(true);
+    setActionFeedback({
+      type: 'success',
+      title: 'Traitement en cours',
+      description: `Cloture du ${format(selectedDate, 'dd/MM/yyyy')} en cours...`,
+    });
     try {
       const payload = buildPayload();
 
