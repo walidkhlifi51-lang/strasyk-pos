@@ -538,6 +538,9 @@ export const localAppClient = {
     async exchangeCodeForSession() {
       return true;
     },
+    async verifyOtp() {
+      return true;
+    },
     async updatePassword() {
       return true;
     },

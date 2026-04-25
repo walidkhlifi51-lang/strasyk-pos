@@ -55,9 +55,12 @@ export default function Auth() {
   useEffect(() => {
     const checkRecoveryState = async () => {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-      const recoveryFromHash = hashParams.get('type') === 'recovery';
-      const recoveryFromQuery = params.get('type') === 'recovery';
+      const queryType = params.get('type');
+      const hashType = hashParams.get('type');
+      const recoveryFromHash = hashType === 'recovery';
+      const recoveryFromQuery = queryType === 'recovery';
       const authCode = params.get('code');
+      const tokenHash = params.get('token_hash') || hashParams.get('token_hash');
       const hasRecoverySession = recoveryFromHash || recoveryFromQuery || Boolean(hashParams.get('access_token'));
 
       if (authCode) {
@@ -68,6 +71,25 @@ export default function Auth() {
           setForgotMode(false);
           const cleanUrl = recoveryFromQuery ? '/Auth?type=recovery' : '/Auth';
           window.history.replaceState({}, document.title, cleanUrl);
+          return;
+        } catch (error) {
+          toast({
+            title: 'Lien invalide',
+            description: error.message || 'Le lien de reinitialisation est invalide ou expire.',
+            variant: 'destructive',
+          });
+        } finally {
+          setRecoveryLoading(false);
+        }
+      }
+
+      if (tokenHash && (queryType || hashType)) {
+        try {
+          setRecoveryLoading(true);
+          await appClient.auth.verifyOtp?.({ tokenHash, type: queryType || hashType });
+          setRecoveryMode(true);
+          setForgotMode(false);
+          window.history.replaceState({}, document.title, '/Auth?type=recovery');
           return;
         } catch (error) {
           toast({

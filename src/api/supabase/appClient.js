@@ -235,6 +235,15 @@ export const supabaseAppClient = {
       if (error) throw error;
       return data;
     },
+    async verifyOtp({ tokenHash, type = 'recovery' }) {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type,
+      });
+      if (error) throw error;
+      return data;
+    },
     async updatePassword({ password }) {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase.auth.updateUser({ password });
