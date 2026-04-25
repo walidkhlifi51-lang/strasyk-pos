@@ -532,6 +532,15 @@ export const localAppClient = {
     async me() {
       return clone(getCurrentUser());
     },
+    async requestPasswordReset() {
+      return true;
+    },
+    async updatePassword() {
+      return true;
+    },
+    onAuthStateChange() {
+      return () => {};
+    },
     async updateMe(data = {}) {
       const current = { ...getCurrentUser(), ...data, updated_date: nowIso() };
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(current));

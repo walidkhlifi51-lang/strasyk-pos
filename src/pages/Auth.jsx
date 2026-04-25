@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { appClient } from '@/api/appClient';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { APP_BACKEND_MODE } from '@/config/env';
+import { buildAbsoluteAppUrl } from '@/lib/appUrls';
+import { createPageUrl } from '@/utils';
 import { ArrowRight, ShieldCheck, Sparkles, Store, Truck } from 'lucide-react';
 
 const panels = [
@@ -42,7 +44,34 @@ export default function Auth() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+
+  useEffect(() => {
+    const checkRecoveryState = () => {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const recoveryFromHash = hashParams.get('type') === 'recovery';
+      const recoveryFromQuery = params.get('type') === 'recovery';
+      setRecoveryMode(recoveryFromHash || recoveryFromQuery);
+    };
+
+    checkRecoveryState();
+    const unsubscribe = appClient.auth.onAuthStateChange?.((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true);
+        setForgotMode(false);
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [params]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -70,6 +99,90 @@ export default function Auth() {
       setLoading(false);
     }
   };
+
+  const handleForgotPassword = async (event) => {
+    event.preventDefault();
+
+    if (!resetEmail) {
+      toast({
+        title: 'Email requis',
+        description: 'Renseignez votre email pour recevoir le lien de reinitialisation.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await appClient.auth.requestPasswordReset({
+        email: resetEmail.trim().toLowerCase(),
+        redirectTo: buildAbsoluteAppUrl('/Auth'),
+      });
+      toast({
+        title: 'Email envoye',
+        description: 'Consultez votre boite mail pour definir un nouveau mot de passe.',
+      });
+      setForgotMode(false);
+    } catch (error) {
+      toast({
+        title: 'Envoi impossible',
+        description: error.message || 'Impossible d envoyer le lien de reinitialisation.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (event) => {
+    event.preventDefault();
+
+    if (!newPassword || newPassword.length < 6) {
+      toast({
+        title: 'Mot de passe invalide',
+        description: 'Choisissez un mot de passe d au moins 6 caracteres.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Confirmation incorrecte',
+        description: 'Les deux mots de passe ne correspondent pas.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await appClient.auth.updatePassword({ password: newPassword });
+      toast({
+        title: 'Mot de passe mis a jour',
+        description: 'Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.',
+      });
+      setRecoveryMode(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      window.history.replaceState({}, document.title, '/Auth');
+    } catch (error) {
+      toast({
+        title: 'Mise a jour impossible',
+        description: error.message || 'Impossible de definir le nouveau mot de passe.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cardTitle = recoveryMode ? 'Nouveau mot de passe' : forgotMode ? 'Mot de passe oublie' : 'Connexion';
+  const cardDescription = recoveryMode
+    ? 'Definissez un nouveau mot de passe pour retrouver l acces a votre espace.'
+    : forgotMode
+      ? 'Renseignez votre email. Nous vous enverrons un lien de reinitialisation.'
+      : 'Commercant, employe ou livreur avec un acces deja actif.';
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(160deg,#fff7ed_0%,#ffffff_42%,#eefcf8_100%)] text-slate-950">
@@ -131,45 +244,121 @@ export default function Auth() {
                   <p className="text-sm font-semibold uppercase tracking-[0.08em] text-orange-600">
                     Espace client
                   </p>
-                  <h2 className="mt-2 text-3xl font-bold text-slate-950">Connexion</h2>
+                  <h2 className="mt-2 text-3xl font-bold text-slate-950">{cardTitle}</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Commercant, employe ou livreur avec un acces deja actif.
+                    {cardDescription}
                   </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="vous@exemple.com"
-                      className="h-12 rounded-lg border-slate-300 bg-white"
-                    />
-                  </div>
+                {recoveryMode ? (
+                  <form onSubmit={handleUpdatePassword} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-password">Nouveau mot de passe</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Nouveau mot de passe"
+                        className="h-12 rounded-lg border-slate-300 bg-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Confirmation</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Retapez le mot de passe"
+                        className="h-12 rounded-lg border-slate-300 bg-white"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="h-12 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm hover:from-orange-600 hover:to-red-600"
+                      disabled={loading}
+                    >
+                      {loading ? 'Enregistrement...' : 'Definir le mot de passe'}
+                    </Button>
+                  </form>
+                ) : forgotMode ? (
+                  <form onSubmit={handleForgotPassword} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-email">Email</Label>
+                      <Input
+                        id="reset-email"
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="vous@exemple.com"
+                        className="h-12 rounded-lg border-slate-300 bg-white"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="h-12 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm hover:from-orange-600 hover:to-red-600"
+                      disabled={loading}
+                    >
+                      {loading ? 'Envoi...' : 'Envoyer le lien'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-11 w-full rounded-lg"
+                      onClick={() => setForgotMode(false)}
+                    >
+                      Retour a la connexion
+                    </Button>
+                  </form>
+                ) : (
+                  <>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="vous@exemple.com"
+                          className="h-12 rounded-lg border-slate-300 bg-white"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Mot de passe</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Mot de passe"
-                      className="h-12 rounded-lg border-slate-300 bg-white"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Mot de passe</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Mot de passe"
+                          className="h-12 rounded-lg border-slate-300 bg-white"
+                        />
+                      </div>
 
-                  <Button
-                    type="submit"
-                    className="h-12 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm hover:from-orange-600 hover:to-red-600"
-                    disabled={loading}
-                  >
-                    {loading ? 'Connexion...' : 'Se connecter'}
-                  </Button>
-                </form>
+                      <Button
+                        type="submit"
+                        className="h-12 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm hover:from-orange-600 hover:to-red-600"
+                        disabled={loading}
+                      >
+                        {loading ? 'Connexion...' : 'Se connecter'}
+                      </Button>
+                    </form>
+
+                    <button
+                      type="button"
+                      className="mt-4 text-sm font-medium text-orange-600 hover:text-orange-700"
+                      onClick={() => {
+                        setForgotMode(true);
+                        setResetEmail(email);
+                      }}
+                    >
+                      Mot de passe oublie ?
+                    </button>
+                  </>
+                )}
 
                 <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-900">Nouveau client</p>
@@ -179,7 +368,7 @@ export default function Auth() {
                   <Button
                     variant="outline"
                     className="mt-4 h-11 w-full rounded-lg border-slate-300 bg-white text-slate-900 hover:bg-slate-100"
-                    onClick={() => navigate('/RequestAccess')}
+                    onClick={() => { window.location.href = createPageUrl('RequestAccess'); }}
                   >
                     Creer un compte
                     <ArrowRight className="ml-2 h-4 w-4" />

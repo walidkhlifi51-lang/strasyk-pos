@@ -1,4 +1,5 @@
 import { getSupabaseBrowserClient } from '@/api/supabase/client';
+import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 
 const ENTITY_TABLE_MAP = {
   Tenant: 'tenants',
@@ -219,6 +220,27 @@ export const supabaseAppClient = {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       return data;
+    },
+    async requestPasswordReset({ email, redirectTo }) {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectTo || buildAbsoluteAppUrl('/Auth'),
+      });
+      if (error) throw error;
+      return data;
+    },
+    async updatePassword({ password }) {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      return data;
+    },
+    onAuthStateChange(callback) {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        callback?.(event, session);
+      });
+      return () => data.subscription.unsubscribe();
     },
     async signup({ email, password, full_name = '', redirectTo }) {
       const supabase = getSupabaseBrowserClient();
