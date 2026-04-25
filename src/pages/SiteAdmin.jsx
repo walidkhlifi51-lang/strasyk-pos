@@ -14,7 +14,7 @@ import { useTenant } from '@/components/contexts/TenantContext';
 export default function SiteAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { hasModuleAccess } = useTenant();
+  const { hasModuleAccess, isPlatformAdmin } = useTenant();
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['siteConfig'],
@@ -115,7 +115,7 @@ export default function SiteAdmin() {
     return <div className="p-6">Chargement...</div>;
   }
 
-  if (!hasModuleAccess('can_access_site_admin')) {
+  if (!isPlatformAdmin && !hasModuleAccess('can_access_site_admin')) {
     return (
       <div className="p-6">
         <Card>

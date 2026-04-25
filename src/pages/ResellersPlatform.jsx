@@ -86,33 +86,6 @@ export default function ResellersPlatform() {
   const [newResellerUserForm, setNewResellerUserForm] = React.useState(createEmptyResellerUserForm());
   const [tenantToAttach, setTenantToAttach] = React.useState('');
 
-  const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
-    return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}&label=${encodeURIComponent(selectedReseller?.name || '')}`;
-  }, [selectedReseller?.name]);
-
-  const copyResellerInviteLink = React.useCallback(async (email, role, resellerId) => {
-    const link = getResellerInviteLink(email, role, resellerId);
-    const message = `Bonjour,
-
-Vous etes invite a rejoindre l espace revendeur ${selectedReseller?.name || ''} sur Strasyk POS.
-
-Lien d activation :
-${link}
-
-Etapes :
-1. Ouvrez le lien
-2. Definissez votre mot de passe
-3. Connectez-vous avec votre email
-
-A bientot.`;
-
-    await navigator.clipboard.writeText(message);
-    toast({
-      title: '✅ Invitation copiee',
-      description: 'Le lien d activation revendeur a ete copie.',
-    });
-  }, [getResellerInviteLink, selectedReseller?.name, toast]);
-
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
     queryFn: async () => {
@@ -162,6 +135,33 @@ A bientot.`;
   const selectedResellerUsers = resellerUsers.filter((item) => item.reseller_id === selectedResellerId);
   const selectedCommissions = commissions.filter((item) => item.reseller_id === selectedResellerId);
   const selectedPayouts = payouts.filter((item) => item.reseller_id === selectedResellerId);
+
+  const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
+    return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}&label=${encodeURIComponent(selectedReseller?.name || '')}`;
+  }, [selectedReseller?.name]);
+
+  const copyResellerInviteLink = React.useCallback(async (email, role, resellerId) => {
+    const link = getResellerInviteLink(email, role, resellerId);
+    const message = `Bonjour,
+
+Vous etes invite a rejoindre l espace revendeur ${selectedReseller?.name || ''} sur Strasyk POS.
+
+Lien d activation :
+${link}
+
+Etapes :
+1. Ouvrez le lien
+2. Definissez votre mot de passe
+3. Connectez-vous avec votre email
+
+A bientot.`;
+
+    await navigator.clipboard.writeText(message);
+    toast({
+      title: '✅ Invitation copiee',
+      description: 'Le lien d activation revendeur a ete copie.',
+    });
+  }, [getResellerInviteLink, selectedReseller?.name, toast]);
 
   const linkedTenants = selectedAssignments
     .map((assignment) => ({
