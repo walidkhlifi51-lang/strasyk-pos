@@ -3,13 +3,14 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from '@/config/
 
 let browserClient = null;
 const RECOVERY_HINT_KEY = 'strasyk_recovery_pending';
+const RECOVERY_DATA_KEY = 'strasyk_recovery_payload';
 
 const persistRecoveryHint = () => {
   if (typeof window === 'undefined' || !window.sessionStorage) return;
 
-  const search = window.location.search || '';
-  const hash = window.location.hash || '';
-  const raw = `${search} ${hash}`.toLowerCase();
+  const search = new URLSearchParams(window.location.search || '');
+  const hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  const raw = `${window.location.search || ''} ${window.location.hash || ''}`.toLowerCase();
   const hasRecoveryHint = raw.includes('type=recovery')
     || raw.includes('token_hash=')
     || raw.includes('code=')
@@ -17,6 +18,14 @@ const persistRecoveryHint = () => {
 
   if (hasRecoveryHint) {
     window.sessionStorage.setItem(RECOVERY_HINT_KEY, '1');
+    const payload = {
+      code: search.get('code') || hash.get('code') || '',
+      tokenHash: search.get('token_hash') || hash.get('token_hash') || '',
+      type: search.get('type') || hash.get('type') || '',
+      accessToken: search.get('access_token') || hash.get('access_token') || '',
+      refreshToken: search.get('refresh_token') || hash.get('refresh_token') || '',
+    };
+    window.sessionStorage.setItem(RECOVERY_DATA_KEY, JSON.stringify(payload));
   }
 };
 
@@ -28,6 +37,18 @@ export const hasRecoveryHint = () => {
 export const clearRecoveryHint = () => {
   if (typeof window === 'undefined' || !window.sessionStorage) return;
   window.sessionStorage.removeItem(RECOVERY_HINT_KEY);
+  window.sessionStorage.removeItem(RECOVERY_DATA_KEY);
+};
+
+export const getRecoveryHintData = () => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
+  const raw = window.sessionStorage.getItem(RECOVERY_DATA_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 };
 
 export const getSupabaseBrowserClient = () => {

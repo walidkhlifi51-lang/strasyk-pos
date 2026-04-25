@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { APP_BACKEND_MODE } from '@/config/env';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { createPageUrl } from '@/utils';
-import { clearRecoveryHint, hasRecoveryHint } from '@/api/supabase/client';
+import { clearRecoveryHint, getRecoveryHintData, hasRecoveryHint } from '@/api/supabase/client';
 import { ArrowRight, ShieldCheck, Sparkles, Store, Truck } from 'lucide-react';
 
 const panels = [
@@ -53,6 +53,31 @@ export default function Auth() {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [actionFeedback, setActionFeedback] = useState(null);
+
+  const ensureRecoverySession = async () => {
+    let session = await appClient.auth.getSession?.();
+    if (session) return session;
+
+    const recoveryData = getRecoveryHintData();
+    if (!recoveryData) return null;
+
+    if (recoveryData.accessToken && recoveryData.refreshToken) {
+      await appClient.auth.setSession?.({
+        accessToken: recoveryData.accessToken,
+        refreshToken: recoveryData.refreshToken,
+      });
+    } else if (recoveryData.code) {
+      await appClient.auth.exchangeCodeForSession?.(recoveryData.code);
+    } else if (recoveryData.tokenHash && recoveryData.type) {
+      await appClient.auth.verifyOtp?.({
+        tokenHash: recoveryData.tokenHash,
+        type: recoveryData.type,
+      });
+    }
+
+    session = await appClient.auth.getSession?.();
+    return session || null;
+  };
 
   useEffect(() => {
     const checkRecoveryState = async () => {
@@ -247,7 +272,7 @@ export default function Auth() {
     try {
       setLoading(true);
       setActionFeedback(null);
-      const session = await appClient.auth.getSession?.();
+      const session = await ensureRecoverySession();
       if (!session) {
         throw new Error('Session de reinitialisation introuvable. Ouvrez a nouveau le lien recu par email.');
       }
