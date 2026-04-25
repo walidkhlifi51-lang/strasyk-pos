@@ -52,6 +52,7 @@ export default function Auth() {
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState(null);
 
   useEffect(() => {
     const checkRecoveryState = async () => {
@@ -139,10 +140,15 @@ export default function Auth() {
 
     try {
       setLoading(true);
+      setActionFeedback(null);
       const normalizedEmail = email.trim().toLowerCase();
       await appClient.auth.login({ email: normalizedEmail, password });
       window.location.assign(redirectTo);
     } catch (error) {
+      setActionFeedback({
+        type: 'error',
+        message: error.message || 'Identifiants invalides.',
+      });
       toast({
         title: 'Connexion impossible',
         description: error.message || 'Identifiants invalides.',
@@ -167,9 +173,14 @@ export default function Auth() {
 
     try {
       setLoading(true);
+      setActionFeedback(null);
       await appClient.auth.requestPasswordReset({
         email: resetEmail.trim().toLowerCase(),
         redirectTo: buildAbsoluteAppUrl('/Auth'),
+      });
+      setActionFeedback({
+        type: 'success',
+        message: 'Consultez votre boite mail pour definir un nouveau mot de passe.',
       });
       toast({
         title: 'Email envoye',
@@ -177,6 +188,10 @@ export default function Auth() {
       });
       setForgotMode(false);
     } catch (error) {
+      setActionFeedback({
+        type: 'error',
+        message: error.message || 'Impossible d envoyer le lien de reinitialisation.',
+      });
       toast({
         title: 'Envoi impossible',
         description: error.message || 'Impossible d envoyer le lien de reinitialisation.',
@@ -210,22 +225,33 @@ export default function Auth() {
 
     try {
       setLoading(true);
+      setActionFeedback(null);
       await appClient.auth.updatePassword({ password: newPassword });
+      setActionFeedback({
+        type: 'success',
+        message: 'Mot de passe mis a jour. Vous pouvez maintenant vous connecter.',
+      });
       toast({
         title: 'Mot de passe mis a jour',
         description: 'Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.',
       });
       clearRecoveryHint();
-      setRecoveryMode(false);
       setNewPassword('');
       setConfirmPassword('');
+      setRecoveryMode(false);
       window.history.replaceState({}, document.title, '/Auth');
+      window.alert('Mot de passe mis a jour. Vous pouvez maintenant vous connecter.');
     } catch (error) {
+      setActionFeedback({
+        type: 'error',
+        message: error.message || 'Impossible de definir le nouveau mot de passe.',
+      });
       toast({
         title: 'Mise a jour impossible',
         description: error.message || 'Impossible de definir le nouveau mot de passe.',
         variant: 'destructive',
       });
+      window.alert(error.message || 'Impossible de definir le nouveau mot de passe.');
     } finally {
       setLoading(false);
     }
@@ -307,6 +333,18 @@ export default function Auth() {
                 {recoveryLoading && (
                   <div className="mb-5 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
                     Verification du lien de reinitialisation...
+                  </div>
+                )}
+
+                {actionFeedback && (
+                  <div
+                    className={`mb-5 rounded-lg px-4 py-3 text-sm ${
+                      actionFeedback.type === 'success'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border border-red-200 bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {actionFeedback.message}
                   </div>
                 )}
 
