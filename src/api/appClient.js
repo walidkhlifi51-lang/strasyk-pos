@@ -535,6 +535,9 @@ export const localAppClient = {
     async requestPasswordReset() {
       return true;
     },
+    async exchangeCodeForSession() {
+      return true;
+    },
     async updatePassword() {
       return true;
     },

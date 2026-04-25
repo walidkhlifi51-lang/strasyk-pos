@@ -229,6 +229,12 @@ export const supabaseAppClient = {
       if (error) throw error;
       return data;
     },
+    async exchangeCodeForSession(code) {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+      return data;
+    },
     async updatePassword({ password }) {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase.auth.updateUser({ password });

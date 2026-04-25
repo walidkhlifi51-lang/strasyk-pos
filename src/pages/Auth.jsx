@@ -48,18 +48,42 @@ export default function Auth() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
 
   useEffect(() => {
-    const checkRecoveryState = () => {
+    const checkRecoveryState = async () => {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const recoveryFromHash = hashParams.get('type') === 'recovery';
       const recoveryFromQuery = params.get('type') === 'recovery';
-      setRecoveryMode(recoveryFromHash || recoveryFromQuery);
+      const authCode = params.get('code');
+      const hasRecoverySession = recoveryFromHash || recoveryFromQuery || Boolean(hashParams.get('access_token'));
+
+      if (authCode) {
+        try {
+          setRecoveryLoading(true);
+          await appClient.auth.exchangeCodeForSession?.(authCode);
+          setRecoveryMode(true);
+          setForgotMode(false);
+          const cleanUrl = recoveryFromQuery ? '/Auth?type=recovery' : '/Auth';
+          window.history.replaceState({}, document.title, cleanUrl);
+          return;
+        } catch (error) {
+          toast({
+            title: 'Lien invalide',
+            description: error.message || 'Le lien de reinitialisation est invalide ou expire.',
+            variant: 'destructive',
+          });
+        } finally {
+          setRecoveryLoading(false);
+        }
+      }
+
+      setRecoveryMode(hasRecoverySession);
     };
 
-    checkRecoveryState();
+    void checkRecoveryState();
     const unsubscribe = appClient.auth.onAuthStateChange?.((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true);
@@ -249,6 +273,12 @@ export default function Auth() {
                     {cardDescription}
                   </p>
                 </div>
+
+                {recoveryLoading && (
+                  <div className="mb-5 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+                    Verification du lien de reinitialisation...
+                  </div>
+                )}
 
                 {recoveryMode ? (
                   <form onSubmit={handleUpdatePassword} className="space-y-5">
