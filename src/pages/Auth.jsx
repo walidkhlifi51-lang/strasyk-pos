@@ -53,6 +53,7 @@ export default function Auth() {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [actionFeedback, setActionFeedback] = useState(null);
+  const [recoveryDebug, setRecoveryDebug] = useState(null);
 
   const ensureRecoverySession = async () => {
     let session = await appClient.auth.getSession?.();
@@ -90,10 +91,22 @@ export default function Auth() {
       const tokenHash = params.get('token_hash') || hashParams.get('token_hash');
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
+      const initialSession = await appClient.auth.getSession?.().catch(() => null);
       const hasRecoverySession = recoveryFromHash
         || recoveryFromQuery
         || Boolean(hashParams.get('access_token'))
         || hasRecoveryHint();
+
+      setRecoveryDebug({
+        queryType: queryType || '',
+        hashType: hashType || '',
+        hasCode: Boolean(authCode),
+        hasTokenHash: Boolean(tokenHash),
+        hasAccessToken: Boolean(accessToken),
+        hasRefreshToken: Boolean(refreshToken),
+        recoveryHintStored: hasRecoveryHint(),
+        hasInitialSession: Boolean(initialSession),
+      });
 
       if (accessToken && refreshToken) {
         try {
@@ -273,6 +286,10 @@ export default function Auth() {
       setLoading(true);
       setActionFeedback(null);
       const session = await ensureRecoverySession();
+      setRecoveryDebug((current) => ({
+        ...(current || {}),
+        hasSessionBeforePasswordUpdate: Boolean(session),
+      }));
       if (!session) {
         throw new Error('Session de reinitialisation introuvable. Ouvrez a nouveau le lien recu par email.');
       }
@@ -395,6 +412,25 @@ export default function Auth() {
                     }`}
                   >
                     {actionFeedback.message}
+                  </div>
+                )}
+
+                {(recoveryMode || recoveryLoading) && recoveryDebug && (
+                  <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                    <p className="mb-2 font-semibold text-slate-900">Debug recovery</p>
+                    <div className="space-y-1">
+                      <p>query type: {recoveryDebug.queryType || 'non'}</p>
+                      <p>hash type: {recoveryDebug.hashType || 'non'}</p>
+                      <p>code detecte: {recoveryDebug.hasCode ? 'oui' : 'non'}</p>
+                      <p>token_hash detecte: {recoveryDebug.hasTokenHash ? 'oui' : 'non'}</p>
+                      <p>access_token detecte: {recoveryDebug.hasAccessToken ? 'oui' : 'non'}</p>
+                      <p>refresh_token detecte: {recoveryDebug.hasRefreshToken ? 'oui' : 'non'}</p>
+                      <p>hint stocke: {recoveryDebug.recoveryHintStored ? 'oui' : 'non'}</p>
+                      <p>session initiale: {recoveryDebug.hasInitialSession ? 'oui' : 'non'}</p>
+                      {'hasSessionBeforePasswordUpdate' in recoveryDebug && (
+                        <p>session avant update password: {recoveryDebug.hasSessionBeforePasswordUpdate ? 'oui' : 'non'}</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
