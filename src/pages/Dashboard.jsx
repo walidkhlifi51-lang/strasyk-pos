@@ -247,55 +247,93 @@ export default function Dashboard() {
       : tenantQuickActions;
 
   const statsCards = isReseller ? resellerStatsCards : tenantStatsCards;
+  const heroTitle = isReseller ? "Pilotage revendeur" : "Accueil";
+  const heroDescription = isReseller
+    ? `Suivez votre portefeuille, vos commissions et vos acces depuis ${currentReseller?.name || 'votre espace revendeur'}.`
+    : "Retrouvez les chiffres du jour et les acces utiles depuis une interface adaptee a l ordinateur comme au telephone.";
+  const heroBadge = isReseller
+    ? `${resellerSummary?.tenantsCount ?? 0} commerces actifs`
+    : `${todayOrders.length} commandes aujourd hui`;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="p-6 md:p-8 max-w-7xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Tableau de bord
-          </h1>
-          <p className="text-gray-600">
-            {isReseller
-              ? `Vue synthese du portefeuille revendeur ${currentReseller?.name || ''}.`
-              : "Une solution de caisse complete et securisee pour votre point de vente."}
-          </p>
+    <div className="min-h-screen bg-slate-100">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-orange-700 text-white shadow-xl">
+          <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)] lg:items-end lg:p-8">
+            <div>
+              <div className="mb-4 inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-100">
+                Tableau de bord
+              </div>
+              <h1 className="max-w-2xl text-2xl font-bold leading-tight sm:text-3xl lg:text-5xl">
+                {heroTitle}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm text-slate-200 sm:text-base">
+                {heroDescription}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-100">
+                Vue rapide
+              </p>
+              <p className="mt-2 text-2xl font-bold sm:text-3xl">{heroBadge}</p>
+              <p className="mt-2 text-sm text-slate-200">
+                {isReseller
+                  ? `${resellerSummary?.usersCount ?? 0} comptes revendeur actifs dans l espace.`
+                  : `${products.length} produits disponibles et ${customerCount} clients en base.`}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
           {statsCards.map((stat, index) => (
-            <Card key={index} className="border-0 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            <Card key={index} className="border-0 shadow-md transition-shadow hover:shadow-lg">
+              <CardContent className="p-4 sm:p-5 lg:p-6">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 sm:text-xs">
                     {stat.title}
                   </span>
-                  <div className={`${stat.bgColor} p-2 rounded-lg`}>
-                    <stat.icon className="w-5 h-5 text-white" />
+                  <div className={`${stat.bgColor} rounded-xl p-2.5 shadow-sm`}>
+                    <stat.icon className="h-5 w-5 text-white" />
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {stat.restricted ? <span className="text-xl text-gray-400">Acces restreint</span> : stat.value}
+                <div className="min-h-[2.75rem] text-2xl font-bold leading-tight text-gray-900 sm:text-3xl">
+                  {stat.restricted ? <span className="text-lg text-gray-400">Acces restreint</span> : stat.value}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Acces Rapides
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="mb-6">
+          <div className="mb-4 flex flex-col gap-2 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Navigation</p>
+              <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+                Acces Rapides
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm text-gray-600">
+              Les raccourcis se reorganisent automatiquement selon la taille de l ecran pour rester pratiques sur mobile.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
             {quickActions.map((action, index) => (
-              <Link to={createPageUrl(action.link)} key={index}>
-                <Card className={`${action.bgColor} border-0 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer h-full`}>
-                  <CardContent className="p-6 text-white">
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="text-xl font-bold">{action.title}</h3>
-                      <action.icon className="w-8 h-8 opacity-80" />
+              <Link to={createPageUrl(action.link)} key={index} className="h-full">
+                <Card className={`${action.bgColor} h-full border-0 shadow-lg transition-all duration-300 hover:shadow-xl lg:hover:-translate-y-1`}>
+                  <CardContent className="flex h-full flex-col justify-between p-5 text-white sm:p-6">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold sm:text-xl">{action.title}</h3>
+                        <p className="mt-2 text-sm opacity-90">{action.description}</p>
+                      </div>
+                      <div className="rounded-2xl bg-white/15 p-3">
+                        <action.icon className="h-6 w-6 opacity-90 sm:h-7 sm:w-7" />
+                      </div>
                     </div>
-                    <p className="text-sm opacity-90">{action.description}</p>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
+                      Ouvrir
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
@@ -310,17 +348,19 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <Card className="border-0 shadow-md bg-blue-50">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+        <Card className="overflow-hidden border-0 bg-blue-50 shadow-md">
+          <CardContent className="p-0">
+            <div className="grid gap-0 md:grid-cols-[auto_1fr]">
+              <div className="flex items-center justify-center bg-blue-500 px-5 py-6 md:px-6">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
+                  <svg className="h-7 w-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-lg text-blue-900 mb-1">Conformite Fiscale</h3>
-                <p className="text-blue-800 text-sm">
+              <div className="p-5 sm:p-6">
+                <h3 className="text-lg font-bold text-blue-900">Conformite Fiscale</h3>
+                <p className="mt-2 text-sm leading-6 text-blue-800">
                   Systeme concu pour respecter les obligations d'inalienabilite et de securisation des donnees.
                 </p>
               </div>
