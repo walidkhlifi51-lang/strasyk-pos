@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { APP_BACKEND_MODE } from '@/config/env';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { createPageUrl } from '@/utils';
+import { clearRecoveryHint, hasRecoveryHint } from '@/api/supabase/client';
 import { ArrowRight, ShieldCheck, Sparkles, Store, Truck } from 'lucide-react';
 
 const panels = [
@@ -61,7 +62,10 @@ export default function Auth() {
       const recoveryFromQuery = queryType === 'recovery';
       const authCode = params.get('code');
       const tokenHash = params.get('token_hash') || hashParams.get('token_hash');
-      const hasRecoverySession = recoveryFromHash || recoveryFromQuery || Boolean(hashParams.get('access_token'));
+      const hasRecoverySession = recoveryFromHash
+        || recoveryFromQuery
+        || Boolean(hashParams.get('access_token'))
+        || hasRecoveryHint();
 
       if (authCode) {
         try {
@@ -103,6 +107,9 @@ export default function Auth() {
       }
 
       setRecoveryMode(hasRecoverySession);
+      if (hasRecoverySession) {
+        setForgotMode(false);
+      }
     };
 
     void checkRecoveryState();
@@ -208,6 +215,7 @@ export default function Auth() {
         title: 'Mot de passe mis a jour',
         description: 'Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.',
       });
+      clearRecoveryHint();
       setRecoveryMode(false);
       setNewPassword('');
       setConfirmPassword('');
@@ -332,6 +340,18 @@ export default function Auth() {
                       disabled={loading}
                     >
                       {loading ? 'Enregistrement...' : 'Definir le mot de passe'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-11 w-full rounded-lg"
+                      onClick={() => {
+                        clearRecoveryHint();
+                        setRecoveryMode(false);
+                        window.history.replaceState({}, document.title, '/Auth');
+                      }}
+                    >
+                      Retour a la connexion
                     </Button>
                   </form>
                 ) : forgotMode ? (
