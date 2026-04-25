@@ -63,10 +63,31 @@ export default function Auth() {
       const recoveryFromQuery = queryType === 'recovery';
       const authCode = params.get('code');
       const tokenHash = params.get('token_hash') || hashParams.get('token_hash');
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
       const hasRecoverySession = recoveryFromHash
         || recoveryFromQuery
         || Boolean(hashParams.get('access_token'))
         || hasRecoveryHint();
+
+      if (accessToken && refreshToken) {
+        try {
+          setRecoveryLoading(true);
+          await appClient.auth.setSession?.({ accessToken, refreshToken });
+          setRecoveryMode(true);
+          setForgotMode(false);
+          window.history.replaceState({}, document.title, '/Auth?type=recovery');
+          return;
+        } catch (error) {
+          toast({
+            title: 'Session invalide',
+            description: error.message || 'Impossible de restaurer la session de reinitialisation.',
+            variant: 'destructive',
+          });
+        } finally {
+          setRecoveryLoading(false);
+        }
+      }
 
       if (authCode) {
         try {
@@ -226,6 +247,10 @@ export default function Auth() {
     try {
       setLoading(true);
       setActionFeedback(null);
+      const session = await appClient.auth.getSession?.();
+      if (!session) {
+        throw new Error('Session de reinitialisation introuvable. Ouvrez a nouveau le lien recu par email.');
+      }
       await appClient.auth.updatePassword({ password: newPassword });
       setActionFeedback({
         type: 'success',

@@ -541,6 +541,12 @@ export const localAppClient = {
     async verifyOtp() {
       return true;
     },
+    async setSession() {
+      return true;
+    },
+    async getSession() {
+      return { access_token: 'local', refresh_token: 'local' };
+    },
     async updatePassword() {
       return true;
     },

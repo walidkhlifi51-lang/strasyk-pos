@@ -244,6 +244,21 @@ export const supabaseAppClient = {
       if (error) throw error;
       return data;
     },
+    async setSession({ accessToken, refreshToken }) {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) throw error;
+      return data;
+    },
+    async getSession() {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return data.session || null;
+    },
     async updatePassword({ password }) {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase.auth.updateUser({ password });
