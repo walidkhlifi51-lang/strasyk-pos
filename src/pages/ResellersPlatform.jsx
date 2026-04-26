@@ -11,9 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
+import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
+import {
+  buildPlatformToResellerInvoicePayload,
+  createInvoiceForm,
+  isInvoiceForReseller,
+  sortInvoicesByDateDesc,
+} from '@/lib/invoiceDocuments';
 
 const createEmptyResellerForm = () => ({
   name: '',
@@ -86,6 +93,7 @@ export default function ResellersPlatform() {
   const [brandingForm, setBrandingForm] = React.useState(createEmptyBrandingForm());
   const [newResellerUserForm, setNewResellerUserForm] = React.useState(createEmptyResellerUserForm());
   const [tenantToAttach, setTenantToAttach] = React.useState('');
+  const [resellerInvoiceForm, setResellerInvoiceForm] = React.useState(createInvoiceForm());
 
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
@@ -98,6 +106,7 @@ export default function ResellersPlatform() {
         commissions,
         payouts,
         tenants,
+        invoices,
       ] = await Promise.all([
         appClient.entities.Reseller.list('-created_date'),
         appClient.entities.ResellerBranding.list('-created_date'),
@@ -106,6 +115,7 @@ export default function ResellersPlatform() {
         appClient.entities.ResellerCommission.list('-created_date'),
         appClient.entities.ResellerPayout.list('-created_date'),
         appClient.entities.Tenant.list('-created_date'),
+        appClient.entities.TenantInvoice.list('-date_facturation').catch(() => []),
       ]);
 
       return {
@@ -116,6 +126,7 @@ export default function ResellersPlatform() {
         commissions,
         payouts,
         tenants,
+        invoices,
       };
     },
     enabled: isPlatformAdmin,
@@ -129,6 +140,7 @@ export default function ResellersPlatform() {
   const commissions = data?.commissions || [];
   const payouts = data?.payouts || [];
   const tenants = data?.tenants || [];
+  const invoices = data?.invoices || [];
 
   const selectedReseller = resellers.find((item) => item.id === selectedResellerId) || null;
   const selectedBranding = resellerBranding.find((item) => item.reseller_id === selectedResellerId) || null;
@@ -136,6 +148,9 @@ export default function ResellersPlatform() {
   const selectedResellerUsers = resellerUsers.filter((item) => item.reseller_id === selectedResellerId);
   const selectedCommissions = commissions.filter((item) => item.reseller_id === selectedResellerId);
   const selectedPayouts = payouts.filter((item) => item.reseller_id === selectedResellerId);
+  const selectedResellerInvoices = sortInvoicesByDateDesc(
+    invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
+  );
 
   const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
     return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}&label=${encodeURIComponent(selectedReseller?.name || '')}`;
@@ -227,6 +242,7 @@ A bientot.`;
     if (!selectedReseller) {
       setResellerForm(createEmptyResellerForm());
       setBrandingForm(createEmptyBrandingForm());
+      setResellerInvoiceForm(createInvoiceForm());
       return;
     }
 
@@ -426,6 +442,30 @@ A bientot.`;
     },
   });
 
+  const createResellerInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedReseller?.id) throw new Error('Aucun revendeur selectionne.');
+      if (!resellerInvoiceForm.montant || Number.isNaN(Number(resellerInvoiceForm.montant))) {
+        throw new Error('Montant facture requis.');
+      }
+
+      return appClient.entities.TenantInvoice.create(
+        buildPlatformToResellerInvoicePayload({
+          form: resellerInvoiceForm,
+          reseller: selectedReseller,
+        }),
+      );
+    },
+    onSuccess: async () => {
+      toast({ title: '✅ Facture revendeur creee' });
+      setResellerInvoiceForm(createInvoiceForm());
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
   if (!isPlatformAdmin) {
     return (
       <div className="p-6 md:p-8">
@@ -617,11 +657,12 @@ A bientot.`;
               <p className="text-sm text-gray-500">Choisissez un revendeur dans la colonne de gauche pour afficher sa fiche complete.</p>
             ) : (
               <Tabs defaultValue="identity" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-6">
                   <TabsTrigger value="identity">Identite</TabsTrigger>
                   <TabsTrigger value="branding">Branding</TabsTrigger>
                   <TabsTrigger value="team">Equipe</TabsTrigger>
                   <TabsTrigger value="tenants">Commerces</TabsTrigger>
+                  <TabsTrigger value="invoices">Factures</TabsTrigger>
                   <TabsTrigger value="finance">Finance</TabsTrigger>
                 </TabsList>
 
@@ -911,6 +952,119 @@ A bientot.`;
                       ))}
                     </div>
                   )}
+                </TabsContent>
+
+                <TabsContent value="invoices" className="space-y-4 mt-4">
+                  <div className="grid md:grid-cols-[380px_minmax(0,1fr)] gap-4">
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Nouvelle facture revendeur</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="rounded-xl border bg-orange-50 p-3 text-sm text-orange-900">
+                          Cette facture est emise par la plateforme vers le revendeur courant. Elle sera visible dans sa fiche.
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Type</Label>
+                          <Select value={resellerInvoiceForm.type} onValueChange={(value) => setResellerInvoiceForm((prev) => ({ ...prev, type: value }))}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="abonnement">Abonnement</SelectItem>
+                              <SelectItem value="materiel">Materiel</SelectItem>
+                              <SelectItem value="module_supplementaire">Module supplementaire</SelectItem>
+                              <SelectItem value="frais_de_maintenance">Maintenance</SelectItem>
+                              <SelectItem value="autre">Autre</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label>Montant TTC</Label>
+                            <Input
+                              value={resellerInvoiceForm.montant}
+                              onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, montant: event.target.value }))}
+                              placeholder="199.00"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>TVA %</Label>
+                            <Input
+                              value={resellerInvoiceForm.tva_taux}
+                              onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, tva_taux: event.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Date</Label>
+                          <Input
+                            type="date"
+                            value={resellerInvoiceForm.date_facturation}
+                            onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, date_facturation: event.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description</Label>
+                          <Textarea
+                            value={resellerInvoiceForm.description}
+                            onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, description: event.target.value }))}
+                            placeholder="Abonnement revendeur, activation modules, support..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Materiel / details</Label>
+                          <Textarea
+                            value={resellerInvoiceForm.materiel}
+                            onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, materiel: event.target.value }))}
+                            placeholder="Optionnel"
+                          />
+                        </div>
+                        <Button onClick={() => createResellerInvoiceMutation.mutate()} disabled={createResellerInvoiceMutation.isPending}>
+                          Creer la facture
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Factures du revendeur</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {selectedResellerInvoices.length === 0 ? (
+                          <p className="text-sm text-gray-500">
+                            Aucune facture plateforme vers revendeur pour le moment. Appliquez d abord le schema SQL billing avant emission.
+                          </p>
+                        ) : (
+                          selectedResellerInvoices.map((invoice) => (
+                            <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-gray-900">
+                                    {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                                  </p>
+                                  {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                  <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                                </p>
+                                {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => generateInvoicePDF(invoice, null)}
+                              >
+                                <Download className="w-4 h-4 mr-2" />
+                                PDF
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="finance" className="space-y-4 mt-4">

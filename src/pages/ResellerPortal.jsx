@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import {
   Handshake,
@@ -22,7 +23,16 @@ import {
   Loader2,
   ShieldCheck,
   Mail,
+  FileText,
+  Download,
 } from 'lucide-react';
+import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
+import {
+  buildResellerToTenantInvoicePayload,
+  createInvoiceForm,
+  isInvoiceForTenant,
+  sortInvoicesByDateDesc,
+} from '@/lib/invoiceDocuments';
 import {
   buildTenantOwnerInviteMessage,
   createTenantAndResolve,
@@ -62,6 +72,8 @@ export default function ResellerPortal() {
   const queryClient = useQueryClient();
   const [newClientForm, setNewClientForm] = React.useState(createClientForm());
   const [submitFeedback, setSubmitFeedback] = React.useState({ type: '', message: '' });
+  const [selectedClientId, setSelectedClientId] = React.useState('');
+  const [clientInvoiceForm, setClientInvoiceForm] = React.useState(createInvoiceForm());
 
   const canManageClients = ['owner', 'manager', 'sales'].includes(resellerRole);
 
@@ -75,6 +87,7 @@ export default function ResellerPortal() {
         commissions,
         payouts,
         resellerUsers,
+        invoices,
       ] = await Promise.all([
         appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date'),
         appClient.entities.Tenant.list('-created_date'),
@@ -82,6 +95,7 @@ export default function ResellerPortal() {
         appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date'),
         appClient.entities.ResellerPayout.filter({ reseller_id: currentReseller.id }, '-created_date'),
         appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date'),
+        appClient.entities.TenantInvoice.list('-date_facturation').catch(() => []),
       ]);
 
       return {
@@ -91,6 +105,7 @@ export default function ResellerPortal() {
         commissions,
         payouts,
         resellerUsers,
+        invoices,
       };
     },
     enabled: !!currentReseller?.id && isReseller,
@@ -103,6 +118,7 @@ export default function ResellerPortal() {
   const commissions = data?.commissions || [];
   const payouts = data?.payouts || [];
   const resellerUsers = data?.resellerUsers || [];
+  const invoices = data?.invoices || [];
 
   const linkedTenants = resellerTenants
     .map((assignment) => ({
@@ -111,6 +127,11 @@ export default function ResellerPortal() {
     }))
     .filter((item) => item.tenant)
     .sort((a, b) => new Date(b.assignment.created_date || 0) - new Date(a.assignment.created_date || 0));
+
+  const selectedClient = linkedTenants.find((item) => item.tenant.id === selectedClientId) || null;
+  const selectedClientInvoices = sortInvoicesByDateDesc(
+    invoices.filter((invoice) => isInvoiceForTenant(invoice, selectedClientId)),
+  );
 
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -128,6 +149,17 @@ export default function ResellerPortal() {
     { title: 'Commissions pending', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
     { title: 'Commissions payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
   ];
+
+  React.useEffect(() => {
+    if (!linkedTenants.length) {
+      setSelectedClientId('');
+      return;
+    }
+
+    if (!selectedClientId || !linkedTenants.some((item) => item.tenant.id === selectedClientId)) {
+      setSelectedClientId(linkedTenants[0].tenant.id);
+    }
+  }, [linkedTenants, selectedClientId]);
 
   const upsertResellerTenantLink = React.useCallback(async ({ tenantId, subscriptionPlan }) => {
     const existingAssignment = resellerTenants.find((item) => item.tenant_id === tenantId && item.reseller_id === currentReseller.id);
@@ -254,6 +286,34 @@ export default function ResellerPortal() {
         description: error.message || 'Impossible de creer le commerce.',
         variant: 'destructive',
       });
+    },
+  });
+
+  const createClientInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedClient?.tenant?.id) {
+        throw new Error('Selectionnez un client commerce.');
+      }
+      if (!clientInvoiceForm.montant || Number.isNaN(Number(clientInvoiceForm.montant))) {
+        throw new Error('Montant facture requis.');
+      }
+
+      return appClient.entities.TenantInvoice.create(
+        buildResellerToTenantInvoicePayload({
+          form: clientInvoiceForm,
+          reseller: currentReseller,
+          branding,
+          tenant: selectedClient.tenant,
+        }),
+      );
+    },
+    onSuccess: async () => {
+      toast({ title: '✅ Facture client creee' });
+      setClientInvoiceForm(createInvoiceForm());
+      await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -415,10 +475,6 @@ export default function ResellerPortal() {
                     </div>
                   </div>
 
-                  <div className="text-xs text-orange-700">
-                    Debug portail revendeur actif
-                  </div>
-
                   {submitFeedback.message ? (
                     <div className={`rounded-xl border p-3 text-sm ${
                       submitFeedback.type === 'error'
@@ -464,13 +520,174 @@ export default function ResellerPortal() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => copyOwnerInvite({ tenantId: tenant.id, email: tenant.owner_email, label: tenant.nom_commercial })}
+                      onClick={() => {
+                        setSelectedClientId(tenant.id);
+                        copyOwnerInvite({ tenantId: tenant.id, email: tenant.owner_email, label: tenant.nom_commercial });
+                      }}
                     >
                       <Copy className="w-4 h-4 mr-2" />
                       Copier invitation client
                     </Button>
                   </div>
                 ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Fiche client et factures</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {linkedTenants.length === 0 ? (
+                <p className="text-sm text-gray-500">Aucun client commerce a ouvrir pour le moment.</p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Client</Label>
+                    <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir un client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {linkedTenants.map(({ tenant }) => (
+                          <SelectItem key={tenant.id} value={tenant.id}>
+                            {tenant.nom_commercial}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedClient ? (
+                    <>
+                      <div className="rounded-xl border bg-gray-50 p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-gray-900">{selectedClient.tenant.nom_commercial}</p>
+                          <Badge variant="outline">{selectedClient.assignment.status}</Badge>
+                          <Badge variant="outline">{selectedClient.assignment.subscription_plan || selectedClient.tenant.subscription_plan || 'Plan non defini'}</Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
+                          <span>Owner: {selectedClient.tenant.owner_email || 'Non defini'}</span>
+                          <span>Acquisition: {selectedClient.assignment.acquisition_channel || 'non precise'}</span>
+                          <span>Debut: {selectedClient.assignment.started_at ? new Date(selectedClient.assignment.started_at).toLocaleDateString('fr-FR') : 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid xl:grid-cols-[380px_minmax(0,1fr)] gap-4">
+                        <Card className="border border-gray-200 shadow-none">
+                          <CardHeader>
+                            <CardTitle className="text-lg">Nouvelle facture client</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="rounded-xl border bg-blue-50 p-3 text-sm text-blue-900">
+                              Le PDF sortira avec l identite du revendeur courant, pas celle de la plateforme.
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Type</Label>
+                              <Select value={clientInvoiceForm.type} onValueChange={(value) => setClientInvoiceForm((prev) => ({ ...prev, type: value }))}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="abonnement">Abonnement</SelectItem>
+                                  <SelectItem value="materiel">Materiel</SelectItem>
+                                  <SelectItem value="module_supplementaire">Module supplementaire</SelectItem>
+                                  <SelectItem value="frais_de_maintenance">Maintenance</SelectItem>
+                                  <SelectItem value="autre">Autre</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label>Montant TTC</Label>
+                                <Input
+                                  value={clientInvoiceForm.montant}
+                                  onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, montant: event.target.value }))}
+                                  placeholder="99.00"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>TVA %</Label>
+                                <Input
+                                  value={clientInvoiceForm.tva_taux}
+                                  onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, tva_taux: event.target.value }))}
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Date</Label>
+                              <Input
+                                type="date"
+                                value={clientInvoiceForm.date_facturation}
+                                onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, date_facturation: event.target.value }))}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Description</Label>
+                              <Textarea
+                                value={clientInvoiceForm.description}
+                                onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, description: event.target.value }))}
+                                placeholder="Abonnement, vente, materiel, support..."
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Materiel / details</Label>
+                              <Textarea
+                                value={clientInvoiceForm.materiel}
+                                onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, materiel: event.target.value }))}
+                                placeholder="Optionnel"
+                              />
+                            </div>
+                            <Button onClick={() => createClientInvoiceMutation.mutate()} disabled={createClientInvoiceMutation.isPending}>
+                              <FileText className="w-4 h-4 mr-2" />
+                              Creer la facture
+                            </Button>
+                          </CardContent>
+                        </Card>
+
+                        <Card className="border border-gray-200 shadow-none">
+                          <CardHeader>
+                            <CardTitle className="text-lg">Factures de ce client</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {selectedClientInvoices.length === 0 ? (
+                              <p className="text-sm text-gray-500">
+                                Aucune facture pour ce client. Si la creation echoue, appliquez d abord `docs/SUPABASE_BILLING_SCHEMA.sql` puis le RLS facture.
+                              </p>
+                            ) : (
+                              selectedClientInvoices.map((invoice) => (
+                                <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-gray-900">
+                                        {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                                      </p>
+                                      {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                      <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                                    </p>
+                                    {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => generateInvoicePDF(invoice, selectedClient.tenant)}
+                                  >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    PDF
+                                  </Button>
+                                </div>
+                              ))
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </>
+                  ) : null}
+                </>
               )}
             </CardContent>
           </Card>

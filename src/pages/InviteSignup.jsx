@@ -84,6 +84,17 @@ export default function InviteSignup() {
     loadContext();
   }, [params]);
 
+  useEffect(() => {
+    if (!contextInfo) return;
+
+    if (contextInfo.type === 'tenant') {
+      setFullName(contextInfo.title && contextInfo.title !== 'Commerce invite' ? contextInfo.title : '');
+      return;
+    }
+
+    setFullName('');
+  }, [contextInfo]);
+
   const handleCreateAccount = async () => {
     if (!contextInfo?.email) return;
 
@@ -189,7 +200,9 @@ export default function InviteSignup() {
                 id="fullName"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Nom et prenom"
+                placeholder={contextInfo.type === 'tenant' ? 'Nom du commerce' : 'Nom et prenom'}
+                autoComplete="off"
+                name="invite_full_name"
               />
             </div>
             <div className="space-y-2">
