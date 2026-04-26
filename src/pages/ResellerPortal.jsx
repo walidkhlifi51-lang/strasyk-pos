@@ -29,6 +29,7 @@ import {
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
   buildResellerToTenantInvoicePayload,
+  computeInvoiceAmounts,
   createInvoiceForm,
   isInvoiceForTenant,
   sortInvoicesByDateDesc,
@@ -132,6 +133,7 @@ export default function ResellerPortal() {
   const selectedClientInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForTenant(invoice, selectedClientId)),
   );
+  const clientInvoiceAmounts = computeInvoiceAmounts(clientInvoiceForm.montant, clientInvoiceForm.tva_taux);
 
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -601,7 +603,7 @@ export default function ResellerPortal() {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-2">
-                                <Label>Montant TTC</Label>
+                                <Label>Montant HT</Label>
                                 <Input
                                   value={clientInvoiceForm.montant}
                                   onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, montant: event.target.value }))}
@@ -615,6 +617,9 @@ export default function ResellerPortal() {
                                   onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, tva_taux: event.target.value }))}
                                 />
                               </div>
+                            </div>
+                            <div className="rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+                              HT: {clientInvoiceAmounts.montantHT.toFixed(2)} EUR | TVA: {clientInvoiceAmounts.montantTVA.toFixed(2)} EUR | TTC: {clientInvoiceAmounts.montantTTC.toFixed(2)} EUR
                             </div>
                             <div className="space-y-2">
                               <Label>Date</Label>

@@ -17,6 +17,7 @@ import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
   buildPlatformToResellerInvoicePayload,
+  computeInvoiceAmounts,
   createInvoiceForm,
   isInvoiceForReseller,
   sortInvoicesByDateDesc,
@@ -151,6 +152,7 @@ export default function ResellersPlatform() {
   const selectedResellerInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
   );
+  const resellerInvoiceAmounts = computeInvoiceAmounts(resellerInvoiceForm.montant, resellerInvoiceForm.tva_taux);
 
   const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
     return `${buildAbsoluteAppUrl('/InviteSignup')}?reseller=${encodeURIComponent(resellerId)}&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role)}&label=${encodeURIComponent(selectedReseller?.name || '')}`;
@@ -982,7 +984,7 @@ A bientot.`;
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-2">
-                            <Label>Montant TTC</Label>
+                            <Label>Montant HT</Label>
                             <Input
                               value={resellerInvoiceForm.montant}
                               onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, montant: event.target.value }))}
@@ -996,6 +998,9 @@ A bientot.`;
                               onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, tva_taux: event.target.value }))}
                             />
                           </div>
+                        </div>
+                        <div className="rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+                          HT: {resellerInvoiceAmounts.montantHT.toFixed(2)} EUR | TVA: {resellerInvoiceAmounts.montantTVA.toFixed(2)} EUR | TTC: {resellerInvoiceAmounts.montantTTC.toFixed(2)} EUR
                         </div>
                         <div className="space-y-2">
                           <Label>Date</Label>

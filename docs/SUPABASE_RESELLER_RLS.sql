@@ -29,12 +29,15 @@ returns boolean
 language sql
 stable
 as $$
-  select exists (
-    select 1
-    from public.platform_admin_access paa
-    where lower(paa.user_email) = public.app_current_user_email()
-      and coalesce(paa.is_active, true) = true
-  )
+  select
+    lower(coalesce(auth.jwt() ->> 'role', '')) = 'admin'
+    or lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '')) = 'admin'
+    or exists (
+      select 1
+      from public.platform_admin_access paa
+      where lower(paa.user_email) = public.app_current_user_email()
+        and coalesce(paa.is_active, true) = true
+    )
 $$;
 
 create or replace function public.app_can_access_reseller(target_reseller_id uuid)

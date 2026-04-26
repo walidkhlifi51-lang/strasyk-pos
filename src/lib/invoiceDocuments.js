@@ -15,16 +15,42 @@ export const createInvoiceForm = () => ({
   materiel: '',
 });
 
+export const computeInvoiceAmounts = (montantInput, tvaInput) => {
+  const montantHT = Number(montantInput || 0);
+  const tauxTVA = Number(tvaInput || 0);
+  const montantTVA = montantHT * (tauxTVA / 100);
+  const montantTTC = montantHT + montantTVA;
+
+  return {
+    montantHT,
+    tauxTVA,
+    montantTVA,
+    montantTTC,
+  };
+};
+
 const buildInvoiceCore = (form = {}) => {
+  const {
+    montantHT,
+    tauxTVA,
+    montantTVA,
+    montantTTC,
+  } = computeInvoiceAmounts(form.montant, form.tva_taux);
+
   const payload = {
     numero_facture: `FAC-${Date.now()}`,
-    montant: Number(form.montant || 0),
-    tva_taux: Number(form.tva_taux || 0),
+    montant: Number(montantTTC.toFixed(2)),
+    tva_taux: tauxTVA,
     type: form.type || 'autre',
     description: (form.description || '').trim() || null,
     date_facturation: form.date_facturation || new Date().toISOString().split('T')[0],
     statut: 'en_attente',
     is_devis: Boolean(form.is_devis),
+    metadata: {
+      amount_ht: Number(montantHT.toFixed(2)),
+      amount_tva: Number(montantTVA.toFixed(2)),
+      amount_ttc: Number(montantTTC.toFixed(2)),
+    },
   };
 
   if ((form.materiel || '').trim()) {
