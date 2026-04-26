@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
@@ -463,6 +463,20 @@ A bientot.`;
     onSuccess: async () => {
       toast({ title: '✅ Facture revendeur creee' });
       setResellerInvoiceForm(createInvoiceForm());
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const markResellerInvoicePaidMutation = useMutation({
+    mutationFn: async (invoiceId) => appClient.entities.TenantInvoice.update(invoiceId, {
+      statut: 'payee',
+      date_paiement: new Date().toISOString().split('T')[0],
+    }),
+    onSuccess: async () => {
+      toast({ title: '✅ Paiement valide' });
       await invalidateResellers();
     },
     onError: (error) => {
@@ -1108,6 +1122,17 @@ A bientot.`;
                                 <Download className="w-4 h-4 mr-2" />
                                 PDF
                               </Button>
+                              {invoice.statut !== 'payee' ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => markResellerInvoicePaidMutation.mutate(invoice.id)}
+                                  disabled={markResellerInvoicePaidMutation.isPending}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  Valider paiement
+                                </Button>
+                              ) : null}
                             </div>
                           );
                           })

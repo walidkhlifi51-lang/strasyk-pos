@@ -7,13 +7,16 @@ export const PLATFORM_ISSUER_SNAPSHOT = {
   website: 'www.strasyk.com',
 };
 
-export const buildTenantRecipientSnapshot = (tenant = {}) => ({
+export const buildTenantRecipientSnapshot = (tenant) => {
+  const safeTenant = tenant || {};
+  return ({
   type: 'tenant',
-  recipient_name: tenant.nom_commercial || '',
-  contact_email: tenant.owner_email || '',
-  address: tenant.profile?.adresse || '',
-  phone: tenant.profile?.telephone || '',
+  recipient_name: safeTenant.nom_commercial || '',
+  contact_email: safeTenant.owner_email || '',
+  address: safeTenant.profile?.adresse || '',
+  phone: safeTenant.profile?.telephone || '',
 });
+};
 
 export const buildResellerIssuerSnapshot = ({ reseller = {}, branding = null } = {}) => ({
   type: 'reseller',
@@ -27,9 +30,12 @@ export const buildResellerIssuerSnapshot = ({ reseller = {}, branding = null } =
   logo_url: branding?.logo_url || '',
 });
 
-export const buildResellerRecipientSnapshot = (reseller = {}) => ({
+export const buildResellerRecipientSnapshot = (reseller) => {
+  const safeReseller = reseller || {};
+  return ({
   type: 'reseller',
-  recipient_name: reseller.name || '',
-  contact_email: reseller.contact_email || '',
-  phone: reseller.contact_phone || '',
+  recipient_name: safeReseller.name || '',
+  contact_email: safeReseller.contact_email || '',
+  phone: safeReseller.contact_phone || '',
 });
+};

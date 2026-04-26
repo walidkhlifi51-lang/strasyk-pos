@@ -525,6 +525,11 @@ using (
     and issuer_id is not null
     and public.app_can_manage_reseller(issuer_id)
   )
+  or (
+    recipient_type = 'reseller'
+    and recipient_id is not null
+    and public.app_can_manage_reseller(recipient_id)
+  )
 )
 with check (
   public.app_is_platform_admin()
@@ -532,6 +537,11 @@ with check (
     issuer_type = 'reseller'
     and issuer_id is not null
     and public.app_can_manage_reseller(issuer_id)
+  )
+  or (
+    recipient_type = 'reseller'
+    and recipient_id is not null
+    and public.app_can_manage_reseller(recipient_id)
   )
 );
 

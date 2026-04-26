@@ -25,6 +25,7 @@ import {
   Mail,
   FileText,
   Download,
+  CheckCircle,
 } from 'lucide-react';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
@@ -321,6 +322,20 @@ export default function ResellerPortal() {
     onSuccess: async () => {
       toast({ title: '✅ Facture client creee' });
       setClientInvoiceForm(createInvoiceForm());
+      await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const markInvoicePaidMutation = useMutation({
+    mutationFn: async (invoiceId) => appClient.entities.TenantInvoice.update(invoiceId, {
+      statut: 'payee',
+      date_paiement: new Date().toISOString().split('T')[0],
+    }),
+    onSuccess: async () => {
+      toast({ title: '✅ Paiement valide' });
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
     },
     onError: (error) => {
@@ -736,6 +751,17 @@ export default function ResellerPortal() {
                                     <Download className="w-4 h-4 mr-2" />
                                     PDF
                                   </Button>
+                                  {invoice.statut !== 'payee' ? (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                                      disabled={markInvoicePaidMutation.isPending}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      <CheckCircle className="w-4 h-4 mr-2" />
+                                      Valider paiement
+                                    </Button>
+                                  ) : null}
                                 </div>
                               );
                               })
@@ -803,6 +829,17 @@ export default function ResellerPortal() {
                       <Download className="w-4 h-4 mr-2" />
                       PDF
                     </Button>
+                    {invoice.statut !== 'payee' ? (
+                      <Button
+                        size="sm"
+                        onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                        disabled={markInvoicePaidMutation.isPending}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Valider paiement
+                      </Button>
+                    ) : null}
                   </div>
                 );
                 })
@@ -865,6 +902,17 @@ export default function ResellerPortal() {
                         <Download className="w-4 h-4 mr-2" />
                         PDF
                       </Button>
+                      {invoice.statut !== 'payee' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                          disabled={markInvoicePaidMutation.isPending}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Valider paiement
+                        </Button>
+                      ) : null}
                     </div>
                   );
                 })
