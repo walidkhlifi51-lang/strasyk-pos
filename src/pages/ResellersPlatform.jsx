@@ -972,6 +972,7 @@ A bientot.`;
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="abonnement">Abonnement</SelectItem>
+                              <SelectItem value="achat_complet">Vente complete</SelectItem>
                               <SelectItem value="materiel">Materiel</SelectItem>
                               <SelectItem value="module_supplementaire">Module supplementaire</SelectItem>
                               <SelectItem value="frais_de_maintenance">Maintenance</SelectItem>
