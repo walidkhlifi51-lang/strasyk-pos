@@ -30,7 +30,7 @@ import {
   resolveTenantByOwnerEmail,
 } from '@/lib/tenantProvisioning';
 
-const currency = (value) => `${Number(value || 0).toFixed(2)}€`;
+const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 
 const createClientForm = () => ({
   nom_commercial: '',
@@ -40,11 +40,28 @@ const createClientForm = () => ({
   subscription_plan: 'basic',
 });
 
+const withTimeout = async (promise, message, timeoutMs = 20000) => {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
 export default function ResellerPortal() {
   const { currentReseller, isReseller, resellerRole } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newClientForm, setNewClientForm] = React.useState(createClientForm());
+  const [submitFeedback, setSubmitFeedback] = React.useState({ type: '', message: '' });
 
   const canManageClients = ['owner', 'manager', 'sales'].includes(resellerRole);
 
@@ -112,11 +129,39 @@ export default function ResellerPortal() {
     { title: 'Commissions payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
   ];
 
+  const upsertResellerTenantLink = React.useCallback(async ({ tenantId, subscriptionPlan }) => {
+    const existingAssignment = resellerTenants.find((item) => item.tenant_id === tenantId && item.reseller_id === currentReseller.id);
+
+    if (existingAssignment?.id) {
+      await appClient.entities.ResellerTenant.update(existingAssignment.id, {
+        status: 'active',
+        acquisition_channel: existingAssignment.acquisition_channel || 'reseller_portal',
+        subscription_plan: subscriptionPlan,
+        started_at: existingAssignment.started_at || new Date().toISOString(),
+      });
+      return 'updated';
+    }
+
+    await appClient.entities.ResellerTenant.create({
+      reseller_id: currentReseller.id,
+      tenant_id: tenantId,
+      acquisition_channel: 'reseller_portal',
+      subscription_plan: subscriptionPlan,
+      status: 'active',
+      started_at: new Date().toISOString(),
+    });
+
+    return 'created';
+  }, [currentReseller.id, resellerTenants]);
+
   const copyOwnerInvite = React.useCallback(async ({ tenantId, email, label }) => {
     const message = buildTenantOwnerInviteMessage({ tenantId, email, label });
+    if (!navigator?.clipboard?.writeText) {
+      throw new Error('Le presse-papiers n est pas disponible sur ce navigateur.');
+    }
     await navigator.clipboard.writeText(message);
     toast({
-      title: '✅ Invitation client copiee',
+      title: 'Invitation client copiee',
       description: 'Le lien d activation proprietaire a ete copie.',
     });
   }, [toast]);
@@ -136,61 +181,94 @@ export default function ResellerPortal() {
       }
 
       const ownerEmail = normalizeEmail(newClientForm.owner_email);
-      const existingTenant = await resolveTenantByOwnerEmail(ownerEmail);
+      const existingTenant = await withTimeout(
+        resolveTenantByOwnerEmail(ownerEmail),
+        'La verification du commerce existant prend trop de temps. Reessayez.'
+      );
       if (existingTenant) {
-        throw new Error('Un commerce existe deja pour cet email proprietaire.');
+        throw new Error('Ce commerce existe deja. Merci de me contacter pour le rattachement.');
       }
 
-      const { tenant, profile } = await createTenantAndResolve({
-        nomCommercial: newClientForm.nom_commercial.trim(),
-        ownerEmail,
-        subscriptionPlan: newClientForm.subscription_plan,
-        adresse: newClientForm.adresse.trim(),
-        telephone: newClientForm.telephone.trim(),
-      });
+      const { tenant, profile } = await withTimeout(
+        createTenantAndResolve({
+          nomCommercial: newClientForm.nom_commercial.trim(),
+          ownerEmail,
+          subscriptionPlan: newClientForm.subscription_plan,
+          adresse: newClientForm.adresse.trim(),
+          telephone: newClientForm.telephone.trim(),
+        }),
+        'La creation du commerce prend trop de temps. Verifiez Supabase ou reessayez.'
+      );
 
-      const existingAssignment = resellerTenants.find((item) => item.tenant_id === tenant.id && item.reseller_id === currentReseller.id);
-      if (existingAssignment?.id) {
-        await appClient.entities.ResellerTenant.update(existingAssignment.id, {
-          status: 'active',
-          acquisition_channel: existingAssignment.acquisition_channel || 'reseller_portal',
-          subscription_plan: newClientForm.subscription_plan,
-          started_at: existingAssignment.started_at || new Date().toISOString(),
-        });
-      } else {
-        await appClient.entities.ResellerTenant.create({
-          reseller_id: currentReseller.id,
-          tenant_id: tenant.id,
-          acquisition_channel: 'reseller_portal',
-          subscription_plan: newClientForm.subscription_plan,
-          status: 'active',
-          started_at: new Date().toISOString(),
-        });
-      }
+      await withTimeout(
+        upsertResellerTenantLink({
+          tenantId: tenant.id,
+          subscriptionPlan: newClientForm.subscription_plan,
+        }),
+        'Le rattachement du commerce prend trop de temps. Verifiez les droits revendeur.'
+      );
 
-      return { tenant, profile, ownerEmail };
+      return { tenant, profile, ownerEmail, mode: 'created' };
     },
-    onSuccess: async ({ tenant, ownerEmail }) => {
-      await copyOwnerInvite({
-        tenantId: tenant.id,
-        email: ownerEmail,
-        label: tenant.nom_commercial,
+    onMutate: () => {
+      setSubmitFeedback({
+        type: 'loading',
+        message: 'Creation et rattachement en cours...',
       });
+    },
+    onSuccess: async ({ tenant, ownerEmail, mode }) => {
       setNewClientForm(createClientForm());
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
+      setSubmitFeedback({
+        type: 'success',
+        message: `${tenant.nom_commercial} a bien ete cree et rattache.`,
+      });
       toast({
-        title: '✅ Commerce cree',
+        title: mode === 'attached_existing' ? 'Commerce rattache' : 'Commerce cree',
         description: `${tenant.nom_commercial} a ete cree et rattache a votre portefeuille.`,
       });
+
+      try {
+        await copyOwnerInvite({
+          tenantId: tenant.id,
+          email: ownerEmail,
+          label: tenant.nom_commercial,
+        });
+      } catch (clipboardError) {
+        console.error('Erreur copie invitation proprietaire:', clipboardError);
+        toast({
+          title: 'Commerce cree, copie impossible',
+          description: 'Le commerce est cree mais le lien n a pas pu etre copie automatiquement.',
+          variant: 'destructive',
+        });
+      }
     },
     onError: (error) => {
+      console.error('Erreur creation commerce revendeur:', error);
+      setSubmitFeedback({
+        type: 'error',
+        message: error.message || 'Impossible de creer le commerce.',
+      });
       toast({
-        title: '❌ Erreur',
+        title: 'Erreur',
         description: error.message || 'Impossible de creer le commerce.',
         variant: 'destructive',
       });
     },
   });
+
+  const handleCreateAndAttach = React.useCallback(async () => {
+    setSubmitFeedback({
+      type: 'loading',
+      message: 'Demande envoyee. Creation et rattachement en cours...',
+    });
+
+    try {
+      await createClientMutation.mutateAsync();
+    } catch (error) {
+      console.error('Echec handler creation commerce revendeur:', error);
+    }
+  }, [createClientMutation]);
 
   if (!isReseller || !currentReseller) {
     return (
@@ -327,7 +405,7 @@ export default function ResellerPortal() {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <Button onClick={() => createClientMutation.mutate()} disabled={createClientMutation.isPending}>
+                    <Button onClick={handleCreateAndAttach} disabled={createClientMutation.isPending}>
                       {createClientMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
                       Creer et rattacher
                     </Button>
@@ -336,6 +414,22 @@ export default function ResellerPortal() {
                       Le lien proprietaire est copie automatiquement apres creation.
                     </div>
                   </div>
+
+                  <div className="text-xs text-orange-700">
+                    Debug portail revendeur actif
+                  </div>
+
+                  {submitFeedback.message ? (
+                    <div className={`rounded-xl border p-3 text-sm ${
+                      submitFeedback.type === 'error'
+                        ? 'border-red-200 bg-red-50 text-red-800'
+                        : submitFeedback.type === 'success'
+                          ? 'border-green-200 bg-green-50 text-green-800'
+                          : 'border-blue-200 bg-blue-50 text-blue-800'
+                    }`}>
+                      {submitFeedback.message}
+                    </div>
+                  ) : null}
                 </>
               )}
             </CardContent>

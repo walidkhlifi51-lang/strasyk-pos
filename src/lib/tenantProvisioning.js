@@ -94,7 +94,7 @@ export const createTenantAndResolve = async ({
     : await resolveTenantByOwnerEmail(normalizedEmail);
 
   if (!resolvedTenant?.id) {
-    throw new Error('Le commerce n a pas pu etre retrouve apres creation.');
+    throw new Error('Le commerce a peut-etre ete cree, mais il n a pas pu etre relu apres creation. Verifiez les policies RLS Supabase sur tenants.');
   }
 
   try {
