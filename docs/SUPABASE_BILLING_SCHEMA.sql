@@ -17,6 +17,7 @@ alter table public.tenant_invoices
   add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 alter table public.tenant_invoices
+  alter column tenant_id drop not null,
   alter column issuer_snapshot set default '{}'::jsonb,
   alter column recipient_snapshot set default '{}'::jsonb,
   alter column metadata set default '{}'::jsonb;

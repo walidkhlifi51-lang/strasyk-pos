@@ -31,6 +31,7 @@ import {
   buildResellerToTenantInvoicePayload,
   computeInvoiceAmounts,
   createInvoiceForm,
+  isInvoiceForReseller,
   isInvoiceForTenant,
   sortInvoicesByDateDesc,
 } from '@/lib/invoiceDocuments';
@@ -132,6 +133,12 @@ export default function ResellerPortal() {
   const selectedClient = linkedTenants.find((item) => item.tenant.id === selectedClientId) || null;
   const selectedClientInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForTenant(invoice, selectedClientId)),
+  );
+  const receivedResellerInvoices = sortInvoicesByDateDesc(
+    invoices.filter((invoice) => isInvoiceForReseller(invoice, currentReseller?.id)),
+  );
+  const sentClientInvoices = sortInvoicesByDateDesc(
+    invoices.filter((invoice) => invoice.issuer_type === 'reseller' && invoice.issuer_id === currentReseller?.id),
   );
   const clientInvoiceAmounts = computeInvoiceAmounts(clientInvoiceForm.montant, clientInvoiceForm.tva_taux);
 
@@ -395,8 +402,9 @@ export default function ResellerPortal() {
       </Card>
 
       <Tabs defaultValue="clients" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="clients">Clients</TabsTrigger>
+          <TabsTrigger value="invoices">Factures</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="team">Equipe</TabsTrigger>
@@ -694,6 +702,88 @@ export default function ResellerPortal() {
                     </>
                   ) : null}
                 </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Factures recues de la plateforme</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {receivedResellerInvoices.length === 0 ? (
+                <p className="text-sm text-gray-500">Aucune facture recue pour le moment.</p>
+              ) : (
+                receivedResellerInvoices.map((invoice) => (
+                  <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">
+                          {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                        </p>
+                        {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                        <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                      </p>
+                      {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => generateInvoicePDF(invoice, null)}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      PDF
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Factures envoyees a mes clients</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {sentClientInvoices.length === 0 ? (
+                <p className="text-sm text-gray-500">Aucune facture envoyee a vos clients pour le moment.</p>
+              ) : (
+                sentClientInvoices.map((invoice) => {
+                  const targetTenant = linkedTenants.find((item) => item.tenant.id === (invoice.recipient_id || invoice.tenant_id))?.tenant || null;
+                  return (
+                    <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">
+                            {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                          </p>
+                          {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                          <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Client: {targetTenant?.nom_commercial || invoice.recipient_snapshot?.recipient_name || 'Inconnu'}
+                        </p>
+                        {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateInvoicePDF(invoice, targetTenant)}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        PDF
+                      </Button>
+                    </div>
+                  );
+                })
               )}
             </CardContent>
           </Card>

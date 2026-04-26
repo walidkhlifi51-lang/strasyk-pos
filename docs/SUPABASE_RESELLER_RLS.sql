@@ -24,7 +24,7 @@ as $$
   )
 $$;
 
-create or replace function public.app_is_platform_admin()
+create or replace function public.app_has_admin_claim()
 returns boolean
 language sql
 stable
@@ -32,6 +32,15 @@ as $$
   select
     lower(coalesce(auth.jwt() ->> 'role', '')) = 'admin'
     or lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '')) = 'admin'
+$$;
+
+create or replace function public.app_is_platform_admin()
+returns boolean
+language sql
+stable
+as $$
+  select
+    public.app_has_admin_claim()
     or exists (
       select 1
       from public.platform_admin_access paa
@@ -97,6 +106,7 @@ grant select, insert, update, delete on public.reseller_tenants to authenticated
 grant select, insert, update, delete on public.reseller_commissions to authenticated;
 grant select, insert, update, delete on public.reseller_payouts to authenticated;
 grant select, insert, update, delete on public.tenant_invoices to authenticated;
+grant select, insert, update, delete on public.platform_admin_access to authenticated;
 
 alter table public.tenants enable row level security;
 alter table public.restaurant_profiles enable row level security;
@@ -108,6 +118,7 @@ alter table public.reseller_tenants enable row level security;
 alter table public.reseller_commissions enable row level security;
 alter table public.reseller_payouts enable row level security;
 alter table public.tenant_invoices enable row level security;
+alter table public.platform_admin_access enable row level security;
 
 drop policy if exists tenants_select_access on public.tenants;
 create policy tenants_select_access
@@ -424,6 +435,38 @@ on public.reseller_payouts
 for delete
 to authenticated
 using (public.app_is_platform_admin());
+
+drop policy if exists platform_admin_access_select_access on public.platform_admin_access;
+create policy platform_admin_access_select_access
+on public.platform_admin_access
+for select
+to authenticated
+using (
+  public.app_has_admin_claim()
+  or lower(user_email) = public.app_current_user_email()
+);
+
+drop policy if exists platform_admin_access_insert_admin on public.platform_admin_access;
+create policy platform_admin_access_insert_admin
+on public.platform_admin_access
+for insert
+to authenticated
+with check (public.app_has_admin_claim());
+
+drop policy if exists platform_admin_access_update_admin on public.platform_admin_access;
+create policy platform_admin_access_update_admin
+on public.platform_admin_access
+for update
+to authenticated
+using (public.app_has_admin_claim())
+with check (public.app_has_admin_claim());
+
+drop policy if exists platform_admin_access_delete_admin on public.platform_admin_access;
+create policy platform_admin_access_delete_admin
+on public.platform_admin_access
+for delete
+to authenticated
+using (public.app_has_admin_claim());
 
 drop policy if exists tenant_invoices_select_access on public.tenant_invoices;
 create policy tenant_invoices_select_access
