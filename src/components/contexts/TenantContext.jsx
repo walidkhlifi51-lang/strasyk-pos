@@ -79,6 +79,24 @@ export const TenantProvider = ({ children }) => {
           if (normalizeEmail(invite.expected_email) === userEmail) {
             await appClient.auth.updateMe({ tenant_id: invite.tenant_id });
 
+            if ((invite.role || '').toLowerCase() === 'owner') {
+              localStorage.removeItem('pending_tenant_invite');
+
+              const updatedUser = await appClient.auth.me();
+              const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5);
+              const tenant = invitedTenants[0] || null;
+
+              return {
+                user: updatedUser,
+                tenant,
+                isOwner: true,
+                role: 'owner',
+                isPlatformAdmin,
+                userAccess: null,
+                status: tenant?.active === false ? 'suspended' : 'active',
+              };
+            }
+
             // Créer l'accès utilisateur (car ce n'est pas l'owner)
             await appClient.entities.UserAccess.create({
               tenant_id: invite.tenant_id,

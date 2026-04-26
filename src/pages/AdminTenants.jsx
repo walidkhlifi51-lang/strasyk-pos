@@ -15,34 +15,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import AdminTemplateSelector from '@/components/admin/AdminTemplateSelector';
 import { normalizeCustomDomain } from '@/lib/publicSiteTenant';
+import {
+  createTenantAndResolve,
+  ensureRestaurantProfile,
+  normalizeEmail,
+  resolveTenantByOwnerEmail,
+} from '@/lib/tenantProvisioning';
 
-const normalizeEmail = (value) => (value || '').trim().toLowerCase();
-const buildRestaurantProfilePayload = ({ tenantId, nomCommercial, adresse, telephone }) => ({
-  tenant_id: tenantId,
-  nom_etablissement: nomCommercial,
-  adresse: adresse || '',
-  telephone: telephone || '',
-  frais_livraison: 2.5,
-  montant_minimum_livraison: 15,
-  zone_livraison_km: 5,
-  impression_auto: true,
-  manages_deliveries: true,
-  manages_table_plan: false,
-  delivery_app_allowed: false,
-  manages_delivery_app: false,
-});
 const buildCreationSummary = ({ tenant, profile, ownerEmail }) => [
   `Commerce : ${tenant.nom_commercial}`,
   `Proprietaire : ${ownerEmail}`,
   `Tenant ID : ${tenant.id}`,
   `Profil : ${profile ? 'cree' : 'absent'}`,
 ].join(' | ');
-const buildTenantSlug = (value) => value
-  .toLowerCase()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/[^a-z0-9]+/g, "-")
-  .replace(/^-+|-+$/g, "");
 
 class AdminSectionBoundary extends React.Component {
   constructor(props) {
@@ -410,66 +395,6 @@ export default function AdminTenants() {
       ...refreshedTenant,
       profile: profiles[0] || null,
     };
-  };
-
-  const resolveTenantByOwnerEmail = async (ownerEmail) => {
-    const tenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5);
-    return tenants.find((tenant) => normalizeEmail(tenant.owner_email) === ownerEmail) || null;
-  };
-
-  const ensureRestaurantProfile = async ({ tenantId, nomCommercial, adresse, telephone }) => {
-    const existingProfiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenantId }, '-created_date', 5);
-    if (existingProfiles[0]) {
-      return existingProfiles[0];
-    }
-
-    await appClient.entities.RestaurantProfile.create(buildRestaurantProfilePayload({
-      tenantId,
-      nomCommercial,
-      adresse,
-      telephone,
-    }));
-
-    const createdProfiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenantId }, '-created_date', 5);
-    if (!createdProfiles[0]) {
-      throw new Error('Le profil restaurant est introuvable apres creation.');
-    }
-
-    return createdProfiles[0];
-  };
-
-  const createTenantAndResolve = async ({ nomCommercial, ownerEmail, subscriptionPlan, adresse, telephone }) => {
-    const createdTenant = await appClient.entities.Tenant.create({
-      nom_commercial: nomCommercial,
-      slug: buildTenantSlug(nomCommercial),
-      owner_email: ownerEmail,
-      subscription_plan: subscriptionPlan,
-      active: true,
-    });
-
-    const resolvedTenant = createdTenant?.id
-      ? createdTenant
-      : await resolveTenantByOwnerEmail(ownerEmail);
-
-    if (!resolvedTenant?.id) {
-      throw new Error('Le commerce n a pas pu etre retrouve apres creation.');
-    }
-
-    try {
-      const profile = await ensureRestaurantProfile({
-        tenantId: resolvedTenant.id,
-        nomCommercial,
-        adresse,
-        telephone,
-      });
-
-      return { tenant: resolvedTenant, profile };
-    } catch (profileError) {
-      if (createdTenant?.id) {
-        await appClient.entities.Tenant.delete(createdTenant.id).catch(() => null);
-      }
-      throw profileError;
-    }
   };
 
   const handleCreate = async (e) => {

@@ -1,16 +1,52 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appClient } from '@/api/appClient';
 import { useTenant } from '@/components/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Handshake, Store, Euro, CreditCard, Palette, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  Handshake,
+  Store,
+  Euro,
+  CreditCard,
+  Palette,
+  Users,
+  Plus,
+  Copy,
+  Loader2,
+  ShieldCheck,
+  Mail,
+} from 'lucide-react';
+import {
+  buildTenantOwnerInviteMessage,
+  createTenantAndResolve,
+  normalizeEmail,
+  resolveTenantByOwnerEmail,
+} from '@/lib/tenantProvisioning';
 
 const currency = (value) => `${Number(value || 0).toFixed(2)}€`;
 
+const createClientForm = () => ({
+  nom_commercial: '',
+  owner_email: '',
+  telephone: '',
+  adresse: '',
+  subscription_plan: 'basic',
+});
+
 export default function ResellerPortal() {
-  const { currentReseller, isReseller } = useTenant();
+  const { currentReseller, isReseller, resellerRole } = useTenant();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [newClientForm, setNewClientForm] = React.useState(createClientForm());
+
+  const canManageClients = ['owner', 'manager', 'sales'].includes(resellerRole);
 
   const { data, isLoading } = useQuery({
     queryKey: ['reseller-portal', currentReseller?.id],
@@ -44,18 +80,6 @@ export default function ResellerPortal() {
     staleTime: 30000,
   });
 
-  if (!isReseller || !currentReseller) {
-    return (
-      <div className="p-6 md:p-8">
-        <Card>
-          <CardContent className="pt-6 text-sm text-gray-600">
-            Cet espace est reserve aux revendeurs actifs.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const resellerTenants = data?.resellerTenants || [];
   const tenants = data?.tenants || [];
   const branding = data?.branding || null;
@@ -68,7 +92,8 @@ export default function ResellerPortal() {
       assignment,
       tenant: tenants.find((tenant) => tenant.id === assignment.tenant_id) || null,
     }))
-    .filter((item) => item.tenant);
+    .filter((item) => item.tenant)
+    .sort((a, b) => new Date(b.assignment.created_date || 0) - new Date(a.assignment.created_date || 0));
 
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -78,19 +103,113 @@ export default function ResellerPortal() {
     .filter((item) => item.status === 'paid')
     .reduce((sum, item) => sum + Number(item.commission_amount || 0), 0);
 
+  const createdByPortalCount = linkedTenants.filter((item) => item.assignment.acquisition_channel === 'reseller_portal').length;
+
   const cards = [
     { title: 'Commerces actifs', value: linkedTenants.filter((item) => item.assignment.status === 'active').length, icon: Store, accent: 'bg-blue-600' },
+    { title: 'Crees par vous', value: createdByPortalCount, icon: Plus, accent: 'bg-orange-500' },
     { title: 'Commissions pending', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
     { title: 'Commissions payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
-    { title: 'Equipe revendeur', value: resellerUsers.length, icon: Users, accent: 'bg-violet-600' },
   ];
+
+  const copyOwnerInvite = React.useCallback(async ({ tenantId, email, label }) => {
+    const message = buildTenantOwnerInviteMessage({ tenantId, email, label });
+    await navigator.clipboard.writeText(message);
+    toast({
+      title: '✅ Invitation client copiee',
+      description: 'Le lien d activation proprietaire a ete copie.',
+    });
+  }, [toast]);
+
+  const createClientMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentReseller?.id) {
+        throw new Error('Revendeur introuvable.');
+      }
+
+      if (!canManageClients) {
+        throw new Error('Votre role revendeur ne permet pas de creer un commerce.');
+      }
+
+      if (!newClientForm.nom_commercial.trim() || !newClientForm.owner_email.trim() || !newClientForm.telephone.trim() || !newClientForm.adresse.trim()) {
+        throw new Error('Tous les champs commerce sont obligatoires.');
+      }
+
+      const ownerEmail = normalizeEmail(newClientForm.owner_email);
+      const existingTenant = await resolveTenantByOwnerEmail(ownerEmail);
+      if (existingTenant) {
+        throw new Error('Un commerce existe deja pour cet email proprietaire.');
+      }
+
+      const { tenant, profile } = await createTenantAndResolve({
+        nomCommercial: newClientForm.nom_commercial.trim(),
+        ownerEmail,
+        subscriptionPlan: newClientForm.subscription_plan,
+        adresse: newClientForm.adresse.trim(),
+        telephone: newClientForm.telephone.trim(),
+      });
+
+      const existingAssignment = resellerTenants.find((item) => item.tenant_id === tenant.id && item.reseller_id === currentReseller.id);
+      if (existingAssignment?.id) {
+        await appClient.entities.ResellerTenant.update(existingAssignment.id, {
+          status: 'active',
+          acquisition_channel: existingAssignment.acquisition_channel || 'reseller_portal',
+          subscription_plan: newClientForm.subscription_plan,
+          started_at: existingAssignment.started_at || new Date().toISOString(),
+        });
+      } else {
+        await appClient.entities.ResellerTenant.create({
+          reseller_id: currentReseller.id,
+          tenant_id: tenant.id,
+          acquisition_channel: 'reseller_portal',
+          subscription_plan: newClientForm.subscription_plan,
+          status: 'active',
+          started_at: new Date().toISOString(),
+        });
+      }
+
+      return { tenant, profile, ownerEmail };
+    },
+    onSuccess: async ({ tenant, ownerEmail }) => {
+      await copyOwnerInvite({
+        tenantId: tenant.id,
+        email: ownerEmail,
+        label: tenant.nom_commercial,
+      });
+      setNewClientForm(createClientForm());
+      await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
+      toast({
+        title: '✅ Commerce cree',
+        description: `${tenant.nom_commercial} a ete cree et rattache a votre portefeuille.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: '❌ Erreur',
+        description: error.message || 'Impossible de creer le commerce.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  if (!isReseller || !currentReseller) {
+    return (
+      <div className="p-6 md:p-8">
+        <Card>
+          <CardContent className="pt-6 text-sm text-gray-600">
+            Cet espace est reserve aux revendeurs actifs.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Espace revendeur</h1>
         <p className="text-gray-600 mt-1">
-          Suivi de votre portefeuille commerces, de vos commissions et de votre branding.
+          Vous pouvez maintenant creer un commerce, le rattacher a votre portefeuille et copier directement son invitation proprietaire.
         </p>
       </div>
 
@@ -119,13 +238,18 @@ export default function ResellerPortal() {
             {currentReseller.name}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{currentReseller.type === 'white_label' ? 'White label' : 'Standard'}</Badge>
             <Badge className={currentReseller.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
               {currentReseller.status === 'active' ? 'Actif' : 'Suspendu'}
             </Badge>
             {currentReseller.contact_email && <Badge variant="outline">{currentReseller.contact_email}</Badge>}
+            {resellerRole && <Badge variant="outline">Role: {resellerRole}</Badge>}
+          </div>
+
+          <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-600">
+            Le portail revendeur reste volontairement simple: creation commerce, rattachement, invitation proprietaire et suivi de portefeuille sur une base claire.
           </div>
         </CardContent>
       </Card>
@@ -138,7 +262,85 @@ export default function ResellerPortal() {
           <TabsTrigger value="team">Equipe</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="clients" className="mt-4">
+        <TabsContent value="clients" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Nouveau commerce client</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!canManageClients ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  Votre role revendeur actuel ne permet pas de creer un commerce. Demandez a un owner ou manager revendeur.
+                </div>
+              ) : (
+                <>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nom du commerce</Label>
+                      <Input
+                        value={newClientForm.nom_commercial}
+                        onChange={(event) => setNewClientForm((prev) => ({ ...prev, nom_commercial: event.target.value }))}
+                        placeholder="Ex: Pizza Gare Centrale"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email proprietaire</Label>
+                      <Input
+                        type="email"
+                        value={newClientForm.owner_email}
+                        onChange={(event) => setNewClientForm((prev) => ({ ...prev, owner_email: event.target.value }))}
+                        placeholder="proprietaire@client.fr"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Telephone</Label>
+                      <Input
+                        value={newClientForm.telephone}
+                        onChange={(event) => setNewClientForm((prev) => ({ ...prev, telephone: event.target.value }))}
+                        placeholder="0600000000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Plan</Label>
+                      <Select
+                        value={newClientForm.subscription_plan}
+                        onValueChange={(value) => setNewClientForm((prev) => ({ ...prev, subscription_plan: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="basic">Basic</SelectItem>
+                          <SelectItem value="pro">Pro</SelectItem>
+                          <SelectItem value="premium">Premium</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Adresse</Label>
+                      <Input
+                        value={newClientForm.adresse}
+                        onChange={(event) => setNewClientForm((prev) => ({ ...prev, adresse: event.target.value }))}
+                        placeholder="12 rue Exemple, 75000 Paris"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button onClick={() => createClientMutation.mutate()} disabled={createClientMutation.isPending}>
+                      {createClientMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                      Creer et rattacher
+                    </Button>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Mail className="w-4 h-4" />
+                      Le lien proprietaire est copie automatiquement apres creation.
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Commerces rattaches</CardTitle>
@@ -150,12 +352,29 @@ export default function ResellerPortal() {
                 <p className="text-sm text-gray-500">Aucun commerce rattache pour le moment.</p>
               ) : (
                 linkedTenants.map(({ assignment, tenant }) => (
-                  <div key={assignment.id} className="border rounded-xl p-4 flex items-center justify-between gap-4">
-                    <div>
+                  <div key={assignment.id} className="border rounded-xl p-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-2">
                       <p className="font-semibold text-gray-900">{tenant.nom_commercial}</p>
-                      <p className="text-xs text-gray-500 mt-1">Plan: {assignment.subscription_plan || tenant.subscription_plan || 'Non defini'}</p>
+                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                        <span>Owner: {tenant.owner_email}</span>
+                        <span>Plan: {assignment.subscription_plan || tenant.subscription_plan || 'Non defini'}</span>
+                        <span>Acquisition: {assignment.acquisition_channel || 'non precise'}</span>
+                        <span>Creation: {tenant.created_date ? new Date(tenant.created_date).toLocaleDateString('fr-FR') : 'N/A'}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">{assignment.status}</Badge>
+                        {assignment.commission_type && <Badge variant="outline">Commission: {assignment.commission_type}</Badge>}
+                        {assignment.sale_price ? <Badge variant="outline">Vente: {currency(assignment.sale_price)}</Badge> : null}
+                      </div>
                     </div>
-                    <Badge variant="outline">{assignment.status}</Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyOwnerInvite({ tenantId: tenant.id, email: tenant.owner_email, label: tenant.nom_commercial })}
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copier invitation client
+                    </Button>
                   </div>
                 ))
               )}
@@ -260,7 +479,10 @@ export default function ResellerPortal() {
                       <p className="font-medium text-gray-900">{item.user_email}</p>
                       <p className="text-xs text-gray-500 mt-1">Role: {item.role}</p>
                     </div>
-                    <Badge variant="outline">{item.status}</Badge>
+                    <div className="flex items-center gap-2">
+                      {item.role === 'owner' && <ShieldCheck className="w-4 h-4 text-emerald-600" />}
+                      <Badge variant="outline">{item.status}</Badge>
+                    </div>
                   </div>
                 ))
               )}

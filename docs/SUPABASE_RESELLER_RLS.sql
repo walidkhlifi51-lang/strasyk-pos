@@ -53,6 +53,23 @@ as $$
     )
 $$;
 
+create or replace function public.app_can_manage_reseller(target_reseller_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select
+    public.app_is_platform_admin()
+    or exists (
+      select 1
+      from public.reseller_users ru
+      where ru.reseller_id = target_reseller_id
+        and lower(ru.user_email) = public.app_current_user_email()
+        and ru.status = 'active'
+        and ru.role in ('owner', 'manager', 'sales')
+    )
+$$;
+
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.resellers to authenticated;
 grant select, insert, update, delete on public.reseller_users to authenticated;
@@ -198,26 +215,29 @@ to authenticated
 using (public.app_can_access_reseller(reseller_id));
 
 drop policy if exists reseller_tenants_insert_platform_admin on public.reseller_tenants;
-create policy reseller_tenants_insert_platform_admin
+drop policy if exists reseller_tenants_insert_manager_access on public.reseller_tenants;
+create policy reseller_tenants_insert_manager_access
 on public.reseller_tenants
 for insert
 to authenticated
-with check (public.app_is_platform_admin());
+with check (public.app_can_manage_reseller(reseller_id));
 
 drop policy if exists reseller_tenants_update_platform_admin on public.reseller_tenants;
-create policy reseller_tenants_update_platform_admin
+drop policy if exists reseller_tenants_update_manager_access on public.reseller_tenants;
+create policy reseller_tenants_update_manager_access
 on public.reseller_tenants
 for update
 to authenticated
-using (public.app_is_platform_admin())
-with check (public.app_is_platform_admin());
+using (public.app_can_manage_reseller(reseller_id))
+with check (public.app_can_manage_reseller(reseller_id));
 
 drop policy if exists reseller_tenants_delete_platform_admin on public.reseller_tenants;
-create policy reseller_tenants_delete_platform_admin
+drop policy if exists reseller_tenants_delete_manager_access on public.reseller_tenants;
+create policy reseller_tenants_delete_manager_access
 on public.reseller_tenants
 for delete
 to authenticated
-using (public.app_is_platform_admin());
+using (public.app_can_manage_reseller(reseller_id));
 
 drop policy if exists reseller_commissions_select_access on public.reseller_commissions;
 create policy reseller_commissions_select_access

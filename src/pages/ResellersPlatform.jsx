@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
+import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 
 const createEmptyResellerForm = () => ({
   name: '',
@@ -170,6 +171,15 @@ A bientot.`;
     }))
     .filter((item) => item.tenant);
 
+  const selectedPipelineStats = {
+    activeClients: linkedTenants.filter((item) => item.assignment.status === 'active').length,
+    clientsCreatedByReseller: linkedTenants.filter((item) => item.assignment.acquisition_channel === 'reseller_portal').length,
+    activeTeam: selectedResellerUsers.filter((item) => item.status === 'active').length,
+    pendingCommissions: selectedCommissions
+      .filter((item) => item.status === 'pending')
+      .reduce((sum, item) => sum + Number(item.commission_amount || 0), 0),
+  };
+
   const activeTenantLinksByTenantId = resellerTenants.reduce((accumulator, item) => {
     if (item.status === 'active' && item.tenant_id && !accumulator[item.tenant_id]) {
       accumulator[item.tenant_id] = item;
@@ -184,6 +194,28 @@ A bientot.`;
   });
 
   const statsCards = computeResellerStats({ resellers, resellerTenants, commissions });
+
+  const copyTenantOwnerInvite = React.useCallback(async (tenant) => {
+    if (!tenant?.id || !tenant?.owner_email) {
+      toast({
+        title: '❌ Invitation impossible',
+        description: 'Email proprietaire introuvable pour ce commerce.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    await navigator.clipboard.writeText(buildTenantOwnerInviteMessage({
+      tenantId: tenant.id,
+      email: tenant.owner_email,
+      label: tenant.nom_commercial,
+    }));
+
+    toast({
+      title: '✅ Invitation proprietaire copiee',
+      description: `Lien d activation pret pour ${tenant.nom_commercial}.`,
+    });
+  }, [toast]);
 
   React.useEffect(() => {
     if (!selectedResellerId && resellers[0]?.id) {
@@ -594,6 +626,33 @@ A bientot.`;
                 </TabsList>
 
                 <TabsContent value="identity" className="space-y-4 mt-4">
+                  <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Clients actifs</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPipelineStats.activeClients}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Crees par le revendeur</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPipelineStats.clientsCreatedByReseller}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Equipe active</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPipelineStats.activeTeam}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Commissions pending</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{currency(selectedPipelineStats.pendingCommissions)}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Nom revendeur</Label>
@@ -754,6 +813,33 @@ A bientot.`;
                 </TabsContent>
 
                 <TabsContent value="tenants" className="space-y-4 mt-4">
+                  <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Total commerces</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{linkedTenants.length}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Crees via portail</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPipelineStats.clientsCreatedByReseller}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Actifs</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPipelineStats.activeClients}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Portefeuille</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{currency(linkedTenants.reduce((sum, item) => sum + Number(item.assignment.sale_price || 0), 0))}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
                   <div className="rounded-xl border bg-blue-50 p-4">
                     <div className="flex items-center gap-2 text-blue-900 font-medium">
                       <Handshake className="w-4 h-4" />
@@ -790,22 +876,37 @@ A bientot.`;
                         <div key={assignment.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
                           <div>
                             <p className="font-semibold text-gray-900">{tenant.nom_commercial}</p>
-                            <p className="text-xs text-gray-500 mt-1">Plan: {assignment.subscription_plan || tenant.subscription_plan || 'Non defini'}</p>
+                            <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
+                              <span>Owner: {tenant.owner_email || 'Non defini'}</span>
+                              <span>Plan: {assignment.subscription_plan || tenant.subscription_plan || 'Non defini'}</span>
+                              <span>Acquisition: {assignment.acquisition_channel || 'non precise'}</span>
+                              <span>Creation commerce: {tenant.created_date ? new Date(tenant.created_date).toLocaleDateString('fr-FR') : 'N/A'}</span>
+                              <span>Debut portefeuille: {assignment.started_at ? new Date(assignment.started_at).toLocaleDateString('fr-FR') : 'N/A'}</span>
+                            </div>
                             <div className="flex flex-wrap gap-2 mt-3">
                               <Badge variant="outline">{assignment.status}</Badge>
                               {assignment.commission_type && <Badge variant="outline">Commission: {assignment.commission_type}</Badge>}
                               {assignment.sale_price ? <Badge variant="outline">Vente: {currency(assignment.sale_price)}</Badge> : null}
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => detachTenantMutation.mutate(assignment.id)}
-                            disabled={detachTenantMutation.isPending}
-                          >
-                            <Unlink className="w-4 h-4 mr-2" />
-                            Retirer
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copyTenantOwnerInvite(tenant)}
+                            >
+                              Copier invitation
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => detachTenantMutation.mutate(assignment.id)}
+                              disabled={detachTenantMutation.isPending}
+                            >
+                              <Unlink className="w-4 h-4 mr-2" />
+                              Retirer
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
