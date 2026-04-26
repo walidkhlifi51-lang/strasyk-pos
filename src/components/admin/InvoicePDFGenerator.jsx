@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { PLATFORM_ISSUER_SNAPSHOT, buildTenantRecipientSnapshot } from '@/lib/invoiceSnapshots';
+import { getInvoiceAmounts } from '@/lib/invoiceDocuments';
 
 const euro = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 
@@ -107,19 +108,24 @@ export const generateInvoicePDF = (invoice, tenant) => {
   let totalTTC = 0;
 
   if (!invoice.lignes_materiel || invoice.lignes_materiel.length === 0) {
-    const montantTTC = Number(invoice.montant || 0);
-    const montantHT = invoice.tva_taux ? montantTTC / (1 + invoice.tva_taux / 100) : montantTTC;
-    const montantTVA = montantTTC - montantHT;
+    const {
+      amountHT,
+      amountTVA,
+      amountTTC,
+      monthlyAmountHT,
+      monthlyAmountTTC,
+    } = getInvoiceAmounts(invoice);
+    const recurringSuffix = invoice.monthly_payments ? ' / mois' : '';
 
     doc.text(typeLabels[invoice.type] || invoice.type || 'Prestation', 20, yPos);
-    doc.text(euro(montantHT), 140, yPos);
+    doc.text(`${euro(invoice.monthly_payments ? monthlyAmountHT : amountHT)}${recurringSuffix}`, 140, yPos);
     doc.text(`${invoice.tva_taux || 0}%`, 165, yPos);
-    doc.text(euro(montantTTC), 180, yPos);
+    doc.text(`${euro(invoice.monthly_payments ? monthlyAmountTTC : amountTTC)}${recurringSuffix}`, 180, yPos);
     yPos += 8;
 
-    totalHT = montantHT;
-    totalTVA = montantTVA;
-    totalTTC = montantTTC;
+    totalHT = amountHT;
+    totalTVA = amountTVA;
+    totalTTC = amountTTC;
   } else {
     invoice.lignes_materiel.forEach((ligne) => {
       const ligneHT = Number(ligne.quantite || 0) * Number(ligne.prix_unitaire_ht || 0);

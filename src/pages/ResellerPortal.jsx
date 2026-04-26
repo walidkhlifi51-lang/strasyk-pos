@@ -31,7 +31,9 @@ import {
   buildResellerToTenantInvoicePayload,
   computeInvoiceAmounts,
   createInvoiceForm,
+  getInvoiceAmounts,
   isInvoiceForReseller,
+  isRecurringInvoiceType,
   isInvoiceForTenant,
   sortInvoicesByDateDesc,
 } from '@/lib/invoiceDocuments';
@@ -637,6 +639,27 @@ export default function ResellerPortal() {
                                 onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, date_facturation: event.target.value }))}
                               />
                             </div>
+                            {isRecurringInvoiceType(clientInvoiceForm.type) ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                  <Label>Debut abonnement</Label>
+                                  <Input
+                                    type="date"
+                                    value={clientInvoiceForm.periode_debut}
+                                    onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, periode_debut: event.target.value }))}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Duree mois</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={clientInvoiceForm.duree_mois}
+                                    onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, duree_mois: event.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
                             <div className="space-y-2">
                               <Label>Description</Label>
                               <Textarea
@@ -670,9 +693,11 @@ export default function ResellerPortal() {
                                 Aucune facture pour ce client. Si la creation echoue, appliquez d abord `docs/SUPABASE_BILLING_SCHEMA.sql` puis le RLS facture.
                               </p>
                             ) : (
-                              selectedClientInvoices.map((invoice) => (
+                              selectedClientInvoices.map((invoice) => {
+                                const amounts = getInvoiceAmounts(invoice);
+                                return (
                                 <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
-                                  <div>
+                                  <div className="space-y-2">
                                     <div className="flex items-center gap-2">
                                       <p className="font-medium text-gray-900">
                                         {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
@@ -683,7 +708,25 @@ export default function ResellerPortal() {
                                     <p className="text-xs text-gray-500 mt-1">
                                       {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
                                     </p>
+                                    <p className="text-xs text-gray-600">
+                                      HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                                    </p>
+                                    {invoice.monthly_payments ? (
+                                      <p className="text-xs text-blue-700">
+                                        Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                                      </p>
+                                    ) : null}
                                     {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                                    {invoice.monthly_payments ? (
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                                        {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
+                                          <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                                            <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
+                                            <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                   </div>
                                   <Button
                                     variant="outline"
@@ -694,7 +737,8 @@ export default function ResellerPortal() {
                                     PDF
                                   </Button>
                                 </div>
-                              ))
+                              );
+                              })
                             )}
                           </CardContent>
                         </Card>
@@ -716,9 +760,11 @@ export default function ResellerPortal() {
               {receivedResellerInvoices.length === 0 ? (
                 <p className="text-sm text-gray-500">Aucune facture recue pour le moment.</p>
               ) : (
-                receivedResellerInvoices.map((invoice) => (
+                receivedResellerInvoices.map((invoice) => {
+                  const amounts = getInvoiceAmounts(invoice);
+                  return (
                   <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
-                    <div>
+                    <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-gray-900">
                           {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
@@ -729,7 +775,25 @@ export default function ResellerPortal() {
                       <p className="text-xs text-gray-500 mt-1">
                         {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
                       </p>
+                      <p className="text-xs text-gray-600">
+                        HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                      </p>
+                      {invoice.monthly_payments ? (
+                        <p className="text-xs text-blue-700">
+                          Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                        </p>
+                      ) : null}
                       {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                      {invoice.monthly_payments ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                          {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
+                            <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                              <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
+                              <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <Button
                       variant="outline"
@@ -740,7 +804,8 @@ export default function ResellerPortal() {
                       PDF
                     </Button>
                   </div>
-                ))
+                );
+                })
               )}
             </CardContent>
           </Card>
@@ -755,9 +820,10 @@ export default function ResellerPortal() {
               ) : (
                 sentClientInvoices.map((invoice) => {
                   const targetTenant = linkedTenants.find((item) => item.tenant.id === (invoice.recipient_id || invoice.tenant_id))?.tenant || null;
+                  const amounts = getInvoiceAmounts(invoice);
                   return (
                     <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
-                      <div>
+                      <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-gray-900">
                             {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
@@ -768,10 +834,28 @@ export default function ResellerPortal() {
                         <p className="text-xs text-gray-500 mt-1">
                           {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
                         </p>
+                        <p className="text-xs text-gray-600">
+                          HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                        </p>
+                        {invoice.monthly_payments ? (
+                          <p className="text-xs text-blue-700">
+                            Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                          </p>
+                        ) : null}
                         <p className="text-xs text-gray-500 mt-1">
                           Client: {targetTenant?.nom_commercial || invoice.recipient_snapshot?.recipient_name || 'Inconnu'}
                         </p>
                         {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                        {invoice.monthly_payments ? (
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                            {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
+                              <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                                <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
+                                <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <Button
                         variant="outline"
