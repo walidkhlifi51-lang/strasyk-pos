@@ -17,6 +17,7 @@ import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
   buildPlatformToResellerInvoicePayload,
+  computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
   getInvoiceAmounts,
@@ -477,6 +478,32 @@ A bientot.`;
     }),
     onSuccess: async () => {
       toast({ title: '✅ Paiement valide' });
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const toggleResellerMonthlyPaymentMutation = useMutation({
+    mutationFn: async ({ invoice, monthKey }) => {
+      const updatedPayments = { ...(invoice.monthly_payments || {}) };
+      const currentPayment = updatedPayments[monthKey] || {};
+      updatedPayments[monthKey] = {
+        ...currentPayment,
+        paye: !currentPayment.paye,
+        date_paiement: !currentPayment.paye ? new Date().toISOString().split('T')[0] : null,
+      };
+      const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
+
+      return appClient.entities.TenantInvoice.update(invoice.id, {
+        monthly_payments: updatedPayments,
+        statut: nextStatus,
+        date_paiement: nextStatus === 'payee' ? new Date().toISOString().split('T')[0] : null,
+      });
+    },
+    onSuccess: async () => {
+      toast({ title: '✅ Paiement mensuel mis a jour' });
       await invalidateResellers();
     },
     onError: (error) => {
@@ -1109,6 +1136,12 @@ A bientot.`;
                                       <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
                                         <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
                                         <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                                        <button
+                                          onClick={() => toggleResellerMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
+                                          className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
+                                        >
+                                          {payment.paye ? '✓' : '×'}
+                                        </button>
                                       </div>
                                     ))}
                                   </div>
@@ -1122,7 +1155,7 @@ A bientot.`;
                                 <Download className="w-4 h-4 mr-2" />
                                 PDF
                               </Button>
-                              {invoice.statut !== 'payee' ? (
+                              {!invoice.monthly_payments && invoice.statut !== 'payee' ? (
                                 <Button
                                   size="sm"
                                   onClick={() => markResellerInvoicePaidMutation.mutate(invoice.id)}

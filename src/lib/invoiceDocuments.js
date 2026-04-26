@@ -33,6 +33,12 @@ export const computeInvoiceAmounts = (montantInput, tvaInput) => {
 
 export const isRecurringInvoiceType = (type) => type === 'abonnement' || type === 'frais_de_maintenance';
 
+export const computeInvoiceStatusFromMonthlyPayments = (monthlyPayments = {}) => {
+  const payments = Object.values(monthlyPayments || {});
+  if (!payments.length) return 'en_attente';
+  return payments.every((payment) => payment?.paye) ? 'payee' : 'en_attente';
+};
+
 export const getInvoiceAmounts = (invoice = {}) => {
   const metadata = invoice.metadata || {};
   const montantTTC = Number(metadata.amount_ttc ?? invoice.montant ?? 0);
