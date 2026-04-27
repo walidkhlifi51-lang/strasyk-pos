@@ -16,7 +16,6 @@ import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
-  buildPlatformToResellerInvoicePayload,
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
@@ -26,6 +25,7 @@ import {
   isInvoiceForReseller,
   sortInvoicesByDateDesc,
 } from '@/lib/invoiceDocuments';
+import { PLATFORM_ISSUER_SNAPSHOT, buildResellerRecipientSnapshot } from '@/lib/invoiceSnapshots';
 
 const createEmptyResellerForm = () => ({
   name: '',
@@ -457,15 +457,72 @@ A bientot.`;
         throw new Error('Montant facture requis.');
       }
 
-      return appClient.entities.TenantInvoice.create(
-        buildPlatformToResellerInvoicePayload({
-          form: {
-            ...resellerInvoiceForm,
-            type: selectedType,
-          },
-          reseller: selectedReseller,
-        }),
-      );
+      const montantHT = parseFloat(resellerInvoiceForm.montant);
+      const tauxTVA = parseFloat(resellerInvoiceForm.tva_taux) || 0;
+      const montantMensuelTTC = parseFloat((montantHT * (1 + tauxTVA / 100)).toFixed(2));
+      const montantMensuelTVA = parseFloat((montantMensuelTTC - montantHT).toFixed(2));
+      const duree = Number(resellerInvoiceForm.duree_mois || 12);
+      const isRecurring = selectedType === 'abonnement' || selectedType === 'frais_de_maintenance';
+      const montantTotalTTC = isRecurring && resellerInvoiceForm.periode_debut ? montantMensuelTTC * duree : montantMensuelTTC;
+      const montantTotalHT = isRecurring && resellerInvoiceForm.periode_debut ? montantHT * duree : montantHT;
+      const montantTotalTVA = isRecurring && resellerInvoiceForm.periode_debut ? montantMensuelTVA * duree : montantMensuelTVA;
+
+      const invoiceData = {
+        reseller_id: selectedReseller.id,
+        numero_facture: `FAC-${Date.now()}`,
+        montant: parseFloat(montantTotalTTC.toFixed(2)),
+        tva_taux: tauxTVA,
+        type: selectedType,
+        description: resellerInvoiceForm.description || null,
+        date_facturation: resellerInvoiceForm.date_facturation,
+        statut: 'en_attente',
+        issuer_type: 'platform',
+        issuer_id: null,
+        recipient_type: 'reseller',
+        recipient_id: selectedReseller.id,
+        issuer_snapshot: PLATFORM_ISSUER_SNAPSHOT,
+        recipient_snapshot: buildResellerRecipientSnapshot(selectedReseller),
+        metadata: {
+          amount_ht: parseFloat(montantTotalHT.toFixed(2)),
+          amount_tva: parseFloat(montantTotalTVA.toFixed(2)),
+          amount_ttc: parseFloat(montantTotalTTC.toFixed(2)),
+          monthly_amount_ht: parseFloat(montantHT.toFixed(2)),
+          monthly_amount_tva: parseFloat(montantMensuelTVA.toFixed(2)),
+          monthly_amount_ttc: parseFloat(montantMensuelTTC.toFixed(2)),
+        },
+      };
+
+      if (resellerInvoiceForm.is_devis) {
+        invoiceData.is_devis = true;
+      }
+
+      if ((resellerInvoiceForm.materiel || '').trim()) {
+        invoiceData.materiel = resellerInvoiceForm.materiel.trim();
+      }
+
+      if (isRecurring && resellerInvoiceForm.periode_debut) {
+        const debut = new Date(resellerInvoiceForm.periode_debut);
+        const monthlyPayments = {};
+
+        for (let i = 0; i < duree; i += 1) {
+          const moisDate = new Date(debut);
+          moisDate.setMonth(debut.getMonth() + i);
+          const moisKey = moisDate.toISOString().split('T')[0];
+          monthlyPayments[moisKey] = {
+            montant: montantMensuelTTC,
+            paye: false,
+            date_paiement: null,
+          };
+        }
+
+        const fin = new Date(debut);
+        fin.setMonth(debut.getMonth() + duree);
+        invoiceData.periode_debut = resellerInvoiceForm.periode_debut;
+        invoiceData.periode_fin = fin.toISOString().split('T')[0];
+        invoiceData.monthly_payments = monthlyPayments;
+      }
+
+      return appClient.entities.TenantInvoice.create(invoiceData);
     },
     onSuccess: async () => {
       toast({ title: '✅ Facture revendeur creee' });

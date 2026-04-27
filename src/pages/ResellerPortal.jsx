@@ -29,7 +29,6 @@ import {
 } from 'lucide-react';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
-  buildResellerToTenantInvoicePayload,
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
@@ -46,6 +45,7 @@ import {
   normalizeEmail,
   resolveTenantByOwnerEmail,
 } from '@/lib/tenantProvisioning';
+import { buildResellerIssuerSnapshot, buildTenantRecipientSnapshot } from '@/lib/invoiceSnapshots';
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 
@@ -318,17 +318,73 @@ export default function ResellerPortal() {
         throw new Error('Montant facture requis.');
       }
 
-      return appClient.entities.TenantInvoice.create(
-        buildResellerToTenantInvoicePayload({
-          form: {
-            ...clientInvoiceForm,
-            type: selectedType,
-          },
-          reseller: currentReseller,
-          branding,
-          tenant: selectedClient.tenant,
-        }),
-      );
+      const montantHT = parseFloat(clientInvoiceForm.montant);
+      const tauxTVA = parseFloat(clientInvoiceForm.tva_taux) || 0;
+      const montantMensuelTTC = parseFloat((montantHT * (1 + tauxTVA / 100)).toFixed(2));
+      const montantMensuelTVA = parseFloat((montantMensuelTTC - montantHT).toFixed(2));
+      const duree = Number(clientInvoiceForm.duree_mois || 12);
+      const isRecurring = selectedType === 'abonnement' || selectedType === 'frais_de_maintenance';
+      const montantTotalTTC = isRecurring && clientInvoiceForm.periode_debut ? montantMensuelTTC * duree : montantMensuelTTC;
+      const montantTotalHT = isRecurring && clientInvoiceForm.periode_debut ? montantHT * duree : montantHT;
+      const montantTotalTVA = isRecurring && clientInvoiceForm.periode_debut ? montantMensuelTVA * duree : montantMensuelTVA;
+
+      const invoiceData = {
+        tenant_id: selectedClient.tenant.id,
+        reseller_id: currentReseller.id,
+        numero_facture: `FAC-${Date.now()}`,
+        montant: parseFloat(montantTotalTTC.toFixed(2)),
+        tva_taux: tauxTVA,
+        type: selectedType,
+        description: clientInvoiceForm.description || null,
+        date_facturation: clientInvoiceForm.date_facturation,
+        statut: 'en_attente',
+        issuer_type: 'reseller',
+        issuer_id: currentReseller.id,
+        recipient_type: 'tenant',
+        recipient_id: selectedClient.tenant.id,
+        issuer_snapshot: buildResellerIssuerSnapshot({ reseller: currentReseller, branding }),
+        recipient_snapshot: buildTenantRecipientSnapshot(selectedClient.tenant),
+        metadata: {
+          amount_ht: parseFloat(montantTotalHT.toFixed(2)),
+          amount_tva: parseFloat(montantTotalTVA.toFixed(2)),
+          amount_ttc: parseFloat(montantTotalTTC.toFixed(2)),
+          monthly_amount_ht: parseFloat(montantHT.toFixed(2)),
+          monthly_amount_tva: parseFloat(montantMensuelTVA.toFixed(2)),
+          monthly_amount_ttc: parseFloat(montantMensuelTTC.toFixed(2)),
+        },
+      };
+
+      if (clientInvoiceForm.is_devis) {
+        invoiceData.is_devis = true;
+      }
+
+      if ((clientInvoiceForm.materiel || '').trim()) {
+        invoiceData.materiel = clientInvoiceForm.materiel.trim();
+      }
+
+      if (isRecurring && clientInvoiceForm.periode_debut) {
+        const debut = new Date(clientInvoiceForm.periode_debut);
+        const monthlyPayments = {};
+
+        for (let i = 0; i < duree; i += 1) {
+          const moisDate = new Date(debut);
+          moisDate.setMonth(debut.getMonth() + i);
+          const moisKey = moisDate.toISOString().split('T')[0];
+          monthlyPayments[moisKey] = {
+            montant: montantMensuelTTC,
+            paye: false,
+            date_paiement: null,
+          };
+        }
+
+        const fin = new Date(debut);
+        fin.setMonth(debut.getMonth() + duree);
+        invoiceData.periode_debut = clientInvoiceForm.periode_debut;
+        invoiceData.periode_fin = fin.toISOString().split('T')[0];
+        invoiceData.monthly_payments = monthlyPayments;
+      }
+
+      return appClient.entities.TenantInvoice.create(invoiceData);
     },
     onSuccess: async () => {
       toast({ title: '✅ Facture client creee' });
