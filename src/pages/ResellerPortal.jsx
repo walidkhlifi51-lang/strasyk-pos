@@ -310,7 +310,8 @@ export default function ResellerPortal() {
       if (!selectedClient?.tenant?.id) {
         throw new Error('Selectionnez un client commerce.');
       }
-      if (!clientInvoiceForm.type) {
+      const selectedType = document.getElementById('client-invoice-type')?.value || clientInvoiceForm.type;
+      if (!selectedType) {
         throw new Error('Choisissez un type de facture.');
       }
       if (!clientInvoiceForm.montant || Number.isNaN(Number(clientInvoiceForm.montant))) {
@@ -319,7 +320,10 @@ export default function ResellerPortal() {
 
       return appClient.entities.TenantInvoice.create(
         buildResellerToTenantInvoicePayload({
-          form: clientInvoiceForm,
+          form: {
+            ...clientInvoiceForm,
+            type: selectedType,
+          },
           reseller: currentReseller,
           branding,
           tenant: selectedClient.tenant,
@@ -646,6 +650,7 @@ export default function ResellerPortal() {
                             <div className="space-y-2">
                               <Label>Type</Label>
                               <select
+                                id="client-invoice-type"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                 value={clientInvoiceForm.type || ''}
                                 onChange={(event) => setClientInvoiceForm((prev) => ({ ...prev, type: event.target.value || null }))}

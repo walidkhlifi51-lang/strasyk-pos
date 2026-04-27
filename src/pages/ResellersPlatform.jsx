@@ -451,14 +451,18 @@ A bientot.`;
   const createResellerInvoiceMutation = useMutation({
     mutationFn: async () => {
       if (!selectedReseller?.id) throw new Error('Aucun revendeur selectionne.');
-      if (!resellerInvoiceForm.type) throw new Error('Choisissez un type de facture.');
+      const selectedType = document.getElementById('reseller-invoice-type')?.value || resellerInvoiceForm.type;
+      if (!selectedType) throw new Error('Choisissez un type de facture.');
       if (!resellerInvoiceForm.montant || Number.isNaN(Number(resellerInvoiceForm.montant))) {
         throw new Error('Montant facture requis.');
       }
 
       return appClient.entities.TenantInvoice.create(
         buildPlatformToResellerInvoicePayload({
-          form: resellerInvoiceForm,
+          form: {
+            ...resellerInvoiceForm,
+            type: selectedType,
+          },
           reseller: selectedReseller,
         }),
       );
@@ -1014,6 +1018,7 @@ A bientot.`;
                         <div className="space-y-2">
                           <Label>Type</Label>
                           <select
+                            id="reseller-invoice-type"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             value={resellerInvoiceForm.type || ''}
                             onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, type: event.target.value || null }))}
