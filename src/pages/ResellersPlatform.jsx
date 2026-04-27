@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2 } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
@@ -612,6 +612,35 @@ A bientot.`;
     },
     onSuccess: async () => {
       toast({ title: '✅ Paiement mensuel mis a jour' });
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteResellerInvoiceMutation = useMutation({
+    mutationFn: async (invoice) => {
+      if (!invoice?.id) {
+        throw new Error('Facture revendeur introuvable.');
+      }
+
+      if (isPaymentRequestInvoice(invoice)) {
+        const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+        const linkedFinalInvoices = allInvoices.filter((item) => (
+          isFinalInvoice(item)
+          && item.metadata?.linked_payment_request_id === invoice.id
+        ));
+
+        for (const linkedInvoice of linkedFinalInvoices) {
+          await appClient.entities.TenantInvoice.delete(linkedInvoice.id);
+        }
+      }
+
+      return appClient.entities.TenantInvoice.delete(invoice.id);
+    },
+    onSuccess: async () => {
+      toast({ title: '✅ Facture revendeur supprimee' });
       await invalidateResellers();
     },
     onError: (error) => {
@@ -1291,6 +1320,18 @@ A bientot.`;
                                   Valider paiement
                                 </Button>
                               ) : null}
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                  if (!confirm('Supprimer cette facture revendeur ?')) return;
+                                  deleteResellerInvoiceMutation.mutate(invoice);
+                                }}
+                                disabled={deleteResellerInvoiceMutation.isPending}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Supprimer
+                              </Button>
                             </div>
                           );
                           })
