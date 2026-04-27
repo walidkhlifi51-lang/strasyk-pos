@@ -173,6 +173,12 @@ export const isInvoiceForTenant = (invoice, tenantId) => {
   return invoice.tenant_id === tenantId;
 };
 
-export const sortInvoicesByDateDesc = (invoices = []) => [...invoices].sort(
-  (left, right) => new Date(right.date_facturation || right.created_date || 0) - new Date(left.date_facturation || left.created_date || 0),
-);
+export const sortInvoicesByDateDesc = (invoices = []) => [...invoices].sort((left, right) => {
+  const createdDelta = new Date(right.created_date || 0) - new Date(left.created_date || 0);
+  if (createdDelta !== 0) return createdDelta;
+
+  const facturationDelta = new Date(right.date_facturation || 0) - new Date(left.date_facturation || 0);
+  if (facturationDelta !== 0) return facturationDelta;
+
+  return `${right.numero_facture || ''}`.localeCompare(`${left.numero_facture || ''}`);
+});
