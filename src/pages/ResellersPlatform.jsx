@@ -1013,19 +1013,19 @@ A bientot.`;
                         </div>
                         <div className="space-y-2">
                           <Label>Type</Label>
-                          <Select value={resellerInvoiceForm.type ?? undefined} onValueChange={(value) => setResellerInvoiceForm((prev) => ({ ...prev, type: value }))}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choisir un type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="abonnement">Abonnement</SelectItem>
-                              <SelectItem value="achat_complet">Vente complete</SelectItem>
-                              <SelectItem value="materiel">Materiel</SelectItem>
-                              <SelectItem value="module_supplementaire">Module supplementaire</SelectItem>
-                              <SelectItem value="frais_de_maintenance">Maintenance</SelectItem>
-                              <SelectItem value="autre">Autre</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={resellerInvoiceForm.type || ''}
+                            onChange={(event) => setResellerInvoiceForm((prev) => ({ ...prev, type: event.target.value || null }))}
+                          >
+                            <option value="">Choisir un type</option>
+                            <option value="abonnement">Abonnement</option>
+                            <option value="achat_complet">Vente complete</option>
+                            <option value="materiel">Materiel</option>
+                            <option value="module_supplementaire">Module supplementaire</option>
+                            <option value="frais_de_maintenance">Maintenance</option>
+                            <option value="autre">Autre</option>
+                          </select>
                           <p className="text-xs text-gray-500">Type choisi: {getInvoiceTypeLabel(resellerInvoiceForm.type)}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
