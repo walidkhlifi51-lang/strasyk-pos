@@ -73,6 +73,12 @@ export const buildPaymentRequestMetadata = ({
 });
 
 export const buildFinalInvoiceFromPaymentRequest = (invoice = {}, monthKey = null) => {
+  const {
+    id: _ignoredId,
+    created_date: _ignoredCreatedDate,
+    updated_date: _ignoredUpdatedDate,
+    ...baseInvoice
+  } = invoice;
   const metadata = invoice.metadata || {};
   const monthlyPayments = invoice.monthly_payments || {};
   const monthPayment = monthKey ? monthlyPayments[monthKey] : null;
@@ -84,7 +90,7 @@ export const buildFinalInvoiceFromPaymentRequest = (invoice = {}, monthKey = nul
   const amountTTC = monthPayment ? Number(monthPayment.montant ?? metadata.monthly_amount_ttc ?? 0) : Number(metadata.amount_ttc ?? invoice.montant ?? 0);
 
   return {
-    ...invoice,
+    ...baseInvoice,
     numero_facture: `FAC-${Date.now()}`,
     montant: Number(amountTTC.toFixed(2)),
     statut: 'payee',
