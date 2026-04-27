@@ -20,6 +20,7 @@ import {
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
+  getInvoiceTypeLabel,
   getInvoiceAmounts,
   isRecurringInvoiceType,
   isInvoiceForReseller,
@@ -1012,7 +1013,7 @@ A bientot.`;
                         </div>
                         <div className="space-y-2">
                           <Label>Type</Label>
-                          <Select value={resellerInvoiceForm.type} onValueChange={(value) => setResellerInvoiceForm((prev) => ({ ...prev, type: value }))}>
+                          <Select value={resellerInvoiceForm.type ?? undefined} onValueChange={(value) => setResellerInvoiceForm((prev) => ({ ...prev, type: value }))}>
                             <SelectTrigger>
                               <SelectValue placeholder="Choisir un type" />
                             </SelectTrigger>
@@ -1025,6 +1026,7 @@ A bientot.`;
                               <SelectItem value="autre">Autre</SelectItem>
                             </SelectContent>
                           </Select>
+                          <p className="text-xs text-gray-500">Type choisi: {getInvoiceTypeLabel(resellerInvoiceForm.type)}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-2">
@@ -1114,7 +1116,7 @@ A bientot.`;
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2">
                                   <p className="font-medium text-gray-900">
-                                    {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                                    {Number(invoice.montant || 0).toFixed(2)} EUR - {getInvoiceTypeLabel(invoice.type)}
                                   </p>
                                   {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
                                   <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>

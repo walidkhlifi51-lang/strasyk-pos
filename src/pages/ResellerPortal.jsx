@@ -33,6 +33,7 @@ import {
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
+  getInvoiceTypeLabel,
   getInvoiceAmounts,
   isInvoiceForReseller,
   isRecurringInvoiceType,
@@ -644,7 +645,7 @@ export default function ResellerPortal() {
                             </div>
                             <div className="space-y-2">
                               <Label>Type</Label>
-                              <Select value={clientInvoiceForm.type} onValueChange={(value) => setClientInvoiceForm((prev) => ({ ...prev, type: value }))}>
+                              <Select value={clientInvoiceForm.type ?? undefined} onValueChange={(value) => setClientInvoiceForm((prev) => ({ ...prev, type: value }))}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Choisir un type" />
                                 </SelectTrigger>
@@ -657,6 +658,7 @@ export default function ResellerPortal() {
                                   <SelectItem value="autre">Autre</SelectItem>
                                 </SelectContent>
                               </Select>
+                              <p className="text-xs text-gray-500">Type choisi: {getInvoiceTypeLabel(clientInvoiceForm.type)}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-2">

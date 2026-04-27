@@ -7,7 +7,7 @@ import {
 
 export const createInvoiceForm = () => ({
   montant: '',
-  type: '',
+  type: null,
   description: '',
   date_facturation: new Date().toISOString().split('T')[0],
   tva_taux: 20,
@@ -16,6 +16,17 @@ export const createInvoiceForm = () => ({
   is_devis: false,
   materiel: '',
 });
+
+export const INVOICE_TYPE_LABELS = {
+  abonnement: 'Abonnement',
+  achat_complet: 'Vente complete',
+  module_supplementaire: 'Module supplementaire',
+  materiel: 'Materiel',
+  frais_de_maintenance: 'Maintenance',
+  autre: 'Autre',
+};
+
+export const getInvoiceTypeLabel = (type) => INVOICE_TYPE_LABELS[type] || type || 'Non defini';
 
 export const computeInvoiceAmounts = (montantInput, tvaInput) => {
   const montantHT = Number(montantInput || 0);
