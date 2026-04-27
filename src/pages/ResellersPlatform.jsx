@@ -99,6 +99,7 @@ export default function ResellersPlatform() {
   const [newResellerUserForm, setNewResellerUserForm] = React.useState(createEmptyResellerUserForm());
   const [tenantToAttach, setTenantToAttach] = React.useState('');
   const [resellerInvoiceForm, setResellerInvoiceForm] = React.useState(createInvoiceForm());
+  const [resellerInvoiceFeedback, setResellerInvoiceFeedback] = React.useState({ type: '', message: '' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
@@ -533,6 +534,20 @@ A bientot.`;
       toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
     },
   });
+
+  const handleCreateResellerInvoice = React.useCallback(async () => {
+    setResellerInvoiceFeedback({ type: 'loading', message: 'Creation de la facture revendeur en cours...' });
+    try {
+      await createResellerInvoiceMutation.mutateAsync();
+      setResellerInvoiceFeedback({ type: 'success', message: 'Facture revendeur creee.' });
+    } catch (error) {
+      setResellerInvoiceFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de creer la facture revendeur.',
+      });
+      console.error('Erreur creation facture revendeur:', error);
+    }
+  }, [createResellerInvoiceMutation]);
 
   const markResellerInvoicePaidMutation = useMutation({
     mutationFn: async (invoiceId) => appClient.entities.TenantInvoice.update(invoiceId, {
@@ -1155,9 +1170,22 @@ A bientot.`;
                             placeholder="Optionnel"
                           />
                         </div>
-                        <Button onClick={() => createResellerInvoiceMutation.mutate()} disabled={createResellerInvoiceMutation.isPending}>
+                        <Button type="button" onClick={handleCreateResellerInvoice} disabled={createResellerInvoiceMutation.isPending}>
                           Creer la facture
                         </Button>
+                        {resellerInvoiceFeedback.message ? (
+                          <div
+                            className={`rounded-xl border p-3 text-sm ${
+                              resellerInvoiceFeedback.type === 'error'
+                                ? 'border-red-200 bg-red-50 text-red-800'
+                                : resellerInvoiceFeedback.type === 'success'
+                                  ? 'border-green-200 bg-green-50 text-green-800'
+                                  : 'border-blue-200 bg-blue-50 text-blue-800'
+                            }`}
+                          >
+                            {resellerInvoiceFeedback.message}
+                          </div>
+                        ) : null}
                       </CardContent>
                     </Card>
 
