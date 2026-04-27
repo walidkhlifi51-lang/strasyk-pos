@@ -16,12 +16,16 @@ import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
+  buildFinalInvoiceFromPaymentRequest,
+  buildPaymentRequestMetadata,
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
   getInvoiceTypeLabel,
   getInvoiceAmounts,
   hasRecurringPayments,
+  isFinalInvoice,
+  isPaymentRequestInvoice,
   isRecurringInvoiceType,
   isInvoiceForReseller,
   sortInvoicesByDateDesc,
@@ -484,14 +488,14 @@ A bientot.`;
         recipient_id: selectedReseller.id,
         issuer_snapshot: PLATFORM_ISSUER_SNAPSHOT,
         recipient_snapshot: buildResellerRecipientSnapshot(selectedReseller),
-        metadata: {
-          amount_ht: parseFloat(montantTotalHT.toFixed(2)),
-          amount_tva: parseFloat(montantTotalTVA.toFixed(2)),
-          amount_ttc: parseFloat(montantTotalTTC.toFixed(2)),
-          monthly_amount_ht: parseFloat(montantHT.toFixed(2)),
-          monthly_amount_tva: parseFloat(montantMensuelTVA.toFixed(2)),
-          monthly_amount_ttc: parseFloat(montantMensuelTTC.toFixed(2)),
-        },
+        metadata: buildPaymentRequestMetadata({
+          amountHT: parseFloat(montantTotalHT.toFixed(2)),
+          amountTVA: parseFloat(montantTotalTVA.toFixed(2)),
+          amountTTC: parseFloat(montantTotalTTC.toFixed(2)),
+          monthlyAmountHT: parseFloat(montantHT.toFixed(2)),
+          monthlyAmountTVA: parseFloat(montantMensuelTVA.toFixed(2)),
+          monthlyAmountTTC: parseFloat(montantMensuelTTC.toFixed(2)),
+        }),
       };
 
       if (resellerInvoiceForm.is_devis) {
@@ -551,10 +555,14 @@ A bientot.`;
   }, [createResellerInvoiceMutation]);
 
   const markResellerInvoicePaidMutation = useMutation({
-    mutationFn: async (invoiceId) => appClient.entities.TenantInvoice.update(invoiceId, {
-      statut: 'payee',
-      date_paiement: new Date().toISOString().split('T')[0],
-    }),
+    mutationFn: async (invoice) => {
+      const finalInvoice = buildFinalInvoiceFromPaymentRequest(invoice);
+      await appClient.entities.TenantInvoice.create(finalInvoice);
+      return appClient.entities.TenantInvoice.update(invoice.id, {
+        statut: 'payee',
+        date_paiement: finalInvoice.date_paiement,
+      });
+    },
     onSuccess: async () => {
       toast({ title: '✅ Paiement valide' });
       await invalidateResellers();
@@ -568,12 +576,33 @@ A bientot.`;
     mutationFn: async ({ invoice, monthKey }) => {
       const updatedPayments = { ...(invoice.monthly_payments || {}) };
       const currentPayment = updatedPayments[monthKey] || {};
+      const isBecomingPaid = !currentPayment.paye;
       updatedPayments[monthKey] = {
         ...currentPayment,
-        paye: !currentPayment.paye,
-        date_paiement: !currentPayment.paye ? new Date().toISOString().split('T')[0] : null,
+        paye: isBecomingPaid,
+        date_paiement: isBecomingPaid ? new Date().toISOString().split('T')[0] : null,
       };
       const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
+
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const existingFinalInvoice = allInvoices.find((item) => (
+        isFinalInvoice(item)
+        && item.metadata?.linked_payment_request_id === invoice.id
+        && item.metadata?.paid_month === monthKey
+      ));
+
+      if (isBecomingPaid && !existingFinalInvoice) {
+        await appClient.entities.TenantInvoice.create(
+          buildFinalInvoiceFromPaymentRequest({
+            ...invoice,
+            monthly_payments: updatedPayments,
+          }, monthKey),
+        );
+      }
+
+      if (!isBecomingPaid && existingFinalInvoice?.id) {
+        await appClient.entities.TenantInvoice.delete(existingFinalInvoice.id);
+      }
 
       return appClient.entities.TenantInvoice.update(invoice.id, {
         monthly_payments: updatedPayments,
@@ -1202,7 +1231,8 @@ A bientot.`;
                         ) : (
                           selectedResellerInvoices.map((invoice) => {
                             const amounts = getInvoiceAmounts(invoice);
-                            const hasMonthlyPayments = hasRecurringPayments(invoice);
+                            const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
+                            const canValidate = isPaymentRequestInvoice(invoice);
                             return (
                             <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
                               <div className="space-y-2">
@@ -1250,10 +1280,10 @@ A bientot.`;
                                 <Download className="w-4 h-4 mr-2" />
                                 PDF
                               </Button>
-                              {!hasMonthlyPayments && invoice.statut !== 'payee' ? (
+                              {!hasMonthlyPayments && canValidate && invoice.statut !== 'payee' ? (
                                 <Button
                                   size="sm"
-                                  onClick={() => markResellerInvoicePaidMutation.mutate(invoice.id)}
+                                  onClick={() => markResellerInvoicePaidMutation.mutate(invoice)}
                                   disabled={markResellerInvoicePaidMutation.isPending}
                                   className="bg-green-600 hover:bg-green-700"
                                 >

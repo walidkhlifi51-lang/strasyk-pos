@@ -10,6 +10,7 @@ import { CreditCard, Download, AlertCircle, Calendar, Euro, FileText, Eye } from
 import { useTenant } from "@/components/contexts/TenantContext";
 import { useToast } from "@/components/ui/use-toast";
 import { generateInvoicePDF } from "@/components/admin/InvoicePDFGenerator";
+import { hasRecurringPayments, isFinalInvoice, isPaymentRequestInvoice } from "@/lib/invoiceDocuments";
 
 export default function MesFactures() {
   const { currentTenant, isOwner, userRole } = useTenant();
@@ -114,9 +115,11 @@ export default function MesFactures() {
     );
   }
 
-  const paidInvoices = invoices.filter(inv => inv.statut === 'payee');
-  const unpaidInvoices = invoices.filter(inv => inv.statut === 'en_attente');
-  const subscriptions = invoices.filter(inv => inv.type === 'abonnement' || inv.type === 'frais_de_maintenance');
+  const paidInvoices = invoices.filter(inv => isFinalInvoice(inv) && inv.statut === 'payee');
+  const unpaidInvoices = invoices.filter(inv => isPaymentRequestInvoice(inv) && inv.statut === 'en_attente');
+  const subscriptions = invoices.filter(
+    (inv) => isPaymentRequestInvoice(inv) && (inv.type === 'abonnement' || inv.type === 'frais_de_maintenance') && hasRecurringPayments(inv),
+  );
 
   const handleDownloadPDF = async (invoice) => {
     try {

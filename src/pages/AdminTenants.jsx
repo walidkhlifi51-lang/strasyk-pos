@@ -14,6 +14,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import AdminTemplateSelector from '@/components/admin/AdminTemplateSelector';
+import {
+  buildFinalInvoiceFromPaymentRequest,
+  buildPaymentRequestMetadata,
+  computeInvoiceStatusFromMonthlyPayments,
+  getInvoiceTypeLabel,
+  hasRecurringPayments,
+  isFinalInvoice,
+  isPaymentRequestInvoice,
+  isRecurringInvoiceType,
+} from '@/lib/invoiceDocuments';
 import { normalizeCustomDomain } from '@/lib/publicSiteTenant';
 import {
   createTenantAndResolve,
@@ -71,7 +81,7 @@ export default function AdminTenants() {
   const [isCreating, setIsCreating] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
     montant: '',
-    type: 'abonnement',
+    type: null,
     description: '',
     date_facturation: new Date().toISOString().split('T')[0],
     tva_taux: 20,
@@ -158,7 +168,7 @@ export default function AdminTenants() {
       toast({ title: "✅ Facture créée" });
       setInvoiceForm({ 
         montant: '', 
-        type: 'abonnement', 
+        type: null, 
         description: '', 
         materiel: '',
         date_facturation: new Date().toISOString().split('T')[0],
@@ -190,7 +200,14 @@ export default function AdminTenants() {
   });
 
   const markAsPaidMutation = useMutation({
-    mutationFn: async ({ invoiceId, statut }) => await appClient.entities.TenantInvoice.update(invoiceId, { statut }),
+    mutationFn: async (invoice) => {
+      const finalInvoice = buildFinalInvoiceFromPaymentRequest(invoice);
+      await appClient.entities.TenantInvoice.create(finalInvoice);
+      return appClient.entities.TenantInvoice.update(invoice.id, {
+        statut: 'payee',
+        date_paiement: finalInvoice.date_paiement,
+      });
+    },
     onSuccess: () => {
       toast({ title: "✅ Statut mis à jour" });
       refetchInvoices();
@@ -215,24 +232,39 @@ export default function AdminTenants() {
       return;
     }
 
+    if (!invoiceForm.type) {
+      toast({ title: "Type de facture requis", variant: "destructive" });
+      return;
+    }
     const montantHT = parseFloat(invoiceForm.montant);
     const tauxTVA = parseFloat(invoiceForm.tva_taux) || 0;
-    const montantMensuelTTC = parseFloat((montantHT * (1 + tauxTVA / 100)).toFixed(2));
+    const montantTVA = parseFloat((montantHT * (tauxTVA / 100)).toFixed(2));
+    const montantMensuelTTC = parseFloat((montantHT + montantTVA).toFixed(2));
 
     // Si abonnement ou frais de maintenance, le montant saisi est le montant MENSUEL
     const duree = invoiceForm.duree_mois || 12;
-    const isRecurring = invoiceForm.type === 'abonnement' || invoiceForm.type === 'frais_de_maintenance';
+    const isRecurring = isRecurringInvoiceType(invoiceForm.type);
+    const montantTotalHT = isRecurring && invoiceForm.periode_debut ? montantHT * duree : montantHT;
+    const montantTotalTVA = isRecurring && invoiceForm.periode_debut ? montantTVA * duree : montantTVA;
     const montantTotalTTC = isRecurring && invoiceForm.periode_debut ? montantMensuelTTC * duree : montantMensuelTTC;
 
     const invoiceData = {
       tenant_id: billingTenant.id,
       numero_facture: `FAC-${Date.now()}`,
-      montant: montantTotalTTC,
+      montant: parseFloat(montantTotalTTC.toFixed(2)),
       tva_taux: tauxTVA,
       type: invoiceForm.type,
       description: invoiceForm.description,
       date_facturation: invoiceForm.date_facturation,
       statut: 'en_attente',
+      metadata: buildPaymentRequestMetadata({
+        amountHT: parseFloat(montantTotalHT.toFixed(2)),
+        amountTVA: parseFloat(montantTotalTVA.toFixed(2)),
+        amountTTC: parseFloat(montantTotalTTC.toFixed(2)),
+        monthlyAmountHT: parseFloat(montantHT.toFixed(2)),
+        monthlyAmountTVA: parseFloat(montantTVA.toFixed(2)),
+        monthlyAmountTTC: parseFloat(montantMensuelTTC.toFixed(2)),
+      }),
     };
 
     if (invoiceForm.is_devis) {
@@ -292,14 +324,40 @@ export default function AdminTenants() {
 
   const handleToggleMonthlyPayment = async (invoice, monthKey) => {
     try {
-      const updatedPayments = { ...invoice.monthly_payments };
-      const currentStatus = updatedPayments[monthKey].paye;
+      const updatedPayments = { ...(invoice.monthly_payments || {}) };
+      const currentPayment = updatedPayments[monthKey] || {};
+      const currentStatus = Boolean(currentPayment.paye);
       updatedPayments[monthKey] = {
-        ...updatedPayments[monthKey],
+        ...currentPayment,
         paye: !currentStatus,
         date_paiement: !currentStatus ? new Date().toISOString().split('T')[0] : null
       };
-      await appClient.entities.TenantInvoice.update(invoice.id, { monthly_payments: updatedPayments });
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const existingFinalInvoice = allInvoices.find((item) => (
+        item.metadata?.linked_payment_request_id === invoice.id
+        && item.metadata?.paid_month === monthKey
+      ));
+
+      if (!currentStatus && !existingFinalInvoice) {
+        await appClient.entities.TenantInvoice.create(
+          buildFinalInvoiceFromPaymentRequest({
+            ...invoice,
+            monthly_payments: updatedPayments,
+          }, monthKey),
+        );
+      }
+
+      if (currentStatus && existingFinalInvoice) {
+        await appClient.entities.TenantInvoice.delete(existingFinalInvoice.id);
+      }
+
+      await appClient.entities.TenantInvoice.update(invoice.id, {
+        monthly_payments: updatedPayments,
+        statut: computeInvoiceStatusFromMonthlyPayments(updatedPayments),
+        date_paiement: Object.values(updatedPayments).every((payment) => payment?.paye)
+          ? new Date().toISOString().split('T')[0]
+          : null,
+      });
       toast({ title: currentStatus ? "❌ Paiement annulé" : "✅ Paiement validé" });
       refetchInvoices();
       refetchPreviewInvoices();
@@ -864,12 +922,12 @@ export default function AdminTenants() {
                                   <Download className="w-4 h-4 mr-1" />
                                   PDF
                                 </Button>
-                                {invoice.statut !== 'payee' && (
+                                {isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee' && !hasRecurringPayments(invoice) && (
                                   <Button
                                     size="sm"
                                     className="bg-green-600 hover:bg-green-700"
                                     onClick={async () => {
-                                      await markAsPaidMutation.mutateAsync({ invoiceId: invoice.id, statut: 'payee' });
+                                      await markAsPaidMutation.mutateAsync(invoice);
                                       await refetchPreviewInvoices();
                                     }}
                                   >
@@ -1151,8 +1209,8 @@ export default function AdminTenants() {
                         </div>
                         <div>
                           <Label>Type</Label>
-                          <Select value={invoiceForm.type} onValueChange={(v) => setInvoiceForm({...invoiceForm, type: v})}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          <Select value={invoiceForm.type ?? undefined} onValueChange={(v) => setInvoiceForm({...invoiceForm, type: v})}>
+                            <SelectTrigger><SelectValue placeholder="Choisir un type" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="abonnement">Abonnement</SelectItem>
                               <SelectItem value="achat_complet">Achat complet</SelectItem>
@@ -1367,11 +1425,11 @@ export default function AdminTenants() {
                                     <Download className="w-4 h-4 mr-1" />
                                     PDF
                                   </Button>
-                                  {invoice.statut !== 'payee' && (
+                                  {isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee' && !hasRecurringPayments(invoice) && (
                                     <Button 
                                       variant="default" 
                                       size="sm" 
-                                      onClick={() => markAsPaidMutation.mutate({ invoiceId: invoice.id, statut: 'payee' })}
+                                      onClick={() => markAsPaidMutation.mutate(invoice)}
                                       disabled={markAsPaidMutation.isPending}
                                       className="bg-green-600 hover:bg-green-700"
                                     >
@@ -1393,7 +1451,7 @@ export default function AdminTenants() {
                                 </div>
                               </div>
                               
-                              {(invoice.type === 'abonnement' || invoice.type === 'frais_de_maintenance') && invoice.monthly_payments && (
+                              {hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice) && (
                                 <div className="mt-3 pt-3 border-t">
                                   <p className="text-xs font-semibold mb-2">Paiements mensuels:</p>
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -1474,12 +1532,12 @@ export default function AdminTenants() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      {invoices.filter(inv => (inv.type === 'abonnement' || inv.type === 'frais_de_maintenance') && inv.monthly_payments).length === 0 ? (
+                      {invoices.filter(inv => isPaymentRequestInvoice(inv) && hasRecurringPayments(inv)).length === 0 ? (
                         <p className="text-gray-500 text-center py-4">Aucun abonnement actif</p>
                       ) : (
                         <div className="space-y-3">
                           {invoices
-                            .filter(inv => (inv.type === 'abonnement' || inv.type === 'frais_de_maintenance') && inv.monthly_payments)
+                            .filter(inv => isPaymentRequestInvoice(inv) && hasRecurringPayments(inv))
                             .map((invoice) => {
                               const payments = Object.entries(invoice.monthly_payments || {});
                               const paidCount = payments.filter(([_, p]) => p.paye).length;

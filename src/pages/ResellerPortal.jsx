@@ -29,12 +29,16 @@ import {
 } from 'lucide-react';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
+  buildFinalInvoiceFromPaymentRequest,
+  buildPaymentRequestMetadata,
   computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
   getInvoiceTypeLabel,
   getInvoiceAmounts,
   hasRecurringPayments,
+  isFinalInvoice,
+  isPaymentRequestInvoice,
   isInvoiceForReseller,
   isRecurringInvoiceType,
   isInvoiceForTenant,
@@ -146,8 +150,8 @@ export default function ResellerPortal() {
   const sentClientInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => invoice.issuer_type === 'reseller' && invoice.issuer_id === currentReseller?.id),
   );
-  const receivedResellerUnpaidInvoices = receivedResellerInvoices.filter((invoice) => invoice.statut !== 'payee');
-  const receivedResellerPaidInvoices = receivedResellerInvoices.filter((invoice) => invoice.statut === 'payee');
+  const receivedResellerUnpaidInvoices = receivedResellerInvoices.filter((invoice) => isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee');
+  const receivedResellerPaidInvoices = receivedResellerInvoices.filter((invoice) => isFinalInvoice(invoice) && invoice.statut === 'payee');
   const clientInvoiceAmounts = computeInvoiceAmounts(clientInvoiceForm.montant, clientInvoiceForm.tva_taux);
 
   const pendingCommissions = commissions
@@ -345,14 +349,14 @@ export default function ResellerPortal() {
         recipient_id: selectedClient.tenant.id,
         issuer_snapshot: buildResellerIssuerSnapshot({ reseller: currentReseller, branding }),
         recipient_snapshot: buildTenantRecipientSnapshot(selectedClient.tenant),
-        metadata: {
-          amount_ht: parseFloat(montantTotalHT.toFixed(2)),
-          amount_tva: parseFloat(montantTotalTVA.toFixed(2)),
-          amount_ttc: parseFloat(montantTotalTTC.toFixed(2)),
-          monthly_amount_ht: parseFloat(montantHT.toFixed(2)),
-          monthly_amount_tva: parseFloat(montantMensuelTVA.toFixed(2)),
-          monthly_amount_ttc: parseFloat(montantMensuelTTC.toFixed(2)),
-        },
+        metadata: buildPaymentRequestMetadata({
+          amountHT: parseFloat(montantTotalHT.toFixed(2)),
+          amountTVA: parseFloat(montantTotalTVA.toFixed(2)),
+          amountTTC: parseFloat(montantTotalTTC.toFixed(2)),
+          monthlyAmountHT: parseFloat(montantHT.toFixed(2)),
+          monthlyAmountTVA: parseFloat(montantMensuelTVA.toFixed(2)),
+          monthlyAmountTTC: parseFloat(montantMensuelTTC.toFixed(2)),
+        }),
       };
 
       if (clientInvoiceForm.is_devis) {
@@ -398,10 +402,14 @@ export default function ResellerPortal() {
   });
 
   const markInvoicePaidMutation = useMutation({
-    mutationFn: async (invoiceId) => appClient.entities.TenantInvoice.update(invoiceId, {
-      statut: 'payee',
-      date_paiement: new Date().toISOString().split('T')[0],
-    }),
+    mutationFn: async (invoice) => {
+      const finalInvoice = buildFinalInvoiceFromPaymentRequest(invoice);
+      await appClient.entities.TenantInvoice.create(finalInvoice);
+      return appClient.entities.TenantInvoice.update(invoice.id, {
+        statut: 'payee',
+        date_paiement: finalInvoice.date_paiement,
+      });
+    },
     onSuccess: async () => {
       toast({ title: '✅ Paiement valide' });
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
@@ -415,12 +423,33 @@ export default function ResellerPortal() {
     mutationFn: async ({ invoice, monthKey }) => {
       const updatedPayments = { ...(invoice.monthly_payments || {}) };
       const currentPayment = updatedPayments[monthKey] || {};
+      const isBecomingPaid = !currentPayment.paye;
       updatedPayments[monthKey] = {
         ...currentPayment,
-        paye: !currentPayment.paye,
-        date_paiement: !currentPayment.paye ? new Date().toISOString().split('T')[0] : null,
+        paye: isBecomingPaid,
+        date_paiement: isBecomingPaid ? new Date().toISOString().split('T')[0] : null,
       };
       const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
+
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const existingFinalInvoice = allInvoices.find((item) => (
+        isFinalInvoice(item)
+        && item.metadata?.linked_payment_request_id === invoice.id
+        && item.metadata?.paid_month === monthKey
+      ));
+
+      if (isBecomingPaid && !existingFinalInvoice) {
+        await appClient.entities.TenantInvoice.create(
+          buildFinalInvoiceFromPaymentRequest({
+            ...invoice,
+            monthly_payments: updatedPayments,
+          }, monthKey),
+        );
+      }
+
+      if (!isBecomingPaid && existingFinalInvoice?.id) {
+        await appClient.entities.TenantInvoice.delete(existingFinalInvoice.id);
+      }
 
       return appClient.entities.TenantInvoice.update(invoice.id, {
         monthly_payments: updatedPayments,
@@ -806,7 +835,8 @@ export default function ResellerPortal() {
                             ) : (
                               selectedClientInvoices.map((invoice) => {
                                 const amounts = getInvoiceAmounts(invoice);
-                                const hasMonthlyPayments = hasRecurringPayments(invoice);
+                                const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
+                                const canValidate = isPaymentRequestInvoice(invoice);
                                 return (
                                 <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
                                   <div className="space-y-2">
@@ -854,10 +884,10 @@ export default function ResellerPortal() {
                                     <Download className="w-4 h-4 mr-2" />
                                     PDF
                                   </Button>
-                                  {!hasMonthlyPayments && invoice.statut !== 'payee' ? (
+                                  {!hasMonthlyPayments && canValidate && invoice.statut !== 'payee' ? (
                                     <Button
                                       size="sm"
-                                      onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                                      onClick={() => markInvoicePaidMutation.mutate(invoice)}
                                       disabled={markInvoicePaidMutation.isPending}
                                       className="bg-green-600 hover:bg-green-700"
                                     >
@@ -898,7 +928,7 @@ export default function ResellerPortal() {
                     ) : (
                       receivedResellerUnpaidInvoices.map((invoice) => {
                         const amounts = getInvoiceAmounts(invoice);
-                        const hasMonthlyPayments = hasRecurringPayments(invoice);
+                        const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
                         return (
                           <div key={`pending-${invoice.id}`} className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                             <div className="space-y-2">
@@ -1012,13 +1042,13 @@ export default function ResellerPortal() {
                       <p className="text-xs text-gray-600">
                         HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
                       </p>
-                      {invoice.monthly_payments ? (
+                      {hasMonthlyPayments ? (
                         <p className="text-xs text-blue-700">
                           Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
                         </p>
                       ) : null}
                       {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
-                      {invoice.monthly_payments ? (
+                      {hasMonthlyPayments ? (
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
                           {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
                             <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
@@ -1043,10 +1073,10 @@ export default function ResellerPortal() {
                       <Download className="w-4 h-4 mr-2" />
                       PDF
                     </Button>
-                    {!invoice.monthly_payments && invoice.statut !== 'payee' ? (
+                    {!hasMonthlyPayments && isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee' ? (
                       <Button
                         size="sm"
-                        onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                        onClick={() => markInvoicePaidMutation.mutate(invoice)}
                         disabled={markInvoicePaidMutation.isPending}
                         className="bg-green-600 hover:bg-green-700"
                       >
@@ -1072,7 +1102,8 @@ export default function ResellerPortal() {
                 sentClientInvoices.map((invoice) => {
                   const targetTenant = linkedTenants.find((item) => item.tenant.id === (invoice.recipient_id || invoice.tenant_id))?.tenant || null;
                   const amounts = getInvoiceAmounts(invoice);
-                  const hasMonthlyPayments = hasRecurringPayments(invoice);
+                  const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
+                  const canValidate = isPaymentRequestInvoice(invoice);
                   return (
                     <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
                       <div className="space-y-2">
@@ -1123,10 +1154,10 @@ export default function ResellerPortal() {
                         <Download className="w-4 h-4 mr-2" />
                         PDF
                       </Button>
-                      {!hasMonthlyPayments && invoice.statut !== 'payee' ? (
+                      {!hasMonthlyPayments && canValidate && invoice.statut !== 'payee' ? (
                         <Button
                           size="sm"
-                          onClick={() => markInvoicePaidMutation.mutate(invoice.id)}
+                          onClick={() => markInvoicePaidMutation.mutate(invoice)}
                           disabled={markInvoicePaidMutation.isPending}
                           className="bg-green-600 hover:bg-green-700"
                         >

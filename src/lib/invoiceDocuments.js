@@ -46,6 +46,67 @@ export const isRecurringInvoiceType = (type) => type === 'abonnement' || type ==
 
 export const hasRecurringPayments = (invoice = {}) => Object.keys(invoice?.monthly_payments || {}).length > 0;
 
+export const getInvoiceDocumentKind = (invoice = {}) => invoice?.metadata?.document_kind || 'legacy_invoice';
+
+export const isPaymentRequestInvoice = (invoice = {}) => getInvoiceDocumentKind(invoice) === 'payment_request';
+
+export const isFinalInvoice = (invoice = {}) => {
+  const kind = getInvoiceDocumentKind(invoice);
+  return kind === 'final_invoice' || kind === 'legacy_invoice';
+};
+
+export const buildPaymentRequestMetadata = ({
+  amountHT,
+  amountTVA,
+  amountTTC,
+  monthlyAmountHT,
+  monthlyAmountTVA,
+  monthlyAmountTTC,
+} = {}) => ({
+  document_kind: 'payment_request',
+  amount_ht: Number(amountHT || 0),
+  amount_tva: Number(amountTVA || 0),
+  amount_ttc: Number(amountTTC || 0),
+  monthly_amount_ht: Number(monthlyAmountHT || 0),
+  monthly_amount_tva: Number(monthlyAmountTVA || 0),
+  monthly_amount_ttc: Number(monthlyAmountTTC || 0),
+});
+
+export const buildFinalInvoiceFromPaymentRequest = (invoice = {}, monthKey = null) => {
+  const metadata = invoice.metadata || {};
+  const monthlyPayments = invoice.monthly_payments || {};
+  const monthPayment = monthKey ? monthlyPayments[monthKey] : null;
+  const monthLabel = monthKey
+    ? new Date(monthKey).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+    : null;
+  const amountHT = monthPayment ? Number(metadata.monthly_amount_ht ?? 0) : Number(metadata.amount_ht ?? invoice.montant ?? 0);
+  const amountTVA = monthPayment ? Number(metadata.monthly_amount_tva ?? 0) : Number(metadata.amount_tva ?? 0);
+  const amountTTC = monthPayment ? Number(monthPayment.montant ?? metadata.monthly_amount_ttc ?? 0) : Number(metadata.amount_ttc ?? invoice.montant ?? 0);
+
+  return {
+    ...invoice,
+    numero_facture: `FAC-${Date.now()}`,
+    montant: Number(amountTTC.toFixed(2)),
+    statut: 'payee',
+    date_paiement: monthPayment?.date_paiement || new Date().toISOString().split('T')[0],
+    monthly_payments: null,
+    periode_debut: monthKey || invoice.periode_debut || null,
+    periode_fin: monthKey || invoice.periode_fin || null,
+    metadata: {
+      ...metadata,
+      document_kind: 'final_invoice',
+      linked_payment_request_id: invoice.id,
+      paid_month: monthKey,
+      amount_ht: Number(amountHT.toFixed(2)),
+      amount_tva: Number(amountTVA.toFixed(2)),
+      amount_ttc: Number(amountTTC.toFixed(2)),
+    },
+    description: monthLabel
+      ? `${invoice.description || getInvoiceTypeLabel(invoice.type)} - echeance ${monthLabel}`
+      : (invoice.description || null),
+  };
+};
+
 export const computeInvoiceStatusFromMonthlyPayments = (monthlyPayments = {}) => {
   const payments = Object.values(monthlyPayments || {});
   if (!payments.length) return 'en_attente';
