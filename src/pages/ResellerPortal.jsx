@@ -144,6 +144,8 @@ export default function ResellerPortal() {
   const sentClientInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => invoice.issuer_type === 'reseller' && invoice.issuer_id === currentReseller?.id),
   );
+  const receivedResellerUnpaidInvoices = receivedResellerInvoices.filter((invoice) => invoice.statut !== 'payee');
+  const receivedResellerPaidInvoices = receivedResellerInvoices.filter((invoice) => invoice.statut === 'payee');
   const clientInvoiceAmounts = computeInvoiceAmounts(clientInvoiceForm.montant, clientInvoiceForm.tva_taux);
 
   const pendingCommissions = commissions
@@ -816,7 +818,111 @@ export default function ResellerPortal() {
               <CardTitle>Factures recues de la plateforme</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {receivedResellerInvoices.length === 0 ? (
+              {receivedResellerInvoices.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-orange-900">Paiements en attente</p>
+                      <Badge className="bg-orange-100 text-orange-800">{receivedResellerUnpaidInvoices.length}</Badge>
+                    </div>
+                    {receivedResellerUnpaidInvoices.length === 0 ? (
+                      <p className="text-sm text-gray-500">Aucun paiement en attente.</p>
+                    ) : (
+                      receivedResellerUnpaidInvoices.map((invoice) => {
+                        const amounts = getInvoiceAmounts(invoice);
+                        return (
+                          <div key={`pending-${invoice.id}`} className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">
+                                  {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                                </p>
+                                {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                              </p>
+                              {invoice.monthly_payments ? (
+                                <p className="text-xs text-blue-700">
+                                  Ligne de paiement abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                                </p>
+                              ) : (
+                                <p className="text-sm text-orange-900">Ligne de paiement en attente de validation par la plateforme.</p>
+                              )}
+                              {invoice.description ? <p className="text-sm text-gray-600">{invoice.description}</p> : null}
+                              {invoice.monthly_payments ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                                  {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
+                                    <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-white border-orange-200'}`}>
+                                      <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
+                                      <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                                      <p className={payment.paye ? 'text-green-700' : 'text-orange-700'}>
+                                        {payment.paye ? 'Valide par la plateforme' : 'En attente'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-green-900">Factures payees</p>
+                      <Badge className="bg-green-100 text-green-800">{receivedResellerPaidInvoices.length}</Badge>
+                    </div>
+                    {receivedResellerPaidInvoices.length === 0 ? (
+                      <p className="text-sm text-gray-500">Aucune facture payee pour le moment.</p>
+                    ) : (
+                      receivedResellerPaidInvoices.map((invoice) => {
+                        const amounts = getInvoiceAmounts(invoice);
+                        return (
+                          <div key={`paid-${invoice.id}`} className="rounded-xl border border-green-200 bg-green-50 p-4 flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">
+                                  {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
+                                </p>
+                                {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                <Badge className="bg-green-100 text-green-800">payee</Badge>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                              </p>
+                              {invoice.date_paiement ? (
+                                <p className="text-xs text-green-700">
+                                  Paiement valide le {new Date(invoice.date_paiement).toLocaleDateString('fr-FR')}
+                                </p>
+                              ) : null}
+                              {invoice.description ? <p className="text-sm text-gray-600">{invoice.description}</p> : null}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateInvoicePDF(invoice, null)}
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              PDF
+                            </Button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              {true ? null : receivedResellerInvoices.length === 0 ? (
                 <p className="text-sm text-gray-500">Aucune facture recue pour le moment.</p>
               ) : (
                 receivedResellerInvoices.map((invoice) => {
