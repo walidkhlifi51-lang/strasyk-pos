@@ -39,6 +39,19 @@ import { appClient } from '@/api/appClient';
 import { useTenant } from "@/components/contexts/TenantContext";
 import { toParisDate as toParisDateValue } from "@/lib/dateParsing";
 import { getInvoiceTypeLabel, isFinalInvoice } from "@/lib/invoiceDocuments";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 
 import { StatCard } from '@/components/stats/StatCards';
 
@@ -92,6 +105,8 @@ const ORDER_STATUS_LABELS = {
   "ready": "Prête",
   "delivered": "Livrée",
 };
+
+const PLATFORM_CHART_COLORS = ['#2563eb', '#f97316', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16'];
 
 // Define the Paris timezone for consistent date comparisons
 const PARIS_TIMEZONE = 'Europe/Paris';
@@ -877,6 +892,22 @@ export default function Statistiques() {
     totals.segmentRows = Object.entries(totals.segmentBreakdown)
       .map(([segment, data]) => ({ segment, ...data }))
       .sort((a, b) => b.amount - a.amount);
+    totals.resellerRows = invoices
+      .filter((invoice) => invoice.recipient_type === 'reseller')
+      .reduce((acc, invoice) => {
+        const key = invoice.recipient_id || invoice.recipient_snapshot?.contact_email || invoice.id;
+        if (!acc[key]) {
+          acc[key] = {
+            name: resolveRecipient(invoice).name,
+            amount: 0,
+            count: 0,
+          };
+        }
+        acc[key].amount += Number(invoice.montant || 0);
+        acc[key].count += 1;
+        return acc;
+      }, {});
+    totals.resellerRows = Object.values(totals.resellerRows).sort((a, b) => b.amount - a.amount).slice(0, 8);
     totals.recentInvoices = totals.recentInvoices
       .sort((a, b) => new Date(b.date_paiement || b.created_date || b.date_facturation || 0) - new Date(a.date_paiement || a.created_date || a.date_facturation || 0))
       .slice(0, 12);
@@ -932,6 +963,130 @@ export default function Statistiques() {
             ))}
           </div>
 
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-6">
+              <Tabs value={dateFilter} onValueChange={setDateFilter}>
+                <TabsList className="grid w-full grid-cols-5">
+                  <TabsTrigger value="today">Aujourd'hui</TabsTrigger>
+                  <TabsTrigger value="specific_day">Un jour</TabsTrigger>
+                  <TabsTrigger value="month">Un mois</TabsTrigger>
+                  <TabsTrigger value="year">Une année</TabsTrigger>
+                  <TabsTrigger value="interval">Intervalle</TabsTrigger>
+                </TabsList>
+
+                <div className="mt-4">
+                  <TabsContent value="today" className="text-center text-gray-600">
+                    Ventes plateforme pour aujourd'hui
+                  </TabsContent>
+
+                  <TabsContent value="specific_day" className="flex justify-center">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="gap-2">
+                          <CalendarIcon className="w-4 h-4" />
+                          {format(selectedDate, 'dd MMMM yyyy', { locale: fr })}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} locale={fr} />
+                      </PopoverContent>
+                    </Popover>
+                  </TabsContent>
+
+                  <TabsContent value="month" className="flex flex-col items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <Button variant="outline" size="sm" onClick={() => setYearForMonthSelector(yearForMonthSelector - 1)}>
+                        &lt; {yearForMonthSelector - 1}
+                      </Button>
+                      <span className="font-bold text-lg">{yearForMonthSelector}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setYearForMonthSelector(yearForMonthSelector + 1)}
+                        disabled={yearForMonthSelector === new Date().getFullYear()}
+                      >
+                        {yearForMonthSelector + 1} &gt;
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 w-full max-w-md">
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const monthDate = new Date(yearForMonthSelector, i, 1);
+                        const isSelected = getYear(selectedMonth) === yearForMonthSelector && getMonth(selectedMonth) === i;
+                        const isFuture = monthDate > new Date();
+
+                        return (
+                          <Button
+                            key={i}
+                            variant={isSelected ? "default" : "outline"}
+                            onClick={() => setSelectedMonth(monthDate)}
+                            disabled={isFuture}
+                            className="capitalize"
+                          >
+                            {format(monthDate, 'MMM', { locale: fr })}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="year" className="flex justify-center">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="gap-2">
+                          <CalendarIcon className="w-4 h-4" />
+                          Année {selectedYear}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-4">
+                        <div className="grid grid-cols-4 gap-2">
+                          {Array.from({ length: 6 }, (_, i) => {
+                            const year = new Date().getFullYear() - 5 + i;
+                            return (
+                              <Button key={year} variant={selectedYear === year ? "default" : "outline"} size="sm" onClick={() => setSelectedYear(year)}>
+                                {year}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </TabsContent>
+
+                  <TabsContent value="interval" className="flex justify-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Du:</span>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="gap-2">
+                            <CalendarIcon className="w-4 h-4" />
+                            {format(intervalStart, 'dd/MM/yyyy', { locale: fr })}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar mode="single" selected={intervalStart} onSelect={(date) => date && setIntervalStart(date)} locale={fr} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Au:</span>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="gap-2">
+                            <CalendarIcon className="w-4 h-4" />
+                            {format(intervalEnd, 'dd/MM/yyyy', { locale: fr })}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar mode="single" selected={intervalEnd} onSelect={(date) => date && setIntervalEnd(date)} locale={fr} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <Card className="border-0 shadow-md">
               <CardContent className="p-6 space-y-4">
@@ -953,11 +1108,74 @@ export default function Statistiques() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">Aucune vente sur cette période.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card className="border-0 shadow-md">
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Revendeurs qui génèrent le plus de ventes</h2>
+                  <p className="text-sm text-gray-500">Classement par chiffre d'affaires facturé par la plateforme.</p>
+                </div>
+                {platformSalesStats?.resellerRows?.length ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={platformSalesStats.resellerRows} layout="vertical" margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" tickFormatter={(value) => `${value.toFixed(0)}€`} />
+                        <YAxis type="category" dataKey="name" width={120} />
+                        <Tooltip formatter={(value) => [`${Number(value || 0).toFixed(2)}€`, 'CA']} />
+                        <Bar dataKey="amount" radius={[0, 10, 10, 0]} fill="#2563eb" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Aucune vente revendeur sur cette période.</p>
                 )}
               </CardContent>
             </Card>
 
             <Card className="border-0 shadow-md">
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Ventes par type</h2>
+                  <p className="text-sm text-gray-500">Abonnements, ventes complètes, matériel et autres ventes plateforme.</p>
+                </div>
+                {platformSalesStats?.typeRows?.length ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={platformSalesStats.typeRows.map((row) => ({
+                            name: getInvoiceTypeLabel(row.type),
+                            value: Number(row.amount || 0),
+                          }))}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={110}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          {platformSalesStats.typeRows.map((row, index) => (
+                            <Cell key={row.type} fill={PLATFORM_CHART_COLORS[index % PLATFORM_CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${Number(value || 0).toFixed(2)}€`, 'CA']} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Aucune vente sur cette période.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-0 shadow-md">
               <CardContent className="p-6 space-y-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Répartition par cible</h2>
