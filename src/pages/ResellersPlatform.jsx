@@ -450,6 +450,7 @@ A bientot.`;
   const createResellerInvoiceMutation = useMutation({
     mutationFn: async () => {
       if (!selectedReseller?.id) throw new Error('Aucun revendeur selectionne.');
+      if (!resellerInvoiceForm.type) throw new Error('Choisissez un type de facture.');
       if (!resellerInvoiceForm.montant || Number.isNaN(Number(resellerInvoiceForm.montant))) {
         throw new Error('Montant facture requis.');
       }
@@ -1013,7 +1014,7 @@ A bientot.`;
                           <Label>Type</Label>
                           <Select value={resellerInvoiceForm.type} onValueChange={(value) => setResellerInvoiceForm((prev) => ({ ...prev, type: value }))}>
                             <SelectTrigger>
-                              <SelectValue />
+                              <SelectValue placeholder="Choisir un type" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="abonnement">Abonnement</SelectItem>

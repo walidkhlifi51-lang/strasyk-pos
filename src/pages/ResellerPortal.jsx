@@ -309,6 +309,9 @@ export default function ResellerPortal() {
       if (!selectedClient?.tenant?.id) {
         throw new Error('Selectionnez un client commerce.');
       }
+      if (!clientInvoiceForm.type) {
+        throw new Error('Choisissez un type de facture.');
+      }
       if (!clientInvoiceForm.montant || Number.isNaN(Number(clientInvoiceForm.montant))) {
         throw new Error('Montant facture requis.');
       }
@@ -643,7 +646,7 @@ export default function ResellerPortal() {
                               <Label>Type</Label>
                               <Select value={clientInvoiceForm.type} onValueChange={(value) => setClientInvoiceForm((prev) => ({ ...prev, type: value }))}>
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="Choisir un type" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="abonnement">Abonnement</SelectItem>

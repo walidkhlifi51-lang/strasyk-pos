@@ -7,7 +7,7 @@ import {
 
 export const createInvoiceForm = () => ({
   montant: '',
-  type: 'abonnement',
+  type: '',
   description: '',
   date_facturation: new Date().toISOString().split('T')[0],
   tva_taux: 20,
