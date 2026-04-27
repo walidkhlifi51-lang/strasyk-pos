@@ -73,6 +73,15 @@ const pagePermissionMap = {
   Kiosk: "can_access_kiosk",
 };
 
+const PLATFORM_ADMIN_ALLOWED_PAGES = new Set([
+  "Dashboard",
+  "Statistiques",
+  "LandingPage",
+  "AdminTenants",
+  "ResellersPlatform",
+  "SiteAdmin",
+]);
+
 const NavLink = ({ item, isSidebarCollapsed, location, currentTenant, onNavigate }) => {
   const isActive = location.pathname.includes(createPageUrl(item.page));
 
@@ -359,9 +368,14 @@ const AppLayout = ({ children, currentPageName }) => {
   }
 
   const isSuperAdmin = isPlatformAdmin;
-  const hasCurrentPageAccess = isSuperAdmin || !pagePermissionMap[currentPageName] || hasModuleAccess(pagePermissionMap[currentPageName]);
+  const hasCurrentPageAccess = isSuperAdmin
+    ? PLATFORM_ADMIN_ALLOWED_PAGES.has(currentPageName)
+    : !pagePermissionMap[currentPageName] || hasModuleAccess(pagePermissionMap[currentPageName]);
 
   const visibleNavItems = navItems.filter((item) => {
+    if (isSuperAdmin) {
+      return PLATFORM_ADMIN_ALLOWED_PAGES.has(item.page);
+    }
     if (item.superAdminOnly && !isSuperAdmin) return false;
     if (item.resellerRoles && !isReseller) return false;
 
