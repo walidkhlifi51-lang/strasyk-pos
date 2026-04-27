@@ -44,6 +44,8 @@ export const computeInvoiceAmounts = (montantInput, tvaInput) => {
 
 export const isRecurringInvoiceType = (type) => type === 'abonnement' || type === 'frais_de_maintenance';
 
+export const hasRecurringPayments = (invoice = {}) => Object.keys(invoice?.monthly_payments || {}).length > 0;
+
 export const computeInvoiceStatusFromMonthlyPayments = (monthlyPayments = {}) => {
   const payments = Object.values(monthlyPayments || {});
   if (!payments.length) return 'en_attente';

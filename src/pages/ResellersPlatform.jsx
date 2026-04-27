@@ -21,6 +21,7 @@ import {
   createInvoiceForm,
   getInvoiceTypeLabel,
   getInvoiceAmounts,
+  hasRecurringPayments,
   isRecurringInvoiceType,
   isInvoiceForReseller,
   sortInvoicesByDateDesc,
@@ -1201,6 +1202,7 @@ A bientot.`;
                         ) : (
                           selectedResellerInvoices.map((invoice) => {
                             const amounts = getInvoiceAmounts(invoice);
+                            const hasMonthlyPayments = hasRecurringPayments(invoice);
                             return (
                             <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
                               <div className="space-y-2">
@@ -1217,13 +1219,13 @@ A bientot.`;
                                 <p className="text-xs text-gray-600">
                                   HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
                                 </p>
-                                {invoice.monthly_payments ? (
+                                {hasMonthlyPayments ? (
                                   <p className="text-xs text-blue-700">
                                     Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
                                   </p>
                                 ) : null}
                                 {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
-                                {invoice.monthly_payments ? (
+                                {hasMonthlyPayments ? (
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
                                     {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
                                       <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
@@ -1248,7 +1250,7 @@ A bientot.`;
                                 <Download className="w-4 h-4 mr-2" />
                                 PDF
                               </Button>
-                              {!invoice.monthly_payments && invoice.statut !== 'payee' ? (
+                              {!hasMonthlyPayments && invoice.statut !== 'payee' ? (
                                 <Button
                                   size="sm"
                                   onClick={() => markResellerInvoicePaidMutation.mutate(invoice.id)}
