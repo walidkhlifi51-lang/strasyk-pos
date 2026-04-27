@@ -38,6 +38,7 @@ import { useQuery } from '@tanstack/react-query';
 import { appClient } from '@/api/appClient';
 import { useTenant } from "@/components/contexts/TenantContext";
 import { toParisDate as toParisDateValue } from "@/lib/dateParsing";
+import { getInvoiceTypeLabel, isFinalInvoice } from "@/lib/invoiceDocuments";
 
 import { StatCard } from '@/components/stats/StatCards';
 
@@ -101,7 +102,8 @@ const toParisDate = (date) => {
 };
 
 export default function Statistiques() {
-  const { filterByTenant } = useTenant();
+  const { filterByTenant, isPlatformAdmin, currentTenant, currentReseller } = useTenant();
+  const isPlatformStatsView = isPlatformAdmin && !currentTenant && !currentReseller;
 
   const [dateFilter, setDateFilter] = useState("today");
 
@@ -208,7 +210,7 @@ export default function Statistiques() {
         return orderDate >= startDateInParis && orderDate <= endDateInParis;
       });
     },
-    enabled: !!startDate && !!endDate, // Only run query if date range is defined
+    enabled: !isPlatformStatsView && !!startDate && !!endDate, // Only run query if date range is defined
     staleTime: 1000 * 60 * 2, // 2 minutes stale time as requested
     refetchOnWindowFocus: false,
     refetchOnMount: false,
@@ -218,6 +220,7 @@ export default function Statistiques() {
   const { data: customers = [], isLoading: isLoadingCustomers } = useQuery({
     queryKey: ['customersForStats'],
     queryFn: () => appClient.entities.Customer.filter(filterByTenant()),
+    enabled: !isPlatformStatsView,
     staleTime: 1000 * 60 * 60 * 24, // 24 hours
     refetchOnWindowFocus: false,
   });
@@ -226,6 +229,7 @@ export default function Statistiques() {
   const { data: products = [], isLoading: isLoadingProducts } = useQuery({
     queryKey: ['productsForStats'],
     queryFn: () => appClient.entities.Product.filter(filterByTenant()),
+    enabled: !isPlatformStatsView,
     staleTime: 1000 * 60 * 60 * 24, // 24 hours
     refetchOnWindowFocus: false,
   });
@@ -237,7 +241,39 @@ export default function Statistiques() {
       const profiles = await appClient.entities.RestaurantProfile.filter(filterByTenant());
       return profiles[0] || null;
     },
+    enabled: !isPlatformStatsView,
     staleTime: 1000 * 60 * 60 * 24 * 7, // 1 week
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: platformSalesContext = { invoices: [], tenants: [], resellers: [] }, isLoading: isLoadingPlatformSales } = useQuery({
+    queryKey: ['platform-sales-stats', startDateStr, endDateStr],
+    queryFn: async () => {
+      const [allInvoices, tenants, resellers] = await Promise.all([
+        appClient.entities.TenantInvoice.list('-created_date'),
+        appClient.entities.Tenant.list(),
+        appClient.entities.Reseller.list(),
+      ]);
+
+      const invoices = allInvoices.filter((invoice) => {
+        if (!isFinalInvoice(invoice) || invoice.statut !== 'payee') return false;
+
+        const isPlatformIssued = invoice.issuer_type === 'platform' || (!invoice.issuer_type && (invoice.tenant_id || invoice.recipient_type === 'tenant'));
+        if (!isPlatformIssued) return false;
+
+        const referenceDate = invoice.date_paiement || invoice.created_date || invoice.date_facturation;
+        if (!referenceDate || !startDateInParis || !endDateInParis) return false;
+
+        const invoiceDate = toParisDate(referenceDate);
+        if (!invoiceDate) return false;
+
+        return invoiceDate >= startDateInParis && invoiceDate <= endDateInParis;
+      });
+
+      return { invoices, tenants, resellers };
+    },
+    enabled: isPlatformStatsView && !!startDate && !!endDate,
+    staleTime: 1000 * 60 * 2,
     refetchOnWindowFocus: false,
   });
 
@@ -748,8 +784,110 @@ export default function Statistiques() {
     setExportModalOpen(false);
   };
 
+  const platformSalesStats = useMemo(() => {
+    if (!isPlatformStatsView) return null;
+
+    const invoices = platformSalesContext.invoices || [];
+    const tenantMap = new Map((platformSalesContext.tenants || []).map((tenant) => [tenant.id, tenant]));
+    const resellerMap = new Map((platformSalesContext.resellers || []).map((reseller) => [reseller.id, reseller]));
+
+    const resolveRecipient = (invoice) => {
+      if (invoice.recipient_type === 'reseller') {
+        return {
+          segment: 'revendeur',
+          name: invoice.recipient_snapshot?.brand_name
+            || invoice.recipient_snapshot?.name
+            || resellerMap.get(invoice.recipient_id)?.name
+            || 'Revendeur inconnu',
+        };
+      }
+
+      return {
+        segment: 'commerce',
+        name: invoice.recipient_snapshot?.nom_commercial
+          || invoice.recipient_snapshot?.name
+          || tenantMap.get(invoice.recipient_id || invoice.tenant_id)?.nom_commercial
+          || 'Commerce inconnu',
+      };
+    };
+
+    const totals = invoices.reduce((acc, invoice) => {
+      const recipient = resolveRecipient(invoice);
+      const amount = Number(invoice.montant || 0);
+      const type = invoice.type || 'autre';
+
+      acc.totalRevenue += amount;
+      acc.totalInvoices += 1;
+
+      if (recipient.segment === 'commerce') {
+        acc.merchantRevenue += amount;
+        acc.merchantInvoices += 1;
+      } else {
+        acc.resellerRevenue += amount;
+        acc.resellerInvoices += 1;
+      }
+
+      if (type === 'abonnement' || type === 'frais_de_maintenance') {
+        acc.recurringRevenue += amount;
+        acc.recurringInvoices += 1;
+      } else {
+        acc.oneOffRevenue += amount;
+        acc.oneOffInvoices += 1;
+      }
+
+      if (!acc.typeBreakdown[type]) {
+        acc.typeBreakdown[type] = { amount: 0, count: 0 };
+      }
+      acc.typeBreakdown[type].amount += amount;
+      acc.typeBreakdown[type].count += 1;
+
+      if (!acc.segmentBreakdown[recipient.segment]) {
+        acc.segmentBreakdown[recipient.segment] = { amount: 0, count: 0 };
+      }
+      acc.segmentBreakdown[recipient.segment].amount += amount;
+      acc.segmentBreakdown[recipient.segment].count += 1;
+
+      acc.recentInvoices.push({
+        ...invoice,
+        recipientName: recipient.name,
+        recipientSegment: recipient.segment,
+      });
+
+      return acc;
+    }, {
+      totalRevenue: 0,
+      totalInvoices: 0,
+      merchantRevenue: 0,
+      merchantInvoices: 0,
+      resellerRevenue: 0,
+      resellerInvoices: 0,
+      recurringRevenue: 0,
+      recurringInvoices: 0,
+      oneOffRevenue: 0,
+      oneOffInvoices: 0,
+      typeBreakdown: {},
+      segmentBreakdown: {},
+      recentInvoices: [],
+    });
+
+    totals.averageInvoice = totals.totalInvoices > 0 ? totals.totalRevenue / totals.totalInvoices : 0;
+    totals.typeRows = Object.entries(totals.typeBreakdown)
+      .map(([type, data]) => ({ type, ...data }))
+      .sort((a, b) => b.amount - a.amount);
+    totals.segmentRows = Object.entries(totals.segmentBreakdown)
+      .map(([segment, data]) => ({ segment, ...data }))
+      .sort((a, b) => b.amount - a.amount);
+    totals.recentInvoices = totals.recentInvoices
+      .sort((a, b) => new Date(b.date_paiement || b.created_date || b.date_facturation || 0) - new Date(a.date_paiement || a.created_date || a.date_facturation || 0))
+      .slice(0, 12);
+
+    return totals;
+  }, [isPlatformStatsView, platformSalesContext]);
+
   // Combine loading states
-  const isLoading = isLoadingOrders || isLoadingCustomers || isLoadingProducts || isLoadingProfile;
+  const isLoading = isPlatformStatsView
+    ? isLoadingPlatformSales
+    : isLoadingOrders || isLoadingCustomers || isLoadingProducts || isLoadingProfile;
 
   if (isLoading) {
     return (
@@ -759,6 +897,124 @@ export default function Statistiques() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
             <p className="mt-4 text-gray-600">Chargement des statistiques...</p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPlatformStatsView) {
+    const statsCards = [
+      { title: "CA plateforme", value: `${(platformSalesStats?.totalRevenue || 0).toFixed(2)}€`, icon: Euro, color: "bg-gradient-to-r from-green-500 to-green-600" },
+      { title: "Factures payees", value: platformSalesStats?.totalInvoices || 0, icon: FileText, color: "bg-gradient-to-r from-blue-500 to-blue-600" },
+      { title: "Ventes commerces", value: `${(platformSalesStats?.merchantRevenue || 0).toFixed(2)}€`, icon: Users, color: "bg-gradient-to-r from-orange-500 to-orange-600" },
+      { title: "Ventes revendeurs", value: `${(platformSalesStats?.resellerRevenue || 0).toFixed(2)}€`, icon: Receipt, color: "bg-gradient-to-r from-purple-500 to-purple-600" },
+      { title: "Abonnements", value: `${(platformSalesStats?.recurringRevenue || 0).toFixed(2)}€`, icon: Percent, color: "bg-gradient-to-r from-cyan-500 to-cyan-600" },
+      { title: "Ventes ponctuelles", value: `${(platformSalesStats?.oneOffRevenue || 0).toFixed(2)}€`, icon: ShoppingCart, color: "bg-gradient-to-r from-rose-500 to-red-600" },
+    ];
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 p-4 md:p-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <BarChart3 className="w-8 h-8 text-orange-500" />
+                Statistiques plateforme
+              </h1>
+              <p className="text-gray-600 mt-2">Ventes facturées par la plateforme aux commerces et aux revendeurs.</p>
+              <p className="text-sm text-blue-600 mt-1">Période: {getPeriodLabel()}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {statsCards.map((card) => (
+              <StatCard key={card.title} title={card.title} value={card.value} icon={card.icon} color={card.color} />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card className="border-0 shadow-md">
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Répartition par type de vente</h2>
+                  <p className="text-sm text-gray-500">Abonnement, vente complète, matériel, maintenance et autres.</p>
+                </div>
+                {platformSalesStats?.typeRows?.length ? (
+                  <div className="space-y-3">
+                    {platformSalesStats.typeRows.map((row) => (
+                      <div key={row.type} className="flex items-center justify-between rounded-lg border bg-white p-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{getInvoiceTypeLabel(row.type)}</p>
+                          <p className="text-xs text-gray-500">{row.count} facture(s)</p>
+                        </div>
+                        <p className="font-semibold text-gray-900">{row.amount.toFixed(2)}€</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Aucune vente sur cette période.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-md">
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Répartition par cible</h2>
+                  <p className="text-sm text-gray-500">Distinction entre commerces et revendeurs.</p>
+                </div>
+                {platformSalesStats?.segmentRows?.length ? (
+                  <div className="space-y-3">
+                    {platformSalesStats.segmentRows.map((row) => (
+                      <div key={row.segment} className="flex items-center justify-between rounded-lg border bg-white p-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{row.segment === 'commerce' ? 'Commerces' : 'Revendeurs'}</p>
+                          <p className="text-xs text-gray-500">{row.count} facture(s)</p>
+                        </div>
+                        <p className="font-semibold text-gray-900">{row.amount.toFixed(2)}€</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Aucune vente sur cette période.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-0 shadow-md">
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Dernières ventes plateforme</h2>
+                <p className="text-sm text-gray-500">Factures finales payées émises par la plateforme.</p>
+              </div>
+              {platformSalesStats?.recentInvoices?.length ? (
+                <div className="space-y-3">
+                  {platformSalesStats.recentInvoices.map((invoice) => (
+                    <div key={invoice.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border bg-white p-4">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {invoice.recipientName} - {getInvoiceTypeLabel(invoice.type)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {invoice.recipientSegment === 'commerce' ? 'Commerce' : 'Revendeur'} - {invoice.numero_facture || invoice.id?.slice(0, 8)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Payée le {new Date(invoice.date_paiement || invoice.created_date || invoice.date_facturation).toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-900">{Number(invoice.montant || 0).toFixed(2)}€</p>
+                        <p className="text-xs text-gray-500">TVA {Number(invoice.tva_taux || 0).toFixed(0)}%</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Aucune facture finale payée sur cette période.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
