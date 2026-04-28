@@ -28,7 +28,6 @@ import {
   Download,
   CheckCircle,
   BarChart3,
-  Trash2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -651,41 +650,6 @@ export default function ResellerPortal() {
     },
     onSuccess: async () => {
       toast({ title: '✅ Paiement mensuel mis a jour' });
-      await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
-    },
-    onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  const deleteReceivedPlatformInvoiceMutation = useMutation({
-    mutationFn: async (invoice) => {
-      if (!invoice?.id) {
-        throw new Error('Facture plateforme introuvable.');
-      }
-
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
-      const paymentRequestId = isPaymentRequestInvoice(invoice)
-        ? invoice.id
-        : invoice.metadata?.linked_payment_request_id || null;
-
-      if (paymentRequestId) {
-        const invoicesToDelete = allInvoices.filter((item) => (
-          item.id === paymentRequestId
-          || item.metadata?.linked_payment_request_id === paymentRequestId
-        ));
-
-        for (const linkedInvoice of invoicesToDelete) {
-          if (linkedInvoice.id !== invoice.id) {
-            await appClient.entities.TenantInvoice.delete(linkedInvoice.id);
-          }
-        }
-      }
-
-      return appClient.entities.TenantInvoice.delete(invoice.id);
-    },
-    onSuccess: async () => {
-      toast({ title: '✅ Facture plateforme supprimee' });
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
     },
     onError: (error) => {
@@ -1329,7 +1293,7 @@ export default function ResellerPortal() {
                         const amounts = getInvoiceAmounts(invoice);
                         const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
                         return (
-                          <div key={`pending-${invoice.id}`} className="rounded-xl border border-orange-200 bg-orange-50 p-4 flex items-start justify-between gap-4">
+                          <div key={`pending-${invoice.id}`} className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 <p className="font-medium text-gray-900">
@@ -1365,20 +1329,6 @@ export default function ResellerPortal() {
                                   ))}
                                 </div>
                               ) : null}
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => {
-                                  if (!confirm('Supprimer provisoirement cette facture plateforme ?')) return;
-                                  deleteReceivedPlatformInvoiceMutation.mutate(invoice);
-                                }}
-                                disabled={deleteReceivedPlatformInvoiceMutation.isPending}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Supprimer
-                              </Button>
                             </div>
                           </div>
                         );
@@ -1419,28 +1369,14 @@ export default function ResellerPortal() {
                               ) : null}
                               {invoice.description ? <p className="text-sm text-gray-600">{invoice.description}</p> : null}
                             </div>
-                            <div className="flex flex-col gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => generateInvoicePDF(invoice, null)}
-                              >
-                                <Download className="w-4 h-4 mr-2" />
-                                PDF
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => {
-                                  if (!confirm('Supprimer provisoirement cette facture plateforme ?')) return;
-                                  deleteReceivedPlatformInvoiceMutation.mutate(invoice);
-                                }}
-                                disabled={deleteReceivedPlatformInvoiceMutation.isPending}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Supprimer
-                              </Button>
-                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateInvoicePDF(invoice, null)}
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              PDF
+                            </Button>
                           </div>
                         );
                       })

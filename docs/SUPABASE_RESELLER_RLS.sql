@@ -543,11 +543,6 @@ to authenticated
 using (
   public.app_is_platform_admin()
   or (
-    recipient_type = 'reseller'
-    and recipient_id is not null
-    and public.app_can_access_reseller(recipient_id)
-  )
-  or (
     issuer_type = 'reseller'
     and issuer_id is not null
     and public.app_can_manage_reseller(issuer_id)
