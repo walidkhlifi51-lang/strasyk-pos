@@ -52,6 +52,7 @@ import {
 } from '@/lib/tenantProvisioning';
 import { buildResellerIssuerSnapshot, buildTenantRecipientSnapshot } from '@/lib/invoiceSnapshots';
 import {
+  RESELLER_PRODUCT_CATALOG,
   buildPricingRuleMap,
   getEffectiveResellerChargeHT,
   getResellerPricingSummary,
@@ -632,10 +633,11 @@ export default function ResellerPortal() {
       </Card>
 
       <Tabs defaultValue="clients" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="invoices">Factures</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
+          <TabsTrigger value="pricing">Tarifs</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="team">Equipe</TabsTrigger>
         </TabsList>
@@ -1264,6 +1266,55 @@ export default function ResellerPortal() {
                   );
                 })
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pricing" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mes tarifs plateforme</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900">
+                Cette vue est en lecture seule. Elle affiche les tarifs plateforme qui s appliquent a tes ventes selon le produit facture.
+              </div>
+
+              <div className="space-y-3">
+                {RESELLER_PRODUCT_CATALOG.map((product) => {
+                  const rule = pricingRuleMap[product.offer_code];
+
+                  return (
+                    <div key={product.offer_code} className="border rounded-xl p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-gray-900">{product.label}</p>
+                          <Badge variant={rule?.active ? 'default' : 'outline'}>
+                            {rule?.active ? 'Actif' : 'Non configure'}
+                          </Badge>
+                          <Badge variant="outline">{rule?.billing_type || product.billing_type}</Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {rule ? getResellerPricingSummary(rule) : 'Aucun tarif actif pour ce produit.'}
+                        </p>
+                      </div>
+
+                      {rule ? (
+                        <div className="grid grid-cols-2 gap-3 text-xs text-gray-500 lg:min-w-[320px]">
+                          <div>
+                            <p className="uppercase tracking-wide">Prix client conseille</p>
+                            <p className="font-semibold text-gray-800 mt-1">{Number(rule.public_price || 0).toFixed(2)} EUR HT</p>
+                          </div>
+                          <div>
+                            <p className="uppercase tracking-wide">Mode tarif</p>
+                            <p className="font-semibold text-gray-800 mt-1">{rule.commission_type === 'percentage' ? 'Pourcentage' : 'Prix fixe'}</p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
