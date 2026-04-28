@@ -49,6 +49,7 @@ const createEmptyResellerForm = () => ({
   vat_number: '',
   kbis_document_url: '',
   identity_document_url: '',
+  other_document_url: '',
   notes: '',
 });
 
@@ -305,6 +306,7 @@ A bientot.`;
       vat_number: selectedReseller.vat_number || '',
       kbis_document_url: selectedReseller.kbis_document_url || '',
       identity_document_url: selectedReseller.identity_document_url || '',
+      other_document_url: selectedReseller.other_document_url || '',
       notes: selectedReseller.notes || '',
     });
 
@@ -362,6 +364,7 @@ A bientot.`;
         vat_number: newResellerForm.vat_number.trim() || null,
         kbis_document_url: newResellerForm.kbis_document_url.trim() || null,
         identity_document_url: newResellerForm.identity_document_url.trim() || null,
+        other_document_url: newResellerForm.other_document_url.trim() || null,
         notes: newResellerForm.notes.trim() || null,
       });
 
@@ -401,6 +404,7 @@ A bientot.`;
         vat_number: resellerForm.vat_number.trim() || null,
         kbis_document_url: resellerForm.kbis_document_url.trim() || null,
         identity_document_url: resellerForm.identity_document_url.trim() || null,
+        other_document_url: resellerForm.other_document_url.trim() || null,
         notes: resellerForm.notes.trim() || null,
       });
     },
@@ -1217,6 +1221,56 @@ A bientot.`;
                           </div>
                           <Button type="button" variant="outline" asChild>
                             <a href={resellerForm.identity_document_url} download="piece-identite-revendeur">
+                              Telecharger
+                            </a>
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="space-y-3 md:col-span-2">
+                      <Label>Autres</Label>
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium cursor-pointer hover:bg-gray-50">
+                          {uploadingResellerDocument === 'other_document_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {uploadingResellerDocument === 'other_document_url' ? 'Telechargement...' : 'Choisir un fichier'}
+                          <input
+                            type="file"
+                            accept="application/pdf,image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(event) => handleResellerDocumentUpload(event, 'other_document_url')}
+                            disabled={uploadingResellerDocument === 'other_document_url'}
+                          />
+                        </label>
+                        {isEmbeddedFileUrl(resellerForm.other_document_url) ? (
+                          <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900 space-y-3 flex-1">
+                            <p>Document telecharge localement. L URL brute est masquee.</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setResellerForm((prev) => ({ ...prev, other_document_url: '' }))}
+                            >
+                              Remplacer par une URL manuelle
+                            </Button>
+                          </div>
+                        ) : (
+                          <Input
+                            value={resellerForm.other_document_url}
+                            onChange={(event) => setResellerForm((prev) => ({ ...prev, other_document_url: event.target.value }))}
+                            placeholder="URL autre document facultative"
+                          />
+                        )}
+                      </div>
+                      {resellerForm.other_document_url ? (
+                        <div className="rounded-xl border bg-gray-50 p-4 flex items-center justify-between gap-4">
+                          <div className="text-sm text-gray-600">
+                            <p className="font-medium text-gray-900">Autre document charge</p>
+                            <p className="break-all">
+                              {isEmbeddedFileUrl(resellerForm.other_document_url) ? 'Document telecharge localement' : resellerForm.other_document_url}
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" asChild>
+                            <a href={resellerForm.other_document_url} download="autre-document-revendeur">
                               Telecharger
                             </a>
                           </Button>

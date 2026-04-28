@@ -28,6 +28,7 @@ create table if not exists public.resellers (
   vat_number text,
   kbis_document_url text,
   identity_document_url text,
+  other_document_url text,
   notes text,
   created_date timestamptz not null default now(),
   updated_date timestamptz not null default now(),
@@ -47,6 +48,7 @@ alter table public.resellers
   add column if not exists vat_number text,
   add column if not exists kbis_document_url text,
   add column if not exists identity_document_url text,
+  add column if not exists other_document_url text,
   add column if not exists notes text,
   add column if not exists created_date timestamptz not null default now(),
   add column if not exists updated_date timestamptz not null default now();
