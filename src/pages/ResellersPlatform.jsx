@@ -424,10 +424,11 @@ A bientot.`;
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type || !file.type.startsWith('image/')) {
+    const allowedLogoTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!file.type || !allowedLogoTypes.includes(file.type)) {
       toast({
         title: '❌ Fichier non valide',
-        description: 'Le logo doit etre une image : PNG, JPG, WEBP ou SVG.',
+        description: 'Le logo doit etre une image PNG, JPG ou WEBP.',
         variant: 'destructive',
       });
       event.target.value = '';
@@ -1115,14 +1116,14 @@ A bientot.`;
                           {isUploadingBrandingLogo ? 'Telechargement...' : 'Choisir un fichier'}
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/png,image/jpeg,image/webp"
                             className="hidden"
                             onChange={handleBrandingLogoUpload}
                             disabled={isUploadingBrandingLogo}
                           />
                         </label>
                         <p className="text-xs text-gray-500">
-                          Formats acceptes : PNG, JPG, WEBP, SVG. Le fichier renseigne automatiquement le champ URL logo.
+                          Formats acceptes : PNG, JPG, WEBP. Le fichier renseigne automatiquement le champ URL logo.
                         </p>
                       </div>
                       {brandingForm.logo_url ? (
