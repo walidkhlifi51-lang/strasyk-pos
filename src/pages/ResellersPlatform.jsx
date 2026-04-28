@@ -703,15 +703,21 @@ A bientot.`;
         throw new Error('Facture revendeur introuvable.');
       }
 
-      if (isPaymentRequestInvoice(invoice)) {
-        const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
-        const linkedFinalInvoices = allInvoices.filter((item) => (
-          isFinalInvoice(item)
-          && item.metadata?.linked_payment_request_id === invoice.id
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const paymentRequestId = isPaymentRequestInvoice(invoice)
+        ? invoice.id
+        : invoice.metadata?.linked_payment_request_id || null;
+
+      if (paymentRequestId) {
+        const invoicesToDelete = allInvoices.filter((item) => (
+          item.id === paymentRequestId
+          || item.metadata?.linked_payment_request_id === paymentRequestId
         ));
 
-        for (const linkedInvoice of linkedFinalInvoices) {
-          await appClient.entities.TenantInvoice.delete(linkedInvoice.id);
+        for (const linkedInvoice of invoicesToDelete) {
+          if (linkedInvoice.id !== invoice.id) {
+            await appClient.entities.TenantInvoice.delete(linkedInvoice.id);
+          }
         }
       }
 
