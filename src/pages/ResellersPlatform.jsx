@@ -1051,11 +1051,39 @@ A bientot.`;
                     </div>
                     <div className="space-y-2">
                       <Label>Couleur principale</Label>
-                      <Input value={brandingForm.primary_color} onChange={(event) => setBrandingForm((prev) => ({ ...prev, primary_color: event.target.value }))} />
+                      <div className="flex items-center gap-3 rounded-xl border px-3 py-2 bg-white">
+                        <span
+                          className="inline-block h-8 w-8 rounded-full border shadow-sm"
+                          style={{ backgroundColor: brandingForm.primary_color || '#f97316' }}
+                        />
+                        <input
+                          type="color"
+                          value={brandingForm.primary_color || '#f97316'}
+                          onChange={(event) => setBrandingForm((prev) => ({ ...prev, primary_color: event.target.value }))}
+                          className="h-10 w-16 cursor-pointer rounded border bg-white p-1"
+                        />
+                        <span className="text-sm font-mono text-gray-600">
+                          {brandingForm.primary_color || '#f97316'}
+                        </span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Couleur secondaire</Label>
-                      <Input value={brandingForm.secondary_color} onChange={(event) => setBrandingForm((prev) => ({ ...prev, secondary_color: event.target.value }))} />
+                      <div className="flex items-center gap-3 rounded-xl border px-3 py-2 bg-white">
+                        <span
+                          className="inline-block h-8 w-8 rounded-full border shadow-sm"
+                          style={{ backgroundColor: brandingForm.secondary_color || '#1d4ed8' }}
+                        />
+                        <input
+                          type="color"
+                          value={brandingForm.secondary_color || '#1d4ed8'}
+                          onChange={(event) => setBrandingForm((prev) => ({ ...prev, secondary_color: event.target.value }))}
+                          className="h-10 w-16 cursor-pointer rounded border bg-white p-1"
+                        />
+                        <span className="text-sm font-mono text-gray-600">
+                          {brandingForm.secondary_color || '#1d4ed8'}
+                        </span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Email support</Label>
