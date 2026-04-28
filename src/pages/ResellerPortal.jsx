@@ -60,6 +60,31 @@ import {
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 
+const createInvoiceTotals = () => ({
+  paid_ttc: 0,
+  paid_ht: 0,
+  paid_tva: 0,
+  unpaid_ttc: 0,
+  unpaid_ht: 0,
+  unpaid_tva: 0,
+});
+
+const sumInvoiceBuckets = (invoices = []) => (
+  invoices.reduce((accumulator, invoice) => {
+    const amounts = getInvoiceAmounts(invoice);
+    if (isFinalInvoice(invoice) && invoice.statut === 'payee') {
+      accumulator.paid_ttc += amounts.amountTTC;
+      accumulator.paid_ht += amounts.amountHT;
+      accumulator.paid_tva += amounts.amountTVA;
+    } else if (isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee') {
+      accumulator.unpaid_ttc += amounts.amountTTC;
+      accumulator.unpaid_ht += amounts.amountHT;
+      accumulator.unpaid_tva += amounts.amountTVA;
+    }
+    return accumulator;
+  }, createInvoiceTotals())
+);
+
 const createClientForm = () => ({
   nom_commercial: '',
   owner_email: '',
@@ -165,6 +190,14 @@ export default function ResellerPortal() {
   const receivedResellerPaidInvoices = receivedResellerInvoices.filter((invoice) => isFinalInvoice(invoice) && invoice.statut === 'payee');
   const clientInvoiceAmounts = computeInvoiceAmounts(clientInvoiceForm.montant, clientInvoiceForm.tva_taux);
   const activeSelectedPricingRule = pricingRuleMap[clientInvoiceForm.type];
+  const resellerSalesTotals = React.useMemo(() => sumInvoiceBuckets(sentClientInvoices), [sentClientInvoices]);
+  const platformChargesTotals = React.useMemo(() => sumInvoiceBuckets(receivedResellerInvoices), [receivedResellerInvoices]);
+  const resellerNetTotals = React.useMemo(() => ({
+    paid_ttc: resellerSalesTotals.paid_ttc - platformChargesTotals.paid_ttc,
+    paid_ht: resellerSalesTotals.paid_ht - platformChargesTotals.paid_ht,
+    unpaid_ttc: resellerSalesTotals.unpaid_ttc - platformChargesTotals.unpaid_ttc,
+    unpaid_ht: resellerSalesTotals.unpaid_ht - platformChargesTotals.unpaid_ht,
+  }), [platformChargesTotals, resellerSalesTotals]);
 
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -633,8 +666,10 @@ export default function ResellerPortal() {
       </Card>
 
       <Tabs defaultValue="clients" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="clients">Clients</TabsTrigger>
+          <TabsTrigger value="stats">Statistiques</TabsTrigger>
+          <TabsTrigger value="accounting">Comptabilite</TabsTrigger>
           <TabsTrigger value="invoices">Factures</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
           <TabsTrigger value="pricing">Tarifs</TabsTrigger>
@@ -1003,6 +1038,82 @@ export default function ResellerPortal() {
                   ) : null}
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stats" className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">CA clients paye TTC</p><p className="text-2xl font-bold text-gray-900 mt-1">{currency(resellerSalesTotals.paid_ttc)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">CA clients en attente TTC</p><p className="text-2xl font-bold text-amber-600 mt-1">{currency(resellerSalesTotals.unpaid_ttc)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme payees TTC</p><p className="text-2xl font-bold text-gray-900 mt-1">{currency(platformChargesTotals.paid_ttc)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme en attente TTC</p><p className="text-2xl font-bold text-amber-600 mt-1">{currency(platformChargesTotals.unpaid_ttc)}</p></CardContent></Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Marge encaissee TTC</p><p className="text-2xl font-bold text-emerald-700 mt-1">{currency(resellerNetTotals.paid_ttc)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Marge encaissee HT</p><p className="text-2xl font-bold text-emerald-700 mt-1">{currency(resellerNetTotals.paid_ht)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Marge a venir TTC</p><p className="text-2xl font-bold text-blue-700 mt-1">{currency(resellerNetTotals.unpaid_ttc)}</p></CardContent></Card>
+            <Card><CardContent className="pt-6"><p className="text-xs uppercase tracking-wide text-gray-500">Marge a venir HT</p><p className="text-2xl font-bold text-blue-700 mt-1">{currency(resellerNetTotals.unpaid_ht)}</p></CardContent></Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Vue rapide</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-gray-600">
+              <p>Cette vue suit l activite du revendeur sur ses ventes clients et sur les lignes de paiement plateforme associees.</p>
+              <p>Les chiffres payes comptent uniquement les factures finales reglees. Les chiffres en attente comptent les lignes de paiement non encore validees.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="accounting" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Comptabilite revendeur</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900">
+                Document de synthese HT / TTC / TVA du revendeur, separe entre ventes clients et facturation plateforme.
+              </div>
+
+              <div className="grid xl:grid-cols-2 gap-4">
+                <Card className="border border-gray-200 shadow-none">
+                  <CardHeader><CardTitle className="text-base">Ventes clients</CardTitle></CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="grid grid-cols-4 gap-2 font-medium text-gray-500">
+                      <span></span><span className="text-right">TTC</span><span className="text-right">HT</span><span className="text-right">TVA</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2"><span>Paye</span><span className="text-right">{currency(resellerSalesTotals.paid_ttc)}</span><span className="text-right">{currency(resellerSalesTotals.paid_ht)}</span><span className="text-right">{currency(resellerSalesTotals.paid_tva)}</span></div>
+                    <div className="grid grid-cols-4 gap-2"><span>En attente</span><span className="text-right">{currency(resellerSalesTotals.unpaid_ttc)}</span><span className="text-right">{currency(resellerSalesTotals.unpaid_ht)}</span><span className="text-right">{currency(resellerSalesTotals.unpaid_tva)}</span></div>
+                    <div className="grid grid-cols-4 gap-2 border-t pt-2 font-semibold"><span>Total</span><span className="text-right">{currency(resellerSalesTotals.paid_ttc + resellerSalesTotals.unpaid_ttc)}</span><span className="text-right">{currency(resellerSalesTotals.paid_ht + resellerSalesTotals.unpaid_ht)}</span><span className="text-right">{currency(resellerSalesTotals.paid_tva + resellerSalesTotals.unpaid_tva)}</span></div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-gray-200 shadow-none">
+                  <CardHeader><CardTitle className="text-base">Facturation plateforme</CardTitle></CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="grid grid-cols-4 gap-2 font-medium text-gray-500">
+                      <span></span><span className="text-right">TTC</span><span className="text-right">HT</span><span className="text-right">TVA</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2"><span>Paye</span><span className="text-right">{currency(platformChargesTotals.paid_ttc)}</span><span className="text-right">{currency(platformChargesTotals.paid_ht)}</span><span className="text-right">{currency(platformChargesTotals.paid_tva)}</span></div>
+                    <div className="grid grid-cols-4 gap-2"><span>En attente</span><span className="text-right">{currency(platformChargesTotals.unpaid_ttc)}</span><span className="text-right">{currency(platformChargesTotals.unpaid_ht)}</span><span className="text-right">{currency(platformChargesTotals.unpaid_tva)}</span></div>
+                    <div className="grid grid-cols-4 gap-2 border-t pt-2 font-semibold"><span>Total</span><span className="text-right">{currency(platformChargesTotals.paid_ttc + platformChargesTotals.unpaid_ttc)}</span><span className="text-right">{currency(platformChargesTotals.paid_ht + platformChargesTotals.unpaid_ht)}</span><span className="text-right">{currency(platformChargesTotals.paid_tva + platformChargesTotals.unpaid_tva)}</span></div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border border-gray-200 shadow-none">
+                <CardHeader><CardTitle className="text-base">Resultat net</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2 font-medium text-gray-500">
+                    <span></span><span className="text-right">TTC</span><span className="text-right">HT</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2"><span>Net paye</span><span className="text-right">{currency(resellerNetTotals.paid_ttc)}</span><span className="text-right">{currency(resellerNetTotals.paid_ht)}</span></div>
+                  <div className="grid grid-cols-3 gap-2"><span>Net en attente</span><span className="text-right">{currency(resellerNetTotals.unpaid_ttc)}</span><span className="text-right">{currency(resellerNetTotals.unpaid_ht)}</span></div>
+                </CardContent>
+              </Card>
             </CardContent>
           </Card>
         </TabsContent>
