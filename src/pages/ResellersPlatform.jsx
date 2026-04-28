@@ -31,6 +31,12 @@ import {
   sortInvoicesByDateDesc,
 } from '@/lib/invoiceDocuments';
 import { PLATFORM_ISSUER_SNAPSHOT, buildResellerRecipientSnapshot } from '@/lib/invoiceSnapshots';
+import {
+  RESELLER_PRODUCT_CATALOG,
+  buildPricingRuleMap,
+  createPricingRuleDraft,
+  getResellerPricingSummary,
+} from '@/lib/resellerPricing';
 
 const createEmptyResellerForm = () => ({
   name: '',
@@ -105,6 +111,7 @@ export default function ResellersPlatform() {
   const [tenantToAttach, setTenantToAttach] = React.useState('');
   const [resellerInvoiceForm, setResellerInvoiceForm] = React.useState(createInvoiceForm());
   const [resellerInvoiceFeedback, setResellerInvoiceFeedback] = React.useState({ type: '', message: '' });
+  const [pricingRuleDrafts, setPricingRuleDrafts] = React.useState({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
@@ -114,6 +121,7 @@ export default function ResellersPlatform() {
         resellerBranding,
         resellerTenants,
         resellerUsers,
+        pricingRules,
         commissions,
         payouts,
         tenants,
@@ -123,6 +131,7 @@ export default function ResellersPlatform() {
         appClient.entities.ResellerBranding.list('-created_date'),
         appClient.entities.ResellerTenant.list('-created_date'),
         appClient.entities.ResellerUser.list('-created_date'),
+        appClient.entities.ResellerPricingRule.list('-created_date'),
         appClient.entities.ResellerCommission.list('-created_date'),
         appClient.entities.ResellerPayout.list('-created_date'),
         appClient.entities.Tenant.list('-created_date'),
@@ -134,6 +143,7 @@ export default function ResellersPlatform() {
         resellerBranding,
         resellerTenants,
         resellerUsers,
+        pricingRules,
         commissions,
         payouts,
         tenants,
@@ -148,6 +158,7 @@ export default function ResellersPlatform() {
   const resellerBranding = data?.resellerBranding || [];
   const resellerTenants = data?.resellerTenants || [];
   const resellerUsers = data?.resellerUsers || [];
+  const pricingRules = data?.pricingRules || [];
   const commissions = data?.commissions || [];
   const payouts = data?.payouts || [];
   const tenants = data?.tenants || [];
@@ -159,6 +170,8 @@ export default function ResellersPlatform() {
   const selectedResellerUsers = resellerUsers.filter((item) => item.reseller_id === selectedResellerId);
   const selectedCommissions = commissions.filter((item) => item.reseller_id === selectedResellerId);
   const selectedPayouts = payouts.filter((item) => item.reseller_id === selectedResellerId);
+  const selectedPricingRules = pricingRules.filter((item) => item.reseller_id === selectedResellerId);
+  const selectedPricingRuleMap = buildPricingRuleMap(selectedPricingRules);
   const selectedResellerInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
   );
@@ -255,6 +268,7 @@ A bientot.`;
       setResellerForm(createEmptyResellerForm());
       setBrandingForm(createEmptyBrandingForm());
       setResellerInvoiceForm(createInvoiceForm());
+      setPricingRuleDrafts({});
       return;
     }
 
@@ -276,7 +290,17 @@ A bientot.`;
       support_phone: selectedBranding?.support_phone || '',
       custom_domain: selectedBranding?.custom_domain || '',
     });
-  }, [selectedBranding, selectedReseller]);
+
+    setPricingRuleDrafts(
+      RESELLER_PRODUCT_CATALOG.reduce((accumulator, product) => {
+        accumulator[product.offer_code] = {
+          ...createPricingRuleDraft(selectedReseller.id, product.offer_code),
+          ...(selectedPricingRuleMap[product.offer_code] || {}),
+        };
+        return accumulator;
+      }, {})
+    );
+  }, [selectedBranding, selectedPricingRuleMap, selectedReseller]);
 
   const invalidateResellers = () => queryClient.invalidateQueries({ queryKey: ['resellers-platform'] });
 
@@ -362,6 +386,40 @@ A bientot.`;
     },
     onSuccess: async () => {
       toast({ title: '✅ Branding revendeur enregistre' });
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const savePricingRuleMutation = useMutation({
+    mutationFn: async (offerCode) => {
+      if (!selectedReseller?.id) throw new Error('Aucun revendeur selectionne.');
+      const draft = pricingRuleDrafts[offerCode];
+      if (!draft) throw new Error('Tarif introuvable.');
+
+      const payload = {
+        reseller_id: selectedReseller.id,
+        offer_code: offerCode,
+        billing_type: draft.billing_type || 'one_shot',
+        cost_price: Number(draft.cost_price || 0),
+        reseller_price: Number(draft.reseller_price || 0),
+        public_price: Number(draft.public_price || 0),
+        commission_type: draft.commission_type || 'fixed',
+        commission_value: Number(draft.commission_value || 0),
+        active: Boolean(draft.active),
+      };
+
+      const existingRule = selectedPricingRuleMap[offerCode];
+      if (existingRule?.id) {
+        return appClient.entities.ResellerPricingRule.update(existingRule.id, payload);
+      }
+
+      return appClient.entities.ResellerPricingRule.create(payload);
+    },
+    onSuccess: async () => {
+      toast({ title: '✅ Tarif revendeur enregistre' });
       await invalidateResellers();
     },
     onError: (error) => {
@@ -839,11 +897,12 @@ A bientot.`;
               <p className="text-sm text-gray-500">Choisissez un revendeur dans la colonne de gauche pour afficher sa fiche complete.</p>
             ) : (
               <Tabs defaultValue="identity" className="w-full">
-                <TabsList className="grid w-full grid-cols-6">
+                <TabsList className="grid w-full grid-cols-7">
                   <TabsTrigger value="identity">Identite</TabsTrigger>
                   <TabsTrigger value="branding">Branding</TabsTrigger>
                   <TabsTrigger value="team">Equipe</TabsTrigger>
                   <TabsTrigger value="tenants">Commerces</TabsTrigger>
+                  <TabsTrigger value="pricing">Tarifs</TabsTrigger>
                   <TabsTrigger value="invoices">Factures</TabsTrigger>
                   <TabsTrigger value="finance">Finance</TabsTrigger>
                 </TabsList>
@@ -1134,6 +1193,133 @@ A bientot.`;
                       ))}
                     </div>
                   )}
+                </TabsContent>
+
+                <TabsContent value="pricing" className="space-y-4 mt-4">
+                  <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900">
+                    Tu fixes ici les tarifs plateforme de ce revendeur par produit. Quand le revendeur facture un commerce, une ligne de paiement plateforme vers revendeur sera creee automatiquement a partir de ces regles.
+                  </div>
+
+                  <div className="space-y-4">
+                    {RESELLER_PRODUCT_CATALOG.map((product) => {
+                      const draft = pricingRuleDrafts[product.offer_code] || createPricingRuleDraft(selectedReseller.id, product.offer_code);
+                      const isPercentage = draft.commission_type === 'percentage';
+
+                      return (
+                        <Card key={product.offer_code} className="border border-gray-200 shadow-none">
+                          <CardHeader>
+                            <CardTitle className="text-base flex items-center justify-between gap-3">
+                              <span>{product.label}</span>
+                              <Badge variant={draft.active ? 'default' : 'outline'}>
+                                {draft.active ? 'Actif' : 'Inactif'}
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-4">
+                              <div className="space-y-2">
+                                <Label>Activer</Label>
+                                <Select
+                                  value={draft.active ? 'yes' : 'no'}
+                                  onValueChange={(value) => setPricingRuleDrafts((prev) => ({
+                                    ...prev,
+                                    [product.offer_code]: {
+                                      ...draft,
+                                      active: value === 'yes',
+                                    },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="yes">Oui</SelectItem>
+                                    <SelectItem value="no">Non</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Mode</Label>
+                                <Select
+                                  value={draft.commission_type || 'fixed'}
+                                  onValueChange={(value) => setPricingRuleDrafts((prev) => ({
+                                    ...prev,
+                                    [product.offer_code]: {
+                                      ...draft,
+                                      commission_type: value,
+                                    },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="fixed">Prix fixe</SelectItem>
+                                    <SelectItem value="percentage">Pourcentage</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Periodicite</Label>
+                                <Select
+                                  value={draft.billing_type || product.billing_type}
+                                  onValueChange={(value) => setPricingRuleDrafts((prev) => ({
+                                    ...prev,
+                                    [product.offer_code]: {
+                                      ...draft,
+                                      billing_type: value,
+                                    },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="monthly">Mensuel</SelectItem>
+                                    <SelectItem value="yearly">Annuel</SelectItem>
+                                    <SelectItem value="one_shot">Ponctuel</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Prix client conseille HT</Label>
+                                <Input
+                                  value={draft.public_price ?? 0}
+                                  onChange={(event) => setPricingRuleDrafts((prev) => ({
+                                    ...prev,
+                                    [product.offer_code]: {
+                                      ...draft,
+                                      public_price: event.target.value,
+                                    },
+                                  }))}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>{isPercentage ? 'Pourcentage plateforme' : 'Prix revendeur HT'}</Label>
+                                <Input
+                                  value={isPercentage ? (draft.commission_value ?? 0) : (draft.reseller_price ?? 0)}
+                                  onChange={(event) => setPricingRuleDrafts((prev) => ({
+                                    ...prev,
+                                    [product.offer_code]: {
+                                      ...draft,
+                                      ...(isPercentage
+                                        ? { commission_value: event.target.value }
+                                        : { reseller_price: event.target.value }),
+                                    },
+                                  }))}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+                              {getResellerPricingSummary(draft)}
+                            </div>
+
+                            <Button
+                              onClick={() => savePricingRuleMutation.mutate(product.offer_code)}
+                              disabled={savePricingRuleMutation.isPending}
+                            >
+                              Enregistrer le tarif
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="invoices" className="space-y-4 mt-4">
