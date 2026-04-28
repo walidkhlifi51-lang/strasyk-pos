@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2 } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2, Loader2, Upload } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
@@ -112,6 +112,7 @@ export default function ResellersPlatform() {
   const [resellerInvoiceForm, setResellerInvoiceForm] = React.useState(createInvoiceForm());
   const [resellerInvoiceFeedback, setResellerInvoiceFeedback] = React.useState({ type: '', message: '' });
   const [pricingRuleDrafts, setPricingRuleDrafts] = React.useState({});
+  const [isUploadingBrandingLogo, setIsUploadingBrandingLogo] = React.useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
@@ -418,6 +419,30 @@ A bientot.`;
       toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
     },
   });
+
+  const handleBrandingLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBrandingLogo(true);
+    try {
+      const { file_url } = await appClient.integrations.Core.UploadFile({ file });
+      setBrandingForm((prev) => ({ ...prev, logo_url: file_url }));
+      toast({
+        title: '✅ Logo telecharge',
+        description: 'Le logo a ete charge. Enregistre le branding pour le sauvegarder.',
+      });
+    } catch (error) {
+      toast({
+        title: '❌ Erreur',
+        description: error.message || 'Echec du telechargement du logo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploadingBrandingLogo(false);
+      event.target.value = '';
+    }
+  };
 
   const savePricingRuleMutation = useMutation({
     mutationFn: async (offerCode) => {
@@ -1043,6 +1068,38 @@ A bientot.`;
                     <div className="space-y-2 md:col-span-2">
                       <Label>URL logo</Label>
                       <Input value={brandingForm.logo_url} onChange={(event) => setBrandingForm((prev) => ({ ...prev, logo_url: event.target.value }))} placeholder="https://..." />
+                    </div>
+                    <div className="space-y-3 md:col-span-2">
+                      <Label>Telecharger un logo</Label>
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium cursor-pointer hover:bg-gray-50">
+                          {isUploadingBrandingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {isUploadingBrandingLogo ? 'Telechargement...' : 'Choisir un fichier'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleBrandingLogoUpload}
+                            disabled={isUploadingBrandingLogo}
+                          />
+                        </label>
+                        <p className="text-xs text-gray-500">
+                          Format libre image. Le fichier renseigne automatiquement le champ URL logo.
+                        </p>
+                      </div>
+                      {brandingForm.logo_url ? (
+                        <div className="rounded-xl border bg-gray-50 p-4 flex items-center gap-4">
+                          <img
+                            src={brandingForm.logo_url}
+                            alt={brandingForm.brand_name || selectedReseller?.name || 'Logo revendeur'}
+                            className="w-16 h-16 rounded-lg object-contain border bg-white"
+                          />
+                          <div className="text-sm text-gray-600">
+                            <p className="font-medium text-gray-900">Apercu du logo</p>
+                            <p className="break-all">{brandingForm.logo_url}</p>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-600">
