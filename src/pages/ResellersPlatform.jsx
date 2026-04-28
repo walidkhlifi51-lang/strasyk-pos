@@ -44,6 +44,11 @@ const createEmptyResellerForm = () => ({
   status: 'active',
   contact_email: '',
   contact_phone: '',
+  address: '',
+  siret: '',
+  vat_number: '',
+  kbis_document_url: '',
+  identity_document_url: '',
   notes: '',
 });
 
@@ -64,6 +69,7 @@ const createEmptyResellerUserForm = () => ({
 });
 
 const isEmbeddedImageUrl = (value) => `${value || ''}`.startsWith('data:image/');
+const isEmbeddedFileUrl = (value) => `${value || ''}`.startsWith('data:');
 
 const currency = (value) => `${Number(value || 0).toFixed(2)}â‚¬`;
 
@@ -115,6 +121,7 @@ export default function ResellersPlatform() {
   const [resellerInvoiceFeedback, setResellerInvoiceFeedback] = React.useState({ type: '', message: '' });
   const [pricingRuleDrafts, setPricingRuleDrafts] = React.useState({});
   const [isUploadingBrandingLogo, setIsUploadingBrandingLogo] = React.useState(false);
+  const [uploadingResellerDocument, setUploadingResellerDocument] = React.useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['resellers-platform'],
@@ -293,6 +300,11 @@ A bientot.`;
       status: selectedReseller.status || 'active',
       contact_email: selectedReseller.contact_email || '',
       contact_phone: selectedReseller.contact_phone || '',
+      address: selectedReseller.address || '',
+      siret: selectedReseller.siret || '',
+      vat_number: selectedReseller.vat_number || '',
+      kbis_document_url: selectedReseller.kbis_document_url || '',
+      identity_document_url: selectedReseller.identity_document_url || '',
       notes: selectedReseller.notes || '',
     });
 
@@ -345,6 +357,11 @@ A bientot.`;
         status: newResellerForm.status,
         contact_email: newResellerForm.contact_email.trim() || null,
         contact_phone: newResellerForm.contact_phone.trim() || null,
+        address: newResellerForm.address.trim() || null,
+        siret: newResellerForm.siret.trim() || null,
+        vat_number: newResellerForm.vat_number.trim() || null,
+        kbis_document_url: newResellerForm.kbis_document_url.trim() || null,
+        identity_document_url: newResellerForm.identity_document_url.trim() || null,
         notes: newResellerForm.notes.trim() || null,
       });
 
@@ -379,6 +396,11 @@ A bientot.`;
         status: resellerForm.status,
         contact_email: resellerForm.contact_email.trim() || null,
         contact_phone: resellerForm.contact_phone.trim() || null,
+        address: resellerForm.address.trim() || null,
+        siret: resellerForm.siret.trim() || null,
+        vat_number: resellerForm.vat_number.trim() || null,
+        kbis_document_url: resellerForm.kbis_document_url.trim() || null,
+        identity_document_url: resellerForm.identity_document_url.trim() || null,
         notes: resellerForm.notes.trim() || null,
       });
     },
@@ -453,6 +475,41 @@ A bientot.`;
       });
     } finally {
       setIsUploadingBrandingLogo(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleResellerDocumentUpload = async (event, field) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedDocumentTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    if (!file.type || !allowedDocumentTypes.includes(file.type)) {
+      toast({
+        title: 'âŒ Fichier non valide',
+        description: 'Le document doit etre un PDF, PNG, JPG ou WEBP.',
+        variant: 'destructive',
+      });
+      event.target.value = '';
+      return;
+    }
+
+    setUploadingResellerDocument(field);
+    try {
+      const { file_url } = await appClient.integrations.Core.UploadFile({ file });
+      setResellerForm((prev) => ({ ...prev, [field]: file_url }));
+      toast({
+        title: 'âœ… Document telecharge',
+        description: 'Le document a ete charge. Enregistre la fiche pour le sauvegarder.',
+      });
+    } catch (error) {
+      toast({
+        title: 'âŒ Erreur',
+        description: error.message || 'Echec du telechargement du document.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingResellerDocument('');
       event.target.value = '';
     }
   };
@@ -1041,6 +1098,102 @@ A bientot.`;
                     <div className="space-y-2 md:col-span-2">
                       <Label>Telephone contact</Label>
                       <Input value={resellerForm.contact_phone} onChange={(event) => setResellerForm((prev) => ({ ...prev, contact_phone: event.target.value }))} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Adresse</Label>
+                      <Textarea
+                        value={resellerForm.address}
+                        onChange={(event) => setResellerForm((prev) => ({ ...prev, address: event.target.value }))}
+                        placeholder="Adresse de la societe"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>SIRET</Label>
+                      <Input
+                        value={resellerForm.siret}
+                        onChange={(event) => setResellerForm((prev) => ({ ...prev, siret: event.target.value }))}
+                        placeholder="Facultatif"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Numero de TVA</Label>
+                      <Input
+                        value={resellerForm.vat_number}
+                        onChange={(event) => setResellerForm((prev) => ({ ...prev, vat_number: event.target.value }))}
+                        placeholder="Facultatif"
+                      />
+                    </div>
+                    <div className="space-y-3 md:col-span-2">
+                      <Label>KBIS</Label>
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium cursor-pointer hover:bg-gray-50">
+                          {uploadingResellerDocument === 'kbis_document_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {uploadingResellerDocument === 'kbis_document_url' ? 'Telechargement...' : 'Choisir un fichier'}
+                          <input
+                            type="file"
+                            accept="application/pdf,image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(event) => handleResellerDocumentUpload(event, 'kbis_document_url')}
+                            disabled={uploadingResellerDocument === 'kbis_document_url'}
+                          />
+                        </label>
+                        <Input
+                          value={resellerForm.kbis_document_url}
+                          onChange={(event) => setResellerForm((prev) => ({ ...prev, kbis_document_url: event.target.value }))}
+                          placeholder="URL document KBIS facultative"
+                        />
+                      </div>
+                      {resellerForm.kbis_document_url ? (
+                        <div className="rounded-xl border bg-gray-50 p-4 flex items-center justify-between gap-4">
+                          <div className="text-sm text-gray-600">
+                            <p className="font-medium text-gray-900">Document KBIS charge</p>
+                            <p className="break-all">
+                              {isEmbeddedFileUrl(resellerForm.kbis_document_url) ? 'Document telecharge localement' : resellerForm.kbis_document_url}
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" asChild>
+                            <a href={resellerForm.kbis_document_url} target="_blank" rel="noreferrer">
+                              Ouvrir
+                            </a>
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="space-y-3 md:col-span-2">
+                      <Label>Piece d identite</Label>
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium cursor-pointer hover:bg-gray-50">
+                          {uploadingResellerDocument === 'identity_document_url' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {uploadingResellerDocument === 'identity_document_url' ? 'Telechargement...' : 'Choisir un fichier'}
+                          <input
+                            type="file"
+                            accept="application/pdf,image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(event) => handleResellerDocumentUpload(event, 'identity_document_url')}
+                            disabled={uploadingResellerDocument === 'identity_document_url'}
+                          />
+                        </label>
+                        <Input
+                          value={resellerForm.identity_document_url}
+                          onChange={(event) => setResellerForm((prev) => ({ ...prev, identity_document_url: event.target.value }))}
+                          placeholder="URL piece d identite facultative"
+                        />
+                      </div>
+                      {resellerForm.identity_document_url ? (
+                        <div className="rounded-xl border bg-gray-50 p-4 flex items-center justify-between gap-4">
+                          <div className="text-sm text-gray-600">
+                            <p className="font-medium text-gray-900">Piece d identite chargee</p>
+                            <p className="break-all">
+                              {isEmbeddedFileUrl(resellerForm.identity_document_url) ? 'Document telecharge localement' : resellerForm.identity_document_url}
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" asChild>
+                            <a href={resellerForm.identity_document_url} target="_blank" rel="noreferrer">
+                              Ouvrir
+                            </a>
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label>Notes internes</Label>
