@@ -170,8 +170,14 @@ export default function ResellersPlatform() {
   const selectedResellerUsers = resellerUsers.filter((item) => item.reseller_id === selectedResellerId);
   const selectedCommissions = commissions.filter((item) => item.reseller_id === selectedResellerId);
   const selectedPayouts = payouts.filter((item) => item.reseller_id === selectedResellerId);
-  const selectedPricingRules = pricingRules.filter((item) => item.reseller_id === selectedResellerId);
-  const selectedPricingRuleMap = buildPricingRuleMap(selectedPricingRules);
+  const selectedPricingRules = React.useMemo(
+    () => pricingRules.filter((item) => item.reseller_id === selectedResellerId),
+    [pricingRules, selectedResellerId],
+  );
+  const selectedPricingRuleMap = React.useMemo(
+    () => buildPricingRuleMap(selectedPricingRules),
+    [selectedPricingRules],
+  );
   const selectedResellerInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
   );
@@ -300,7 +306,21 @@ A bientot.`;
         return accumulator;
       }, {})
     );
-  }, [selectedBranding, selectedPricingRuleMap, selectedReseller]);
+  }, [selectedBranding, selectedReseller]);
+
+  React.useEffect(() => {
+    if (!selectedReseller?.id) return;
+
+    setPricingRuleDrafts(
+      RESELLER_PRODUCT_CATALOG.reduce((accumulator, product) => {
+        accumulator[product.offer_code] = {
+          ...createPricingRuleDraft(selectedReseller.id, product.offer_code),
+          ...(selectedPricingRuleMap[product.offer_code] || {}),
+        };
+        return accumulator;
+      }, {})
+    );
+  }, [selectedReseller?.id, selectedPricingRuleMap]);
 
   const invalidateResellers = () => queryClient.invalidateQueries({ queryKey: ['resellers-platform'] });
 
