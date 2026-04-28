@@ -424,6 +424,16 @@ A bientot.`;
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!file.type || !file.type.startsWith('image/')) {
+      toast({
+        title: '❌ Fichier non valide',
+        description: 'Le logo doit etre une image : PNG, JPG, WEBP ou SVG.',
+        variant: 'destructive',
+      });
+      event.target.value = '';
+      return;
+    }
+
     setIsUploadingBrandingLogo(true);
     try {
       const { file_url } = await appClient.integrations.Core.UploadFile({ file });
@@ -1112,7 +1122,7 @@ A bientot.`;
                           />
                         </label>
                         <p className="text-xs text-gray-500">
-                          Format libre image. Le fichier renseigne automatiquement le champ URL logo.
+                          Formats acceptes : PNG, JPG, WEBP, SVG. Le fichier renseigne automatiquement le champ URL logo.
                         </p>
                       </div>
                       {brandingForm.logo_url ? (
