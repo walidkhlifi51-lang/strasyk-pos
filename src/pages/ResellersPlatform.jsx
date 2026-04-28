@@ -1137,11 +1137,25 @@ A bientot.`;
                             disabled={uploadingResellerDocument === 'kbis_document_url'}
                           />
                         </label>
-                        <Input
-                          value={resellerForm.kbis_document_url}
-                          onChange={(event) => setResellerForm((prev) => ({ ...prev, kbis_document_url: event.target.value }))}
-                          placeholder="URL document KBIS facultative"
-                        />
+                        {isEmbeddedFileUrl(resellerForm.kbis_document_url) ? (
+                          <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900 space-y-3 flex-1">
+                            <p>Document telecharge localement. L URL brute est masquee.</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setResellerForm((prev) => ({ ...prev, kbis_document_url: '' }))}
+                            >
+                              Remplacer par une URL manuelle
+                            </Button>
+                          </div>
+                        ) : (
+                          <Input
+                            value={resellerForm.kbis_document_url}
+                            onChange={(event) => setResellerForm((prev) => ({ ...prev, kbis_document_url: event.target.value }))}
+                            placeholder="URL document KBIS facultative"
+                          />
+                        )}
                       </div>
                       {resellerForm.kbis_document_url ? (
                         <div className="rounded-xl border bg-gray-50 p-4 flex items-center justify-between gap-4">
@@ -1152,8 +1166,8 @@ A bientot.`;
                             </p>
                           </div>
                           <Button type="button" variant="outline" asChild>
-                            <a href={resellerForm.kbis_document_url} target="_blank" rel="noreferrer">
-                              Ouvrir
+                            <a href={resellerForm.kbis_document_url} download="kbis-revendeur">
+                              Telecharger
                             </a>
                           </Button>
                         </div>
@@ -1173,11 +1187,25 @@ A bientot.`;
                             disabled={uploadingResellerDocument === 'identity_document_url'}
                           />
                         </label>
-                        <Input
-                          value={resellerForm.identity_document_url}
-                          onChange={(event) => setResellerForm((prev) => ({ ...prev, identity_document_url: event.target.value }))}
-                          placeholder="URL piece d identite facultative"
-                        />
+                        {isEmbeddedFileUrl(resellerForm.identity_document_url) ? (
+                          <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900 space-y-3 flex-1">
+                            <p>Document telecharge localement. L URL brute est masquee.</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setResellerForm((prev) => ({ ...prev, identity_document_url: '' }))}
+                            >
+                              Remplacer par une URL manuelle
+                            </Button>
+                          </div>
+                        ) : (
+                          <Input
+                            value={resellerForm.identity_document_url}
+                            onChange={(event) => setResellerForm((prev) => ({ ...prev, identity_document_url: event.target.value }))}
+                            placeholder="URL piece d identite facultative"
+                          />
+                        )}
                       </div>
                       {resellerForm.identity_document_url ? (
                         <div className="rounded-xl border bg-gray-50 p-4 flex items-center justify-between gap-4">
@@ -1188,8 +1216,8 @@ A bientot.`;
                             </p>
                           </div>
                           <Button type="button" variant="outline" asChild>
-                            <a href={resellerForm.identity_document_url} target="_blank" rel="noreferrer">
-                              Ouvrir
+                            <a href={resellerForm.identity_document_url} download="piece-identite-revendeur">
+                              Telecharger
                             </a>
                           </Button>
                         </div>
