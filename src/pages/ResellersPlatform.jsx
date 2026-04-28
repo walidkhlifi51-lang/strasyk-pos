@@ -72,7 +72,7 @@ const createEmptyResellerUserForm = () => ({
 const isEmbeddedImageUrl = (value) => `${value || ''}`.startsWith('data:image/');
 const isEmbeddedFileUrl = (value) => `${value || ''}`.startsWith('data:');
 
-const currency = (value) => `${Number(value || 0).toFixed(2)}â‚¬`;
+const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 
 const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
   const activeLinks = resellerTenants.filter((item) => item.status === 'active').length;
