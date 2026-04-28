@@ -181,6 +181,12 @@ export default function ResellersPlatform() {
   const selectedResellerInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
   );
+  const selectedResellerUnpaidInvoices = selectedResellerInvoices.filter(
+    (invoice) => isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee',
+  );
+  const selectedResellerPaidInvoices = selectedResellerInvoices.filter(
+    (invoice) => isFinalInvoice(invoice) && invoice.statut === 'payee',
+  );
   const resellerInvoiceAmounts = computeInvoiceAmounts(resellerInvoiceForm.montant, resellerInvoiceForm.tva_taux);
 
   const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
@@ -1470,83 +1476,147 @@ A bientot.`;
                             Aucune facture plateforme vers revendeur pour le moment. Appliquez d abord le schema SQL billing avant emission.
                           </p>
                         ) : (
-                          selectedResellerInvoices.map((invoice) => {
-                            const amounts = getInvoiceAmounts(invoice);
-                            const hasMonthlyPayments = hasRecurringPayments(invoice) && isPaymentRequestInvoice(invoice);
-                            const canValidate = isPaymentRequestInvoice(invoice);
-                            return (
-                            <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium text-gray-900">
-                                    {Number(invoice.montant || 0).toFixed(2)} EUR - {getInvoiceTypeLabel(invoice.type)}
-                                  </p>
-                                  {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
-                                  <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
-                                </p>
-                                {hasMonthlyPayments ? (
-                                  <p className="text-xs text-blue-700">
-                                    Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
-                                  </p>
-                                ) : null}
-                                {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
-                                {hasMonthlyPayments ? (
-                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
-                                    {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
-                                      <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
-                                        <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
-                                        <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
-                                        <button
-                                          onClick={() => toggleResellerMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
-                                          className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
-                                        >
-                                          {payment.paye ? '✓' : '×'}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => generateInvoicePDF(invoice, null)}
-                              >
-                                <Download className="w-4 h-4 mr-2" />
-                                PDF
-                              </Button>
-                              {!hasMonthlyPayments && canValidate && invoice.statut !== 'payee' ? (
-                                <Button
-                                  size="sm"
-                                  onClick={() => markResellerInvoicePaidMutation.mutate(invoice)}
-                                  disabled={markResellerInvoicePaidMutation.isPending}
-                                  className="bg-green-600 hover:bg-green-700"
-                                >
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                  Valider paiement
-                                </Button>
-                              ) : null}
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => {
-                                  if (!confirm('Supprimer cette facture revendeur ?')) return;
-                                  deleteResellerInvoiceMutation.mutate(invoice);
-                                }}
-                                disabled={deleteResellerInvoiceMutation.isPending}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Supprimer
-                              </Button>
+                          <>
+                            <div className="flex items-center justify-between pt-1">
+                              <h4 className="text-sm font-semibold text-amber-700">Paiements en attente</h4>
+                              <Badge variant="outline">{selectedResellerUnpaidInvoices.length}</Badge>
                             </div>
-                          );
-                          })
+                            {selectedResellerUnpaidInvoices.length === 0 ? (
+                              <p className="text-sm text-gray-500">Aucune ligne de paiement en attente.</p>
+                            ) : (
+                              selectedResellerUnpaidInvoices.map((invoice) => {
+                                const amounts = getInvoiceAmounts(invoice);
+                                const hasMonthlyPayments = hasRecurringPayments(invoice);
+                                return (
+                                  <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <p className="font-medium text-gray-900">
+                                          {Number(invoice.montant || 0).toFixed(2)} EUR - {getInvoiceTypeLabel(invoice.type)}
+                                        </p>
+                                        {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                        <Badge variant="outline">{invoice.statut || 'en_attente'}</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                                      </p>
+                                      <p className="text-xs text-gray-600">
+                                        HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                                      </p>
+                                      {hasMonthlyPayments ? (
+                                        <p className="text-xs text-blue-700">
+                                          Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                                        </p>
+                                      ) : null}
+                                      {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                                      {hasMonthlyPayments ? (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                                          {Object.entries(invoice.monthly_payments).map(([month, payment]) => (
+                                            <div key={month} className={`rounded border p-2 text-xs ${payment.paye ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                                              <p className="font-medium">{new Date(month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</p>
+                                              <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
+                                              <button
+                                                onClick={() => toggleResellerMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
+                                                className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
+                                              >
+                                                {payment.paye ? 'OK' : 'X'}
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => generateInvoicePDF(invoice, null)}
+                                      >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        PDF
+                                      </Button>
+                                      {!hasMonthlyPayments ? (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => markResellerInvoicePaidMutation.mutate(invoice)}
+                                          disabled={markResellerInvoicePaidMutation.isPending}
+                                          className="bg-green-600 hover:bg-green-700"
+                                        >
+                                          <CheckCircle className="w-4 h-4 mr-2" />
+                                          Valider paiement
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (!confirm('Supprimer cette facture revendeur ?')) return;
+                                          deleteResellerInvoiceMutation.mutate(invoice);
+                                        }}
+                                        disabled={deleteResellerInvoiceMutation.isPending}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Supprimer
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                            <div className="flex items-center justify-between pt-3">
+                              <h4 className="text-sm font-semibold text-green-700">Factures payees</h4>
+                              <Badge variant="outline">{selectedResellerPaidInvoices.length}</Badge>
+                            </div>
+                            {selectedResellerPaidInvoices.length === 0 ? (
+                              <p className="text-sm text-gray-500">Aucune facture payee pour le moment.</p>
+                            ) : (
+                              selectedResellerPaidInvoices.map((invoice) => {
+                                const amounts = getInvoiceAmounts(invoice);
+                                return (
+                                  <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4 bg-green-50/40">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <p className="font-medium text-gray-900">
+                                          {Number(invoice.montant || 0).toFixed(2)} EUR - {getInvoiceTypeLabel(invoice.type)}
+                                        </p>
+                                        {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
+                                        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">payee</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                                      </p>
+                                      <p className="text-xs text-gray-600">
+                                        HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                                      </p>
+                                      {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => generateInvoicePDF(invoice, null)}
+                                      >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        PDF
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (!confirm('Supprimer cette facture revendeur ?')) return;
+                                          deleteResellerInvoiceMutation.mutate(invoice);
+                                        }}
+                                        disabled={deleteResellerInvoiceMutation.isPending}
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Supprimer
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </>
                         )}
                       </CardContent>
                     </Card>
