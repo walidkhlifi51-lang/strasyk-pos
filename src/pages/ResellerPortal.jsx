@@ -27,7 +27,21 @@ import {
   FileText,
   Download,
   CheckCircle,
+  BarChart3,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
   buildFinalInvoiceFromPaymentRequest,
@@ -60,6 +74,7 @@ import {
 } from '@/lib/resellerPricing';
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
+const RESELLER_STATS_COLORS = ['#2563eb', '#f97316', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4'];
 
 const createInvoiceTotals = () => ({
   paid_ttc: 0,
@@ -204,6 +219,48 @@ export default function ResellerPortal() {
     unpaid_ttc: resellerSalesTotals.unpaid_ttc - platformChargesTotals.unpaid_ttc,
     unpaid_ht: resellerSalesTotals.unpaid_ht - platformChargesTotals.unpaid_ht,
   }), [platformChargesTotals, resellerSalesTotals]);
+  const resellerSalesByClient = React.useMemo(() => {
+    const byClient = sentClientInvoices.reduce((accumulator, invoice) => {
+      const label = invoice.recipient_snapshot?.name || invoice.recipient_snapshot?.nom_commercial || 'Client';
+      const amounts = getInvoiceAmounts(invoice);
+      accumulator[label] = (accumulator[label] || 0) + amounts.amountTTC;
+      return accumulator;
+    }, {});
+
+    return Object.entries(byClient)
+      .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 6);
+  }, [sentClientInvoices]);
+  const resellerSalesByType = React.useMemo(() => {
+    const byType = sentClientInvoices.reduce((accumulator, invoice) => {
+      const type = getInvoiceTypeLabel(invoice.type);
+      const amounts = getInvoiceAmounts(invoice);
+      accumulator[type] = (accumulator[type] || 0) + amounts.amountTTC;
+      return accumulator;
+    }, {});
+
+    return Object.entries(byType)
+      .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+      .sort((left, right) => right.value - left.value);
+  }, [sentClientInvoices]);
+  const resellerFlowComparison = React.useMemo(() => ([
+    {
+      name: 'Ventes clients',
+      paye: Number(resellerSalesTotals.paid_ttc.toFixed(2)),
+      attente: Number(resellerSalesTotals.unpaid_ttc.toFixed(2)),
+    },
+    {
+      name: 'Charges plateforme',
+      paye: Number(platformChargesTotals.paid_ttc.toFixed(2)),
+      attente: Number(platformChargesTotals.unpaid_ttc.toFixed(2)),
+    },
+    {
+      name: 'Net revendeur',
+      paye: Number(resellerNetTotals.paid_ttc.toFixed(2)),
+      attente: Number(resellerNetTotals.unpaid_ttc.toFixed(2)),
+    },
+  ]), [platformChargesTotals, resellerNetTotals, resellerSalesTotals]);
 
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -1078,11 +1135,90 @@ export default function ResellerPortal() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Vue rapide</CardTitle>
+              <CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-orange-500" /> Vue rapide</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-gray-600">
               <p>Cette vue suit l activite du revendeur sur ses ventes clients et sur les lignes de paiement plateforme associees.</p>
               <p>Les chiffres payes comptent uniquement les factures finales reglees. Les chiffres en attente comptent les lignes de paiement non encore validees.</p>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Top clients</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {resellerSalesByClient.length === 0 ? (
+                  <p className="text-sm text-gray-500">Aucune vente client a afficher.</p>
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={resellerSalesByClient} layout="vertical" margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" tickFormatter={(value) => `${Number(value || 0).toFixed(0)}€`} />
+                        <YAxis type="category" dataKey="name" width={120} />
+                        <Tooltip formatter={(value) => [`${Number(value || 0).toFixed(2)}€`, 'CA TTC']} />
+                        <Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ventes par type</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {resellerSalesByType.length === 0 ? (
+                  <p className="text-sm text-gray-500">Aucune vente a afficher.</p>
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={resellerSalesByType}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={105}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {resellerSalesByType.map((entry, index) => (
+                            <Cell key={entry.name} fill={RESELLER_STATS_COLORS[index % RESELLER_STATS_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${Number(value || 0).toFixed(2)}€`, 'CA TTC']} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Comparaison ventes / charges</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={resellerFlowComparison} margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => `${Number(value || 0).toFixed(0)}€`} />
+                    <Tooltip formatter={(value) => [`${Number(value || 0).toFixed(2)}€`, 'Montant TTC']} />
+                    <Legend />
+                    <Bar dataKey="paye" fill="#16a34a" radius={[6, 6, 0, 0]} name="Paye" />
+                    <Bar dataKey="attente" fill="#f59e0b" radius={[6, 6, 0, 0]} name="En attente" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
