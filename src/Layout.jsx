@@ -56,7 +56,9 @@ const navItems = [
   { name: "Certification", icon: FileCheck, page: "Certification", roles: ["owner", "manager"] },
   { name: "Clients", icon: Users, page: "Clients", roles: ["owner", "manager", "employee"] },
   { name: "Site Commercial", icon: Globe, page: "LandingPage", roles: ["owner", "manager", "employee"], externalUrl: "https://strasyk.com/home" },
-  { name: "Portefeuille Revendeur", icon: Handshake, page: "ResellerPortal", resellerRoles: ["reseller_owner", "reseller_manager", "reseller_sales", "reseller_support"] },
+  { name: "Portefeuille Revendeur", icon: Handshake, page: "ResellerPortal", resellerRoles: ["reseller_owner", "reseller_manager", "reseller_sales", "reseller_support"], query: { tab: "clients" } },
+  { name: "Statistiques", icon: BarChart3, page: "ResellerPortal", resellerRoles: ["reseller_owner", "reseller_manager", "reseller_sales", "reseller_support"], query: { tab: "stats" } },
+  { name: "Comptabilite", icon: BookCopy, page: "ResellerPortal", resellerRoles: ["reseller_owner", "reseller_manager", "reseller_sales", "reseller_support"], query: { tab: "accounting" } },
   { name: "Admin Commerces", icon: Building2, page: "AdminTenants", superAdminOnly: true },
   { name: "Revendeurs", icon: Handshake, page: "ResellersPlatform", superAdminOnly: true },
   { name: "Config Site", icon: Settings, page: "SiteAdmin", superAdminOnly: true },
@@ -84,11 +86,20 @@ const PLATFORM_ADMIN_ALLOWED_PAGES = new Set([
 ]);
 
 const NavLink = ({ item, isSidebarCollapsed, location, currentTenant, onNavigate }) => {
-  const isActive = location.pathname.includes(createPageUrl(item.page));
+  const currentSearchParams = new URLSearchParams(location.search);
+  const itemSearchParams = item.query ? new URLSearchParams(item.query) : null;
+  const isActive = location.pathname.includes(createPageUrl(item.page))
+    && (
+      !itemSearchParams
+      || Array.from(itemSearchParams.entries()).every(([key, value]) => currentSearchParams.get(key) === value)
+    );
 
   const getPageUrl = () => {
     if (item.page === "Kiosk" && currentTenant) {
       return `${createPageUrl(item.page)}?tenant=${currentTenant.id}`;
+    }
+    if (item.query) {
+      return `${createPageUrl(item.page)}?${new URLSearchParams(item.query).toString()}`;
     }
     return createPageUrl(item.page);
   };

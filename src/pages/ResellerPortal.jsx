@@ -1,5 +1,6 @@
 import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { appClient } from '@/api/appClient';
 import { useTenant } from '@/components/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -110,6 +111,8 @@ const withTimeout = async (promise, message, timeoutMs = 20000) => {
 };
 
 export default function ResellerPortal() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { currentReseller, isReseller, resellerRole } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -117,6 +120,9 @@ export default function ResellerPortal() {
   const [submitFeedback, setSubmitFeedback] = React.useState({ type: '', message: '' });
   const [selectedClientId, setSelectedClientId] = React.useState('');
   const [clientInvoiceForm, setClientInvoiceForm] = React.useState(createInvoiceForm());
+  const allowedTabs = React.useMemo(() => new Set(['clients', 'stats', 'accounting', 'invoices', 'commissions', 'pricing', 'branding', 'team']), []);
+  const requestedTab = React.useMemo(() => new URLSearchParams(location.search).get('tab') || 'clients', [location.search]);
+  const [activeTab, setActiveTab] = React.useState(allowedTabs.has(requestedTab) ? requestedTab : 'clients');
 
   const canManageClients = ['owner', 'manager', 'sales'].includes(resellerRole);
 
@@ -215,6 +221,10 @@ export default function ResellerPortal() {
     { title: 'Commissions pending', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
     { title: 'Commissions payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
   ];
+
+  React.useEffect(() => {
+    setActiveTab(allowedTabs.has(requestedTab) ? requestedTab : 'clients');
+  }, [allowedTabs, requestedTab]);
 
   React.useEffect(() => {
     if (!linkedTenants.length) {
@@ -665,7 +675,16 @@ export default function ResellerPortal() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="clients" className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          setActiveTab(value);
+          const searchParams = new URLSearchParams(location.search);
+          searchParams.set('tab', value);
+          navigate(`${location.pathname}?${searchParams.toString()}`, { replace: true });
+        }}
+        className="w-full"
+      >
         <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="stats">Statistiques</TabsTrigger>
