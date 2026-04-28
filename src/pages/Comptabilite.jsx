@@ -25,7 +25,7 @@ import {
 import { fr } from "date-fns/locale";
 import { useTenant } from "@/components/contexts/TenantContext";
 import { computeTaxSummaryFromArticles } from "@/components/utils/taxUtils";
-import { getInvoiceTypeLabel, isFinalInvoice } from "@/lib/invoiceDocuments";
+import { isFinalInvoice } from "@/lib/invoiceDocuments";
 import { toParisDate as toParisDateValue } from "@/lib/dateParsing";
 
 const safeToFixed = (num) => (typeof num === "number" ? num.toFixed(2) : "0.00");
@@ -44,46 +44,46 @@ const monthOptions = Array.from({ length: 12 }, (_, i) => ({
   label: format(new Date(0, i), "MMMM", { locale: fr }),
 }));
 
-const PLATFORM_TYPE_KEYS = [
-  "abonnement",
-  "achat_complet",
-  "materiel",
-  "module_supplementaire",
-  "frais_de_maintenance",
-  "autre",
-];
-
-const createPlatformAccumulator = () => ({
-  invoices_count: 0,
-  total_ttc: 0,
-  total_ht: 0,
-  total_tva: 0,
-  commerce_ttc: 0,
-  revendeur_ttc: 0,
-  abonnement_ttc: 0,
-  achat_complet_ttc: 0,
-  materiel_ttc: 0,
-  module_supplementaire_ttc: 0,
-  frais_de_maintenance_ttc: 0,
-  autre_ttc: 0,
+const createPlatformAccountingAccumulator = () => ({
+  paid_count: 0,
+  paid_ttc: 0,
+  paid_ht: 0,
+  paid_tva: 0,
+  unpaid_count: 0,
+  unpaid_ttc: 0,
+  unpaid_ht: 0,
+  unpaid_tva: 0,
 });
 
-const addPlatformInvoiceToAccumulator = (target, invoice) => {
+const getPlatformInvoiceAmounts = (invoice) => {
   const amountTtc = Number(invoice.metadata?.amount_ttc ?? invoice.montant ?? 0);
-  const amountHt = Number(invoice.metadata?.amount_ht ?? (amountTtc / (1 + Number(invoice.tva_taux || 0) / 100)));
+  const amountHt = Number(
+    invoice.metadata?.amount_ht ?? (amountTtc / (1 + Number(invoice.tva_taux || 0) / 100))
+  );
   const amountTva = Number(invoice.metadata?.amount_tva ?? (amountTtc - amountHt));
-  const typeKey = PLATFORM_TYPE_KEYS.includes(invoice.type) ? invoice.type : "autre";
-  const segmentKey = invoice.recipient_type === "reseller" ? "revendeur_ttc" : "commerce_ttc";
 
-  target.invoices_count += 1;
-  target.total_ttc += amountTtc;
-  target.total_ht += amountHt;
-  target.total_tva += amountTva;
-  target[segmentKey] += amountTtc;
-  target[`${typeKey}_ttc`] += amountTtc;
+  return { amountTtc, amountHt, amountTva };
 };
 
-const clonePlatformTotals = (source) => ({ ...source });
+const addPlatformAccountingInvoice = (target, invoice) => {
+  const { amountTtc, amountHt, amountTva } = getPlatformInvoiceAmounts(invoice);
+  const isPaidInvoice = isFinalInvoice(invoice) && invoice.statut === "payee";
+  const isUnpaidPaymentLine = invoice.metadata?.document_kind === "payment_request" && invoice.statut !== "payee";
+
+  if (isPaidInvoice) {
+    target.paid_count += 1;
+    target.paid_ttc += amountTtc;
+    target.paid_ht += amountHt;
+    target.paid_tva += amountTva;
+  }
+
+  if (isUnpaidPaymentLine) {
+    target.unpaid_count += 1;
+    target.unpaid_ttc += amountTtc;
+    target.unpaid_ht += amountHt;
+    target.unpaid_tva += amountTva;
+  }
+};
 
 export default function Comptabilite() {
   const { filterByTenant, isPlatformAdmin, currentTenant, currentReseller } = useTenant();
@@ -117,8 +117,16 @@ export default function Comptabilite() {
     queryFn: async () => {
       const invoices = await appClient.entities.TenantInvoice.list("-created_date");
       return invoices.filter((invoice) => {
-        if (!isFinalInvoice(invoice) || invoice.statut !== "payee") return false;
-        return invoice.issuer_type === "platform" || (!invoice.issuer_type && (invoice.tenant_id || invoice.recipient_type === "tenant"));
+        const isPlatformIssued =
+          invoice.issuer_type === "platform" ||
+          (!invoice.issuer_type && (invoice.tenant_id || invoice.recipient_type === "tenant"));
+
+        if (!isPlatformIssued) return false;
+
+        return (
+          (isFinalInvoice(invoice) && invoice.statut === "payee") ||
+          invoice.metadata?.document_kind === "payment_request"
+        );
       });
     },
     enabled: isPlatformAccountingView,
@@ -282,7 +290,10 @@ export default function Comptabilite() {
         : () => format(selectedDay, "dd MMMM yyyy", { locale: fr });
 
     const invoicesForPeriod = platformInvoices.filter((invoice) => {
-      const sourceDate = invoice.date_paiement || invoice.created_date || invoice.date_facturation;
+      const isPaidInvoice = isFinalInvoice(invoice) && invoice.statut === "payee";
+      const sourceDate = isPaidInvoice
+        ? (invoice.date_paiement || invoice.updated_date || invoice.created_date || invoice.date_facturation)
+        : (invoice.created_date || invoice.date_facturation);
       if (!sourceDate) return false;
       const invoiceDate = toParisDateValue(sourceDate);
       return invoiceDate ? isWithinInterval(invoiceDate, interval) : false;
@@ -290,28 +301,30 @@ export default function Comptabilite() {
 
     const dataByGroup = {};
     invoicesForPeriod.forEach((invoice) => {
-      const sourceDate = invoice.date_paiement || invoice.created_date || invoice.date_facturation;
+      const isPaidInvoice = isFinalInvoice(invoice) && invoice.statut === "payee";
+      const sourceDate = isPaidInvoice
+        ? (invoice.date_paiement || invoice.updated_date || invoice.created_date || invoice.date_facturation)
+        : (invoice.created_date || invoice.date_facturation);
       const groupKey = groupingFn(toParisDateValue(sourceDate));
 
       if (!dataByGroup[groupKey]) {
         dataByGroup[groupKey] = {
           groupLabel: displayFormat(groupKey),
           groupKey,
-          ...createPlatformAccumulator(),
+          ...createPlatformAccountingAccumulator(),
         };
       }
 
-      addPlatformInvoiceToAccumulator(dataByGroup[groupKey], invoice);
+      addPlatformAccountingInvoice(dataByGroup[groupKey], invoice);
     });
 
     const items = Object.values(dataByGroup).sort((a, b) => a.groupKey.localeCompare(b.groupKey));
     const totals = items.reduce((acc, item) => {
-      const next = clonePlatformTotals(acc);
-      Object.keys(createPlatformAccumulator()).forEach((key) => {
-        next[key] += item[key] || 0;
+      Object.keys(createPlatformAccountingAccumulator()).forEach((key) => {
+        acc[key] += item[key] || 0;
       });
-      return next;
-    }, createPlatformAccumulator());
+      return acc;
+    }, createPlatformAccountingAccumulator());
 
     return { items, totals, periodLabel, detailTitle };
   }, [isPlatformAccountingView, periodConfig, platformInvoices, selectedDay, viewMode]);
@@ -333,56 +346,50 @@ export default function Comptabilite() {
     return total;
   }, [isPlatformAccountingView, totals, tvaRates]);
 
+  const platformGrandTotals = useMemo(() => ({
+    total_ttc: Number(totals.paid_ttc || 0) + Number(totals.unpaid_ttc || 0),
+    total_ht: Number(totals.paid_ht || 0) + Number(totals.unpaid_ht || 0),
+    total_tva: Number(totals.paid_tva || 0) + Number(totals.unpaid_tva || 0),
+  }), [totals]);
+
   const exportTo = (formatType) => {
     if (!hasData) return;
 
     if (isPlatformAccountingView) {
       const headers = [
         "Période",
-        "Factures",
+        "Paye TTC",
+        "Paye HT",
+        "TVA payee",
+        "Non paye TTC",
+        "Non paye HT",
+        "TVA non payee",
         "Total TTC",
         "Total HT",
-        "Total TVA",
-        "Ventes commerces",
-        "Ventes revendeurs",
-        "Abonnements",
-        "Vente complete",
-        "Materiel",
-        "Module supplementaire",
-        "Maintenance",
-        "Autre",
       ];
 
       const bodyRows = items.map((item) => [
         `"${item.groupLabel}"`,
-        item.invoices_count,
-        safeToFixed(item.total_ttc),
-        safeToFixed(item.total_ht),
-        safeToFixed(item.total_tva),
-        safeToFixed(item.commerce_ttc),
-        safeToFixed(item.revendeur_ttc),
-        safeToFixed(item.abonnement_ttc),
-        safeToFixed(item.achat_complet_ttc),
-        safeToFixed(item.materiel_ttc),
-        safeToFixed(item.module_supplementaire_ttc),
-        safeToFixed(item.frais_de_maintenance_ttc),
-        safeToFixed(item.autre_ttc),
+        safeToFixed(item.paid_ttc),
+        safeToFixed(item.paid_ht),
+        safeToFixed(item.paid_tva),
+        safeToFixed(item.unpaid_ttc),
+        safeToFixed(item.unpaid_ht),
+        safeToFixed(item.unpaid_tva),
+        safeToFixed((item.paid_ttc || 0) + (item.unpaid_ttc || 0)),
+        safeToFixed((item.paid_ht || 0) + (item.unpaid_ht || 0)),
       ]);
 
       const footerRow = [
         "Total",
-        totals.invoices_count || 0,
-        safeToFixed(totals.total_ttc),
-        safeToFixed(totals.total_ht),
-        safeToFixed(totals.total_tva),
-        safeToFixed(totals.commerce_ttc),
-        safeToFixed(totals.revendeur_ttc),
-        safeToFixed(totals.abonnement_ttc),
-        safeToFixed(totals.achat_complet_ttc),
-        safeToFixed(totals.materiel_ttc),
-        safeToFixed(totals.module_supplementaire_ttc),
-        safeToFixed(totals.frais_de_maintenance_ttc),
-        safeToFixed(totals.autre_ttc),
+        safeToFixed(totals.paid_ttc),
+        safeToFixed(totals.paid_ht),
+        safeToFixed(totals.paid_tva),
+        safeToFixed(totals.unpaid_ttc),
+        safeToFixed(totals.unpaid_ht),
+        safeToFixed(totals.unpaid_tva),
+        safeToFixed(platformGrandTotals.total_ttc),
+        safeToFixed(platformGrandTotals.total_ht),
       ];
 
       if (formatType === "csv") {
@@ -574,10 +581,21 @@ export default function Comptabilite() {
         </Tabs>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires TTC</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ttc)}€</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires HT</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ht)}€</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Total TVA</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totalTVA)}€</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-1">{isPlatformAccountingView ? "Nombre de factures" : "Total Remises"} {!isPlatformAccountingView && <Percent className="w-4 h-4" />}</CardTitle></CardHeader><CardContent><p className={`text-2xl font-bold ${isPlatformAccountingView ? "text-blue-600" : "text-red-600"}`}>{isPlatformAccountingView ? (totals?.invoices_count || 0) : `${safeToFixed(totals?.total_remises)}€`}</p></CardContent></Card>
+          {isPlatformAccountingView ? (
+            <>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Ventes payees TTC</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.paid_ttc)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Ventes payees HT</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.paid_ht)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Ventes en attente TTC</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-amber-600">{safeToFixed(totals?.unpaid_ttc)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Ventes en attente HT</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-amber-600">{safeToFixed(totals?.unpaid_ht)}€</p></CardContent></Card>
+            </>
+          ) : (
+            <>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires TTC</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ttc)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires HT</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ht)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Total TVA</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totalTVA)}€</p></CardContent></Card>
+              <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-1">Total Remises <Percent className="w-4 h-4" /></CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-red-600">{safeToFixed(totals?.total_remises)}€</p></CardContent></Card>
+            </>
+          )}
         </div>
 
         <Card>
@@ -590,15 +608,14 @@ export default function Comptabilite() {
                     <TableHead className="min-w-[150px]">Période</TableHead>
                     {isPlatformAccountingView ? (
                       <>
-                        <TableHead className="text-right min-w-[90px]">Factures</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Paye TTC</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Paye HT</TableHead>
+                        <TableHead className="text-right min-w-[120px]">TVA payee</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Non paye TTC</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Non paye HT</TableHead>
+                        <TableHead className="text-right min-w-[120px]">TVA non payee</TableHead>
                         <TableHead className="text-right min-w-[120px]">Total TTC</TableHead>
                         <TableHead className="text-right min-w-[120px]">Total HT</TableHead>
-                        <TableHead className="text-right min-w-[120px]">Total TVA</TableHead>
-                        <TableHead className="text-right min-w-[120px]">Commerces</TableHead>
-                        <TableHead className="text-right min-w-[120px]">Revendeurs</TableHead>
-                        {PLATFORM_TYPE_KEYS.map((type) => (
-                          <TableHead key={type} className="text-right min-w-[130px]">{getInvoiceTypeLabel(type)}</TableHead>
-                        ))}
                       </>
                     ) : (
                       <>
@@ -618,20 +635,21 @@ export default function Comptabilite() {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 12 + PLATFORM_TYPE_KEYS.length : 11 + tvaRates.length} className="text-center py-10"><Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" /><p className="text-gray-500 mt-2">Chargement des données...</p></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 9 : 11 + tvaRates.length} className="text-center py-10"><Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" /><p className="text-gray-500 mt-2">Chargement des données...</p></TableCell></TableRow>
                   ) : hasData ? (
                     items.map((item) => (
                       <TableRow key={item.groupKey || item.groupLabel}>
                         <TableCell className="font-medium">{item.groupLabel}</TableCell>
                         {isPlatformAccountingView ? (
                           <>
-                            <TableCell className="text-right">{item.invoices_count}</TableCell>
-                            <TableCell className="text-right">{safeToFixed(item.total_ttc)}€</TableCell>
-                            <TableCell className="text-right">{safeToFixed(item.total_ht)}€</TableCell>
-                            <TableCell className="text-right">{safeToFixed(item.total_tva)}€</TableCell>
-                            <TableCell className="text-right">{safeToFixed(item.commerce_ttc)}€</TableCell>
-                            <TableCell className="text-right">{safeToFixed(item.revendeur_ttc)}€</TableCell>
-                            {PLATFORM_TYPE_KEYS.map((type) => <TableCell key={type} className="text-right">{safeToFixed(item[`${type}_ttc`])}€</TableCell>)}
+                            <TableCell className="text-right">{safeToFixed(item.paid_ttc)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.paid_ht)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.paid_tva)}€</TableCell>
+                            <TableCell className="text-right text-amber-600">{safeToFixed(item.unpaid_ttc)}€</TableCell>
+                            <TableCell className="text-right text-amber-600">{safeToFixed(item.unpaid_ht)}€</TableCell>
+                            <TableCell className="text-right text-amber-600">{safeToFixed(item.unpaid_tva)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed((item.paid_ttc || 0) + (item.unpaid_ttc || 0))}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed((item.paid_ht || 0) + (item.unpaid_ht || 0))}€</TableCell>
                           </>
                         ) : (
                           <>
@@ -650,7 +668,7 @@ export default function Comptabilite() {
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 12 + PLATFORM_TYPE_KEYS.length : 11 + tvaRates.length} className="text-center py-10 text-gray-500">
+                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 9 : 11 + tvaRates.length} className="text-center py-10 text-gray-500">
                       {isPlatformAccountingView ? "Aucune vente plateforme pour la période sélectionnée." : "Aucune donnée de commande pour la période sélectionnée."}
                     </TableCell></TableRow>
                   )}
@@ -661,13 +679,14 @@ export default function Comptabilite() {
                       <TableCell>Total</TableCell>
                       {isPlatformAccountingView ? (
                         <>
-                          <TableCell className="text-right">{totals.invoices_count || 0}</TableCell>
-                          <TableCell className="text-right">{safeToFixed(totals.total_ttc)}€</TableCell>
-                          <TableCell className="text-right">{safeToFixed(totals.total_ht)}€</TableCell>
-                          <TableCell className="text-right">{safeToFixed(totals.total_tva)}€</TableCell>
-                          <TableCell className="text-right">{safeToFixed(totals.commerce_ttc)}€</TableCell>
-                          <TableCell className="text-right">{safeToFixed(totals.revendeur_ttc)}€</TableCell>
-                          {PLATFORM_TYPE_KEYS.map((type) => <TableCell key={type} className="text-right">{safeToFixed(totals[`${type}_ttc`])}€</TableCell>)}
+                          <TableCell className="text-right">{safeToFixed(totals.paid_ttc)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.paid_ht)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.paid_tva)}€</TableCell>
+                          <TableCell className="text-right text-amber-600">{safeToFixed(totals.unpaid_ttc)}€</TableCell>
+                          <TableCell className="text-right text-amber-600">{safeToFixed(totals.unpaid_ht)}€</TableCell>
+                          <TableCell className="text-right text-amber-600">{safeToFixed(totals.unpaid_tva)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(platformGrandTotals.total_ttc)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(platformGrandTotals.total_ht)}€</TableCell>
                         </>
                       ) : (
                         <>
