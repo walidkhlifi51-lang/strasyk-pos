@@ -76,6 +76,7 @@ const pagePermissionMap = {
 const PLATFORM_ADMIN_ALLOWED_PAGES = new Set([
   "Dashboard",
   "Statistiques",
+  "Comptabilite",
   "LandingPage",
   "AdminTenants",
   "ResellersPlatform",

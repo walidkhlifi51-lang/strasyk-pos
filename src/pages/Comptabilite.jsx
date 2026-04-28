@@ -1,35 +1,39 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { appClient } from "@/api/appClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookCopy, FileDown, Loader2, FileType, Percent } from "lucide-react";
+import { BookCopy, FileDown, FileType, Loader2, Percent } from "lucide-react";
 import {
-  format,
-  getYear,
-  getMonth,
-  set,
-  startOfMonth,
+  endOfDay,
   endOfMonth,
-  startOfYear,
   endOfYear,
-  parseISO,
+  format,
+  getMonth,
+  getYear,
   isWithinInterval,
+  parseISO,
+  set,
+  startOfDay,
+  startOfMonth,
+  startOfYear,
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useTenant } from "@/components/contexts/TenantContext";
 import { computeTaxSummaryFromArticles } from "@/components/utils/taxUtils";
+import { getInvoiceTypeLabel, isFinalInvoice } from "@/lib/invoiceDocuments";
+import { toParisDate as toParisDateValue } from "@/lib/dateParsing";
 
-const safeToFixed = (num) => (typeof num === 'number' ? num.toFixed(2) : '0.00');
+const safeToFixed = (num) => (typeof num === "number" ? num.toFixed(2) : "0.00");
 
 const generateYearOptions = () => {
   const currentYear = getYear(new Date());
   const years = [];
-  for (let i = currentYear + 1; i >= 2023; i--) {
+  for (let i = currentYear + 1; i >= 2023; i -= 1) {
     years.push({ value: i, label: i.toString() });
   }
   return years;
@@ -37,160 +41,404 @@ const generateYearOptions = () => {
 
 const monthOptions = Array.from({ length: 12 }, (_, i) => ({
   value: i,
-  label: format(new Date(0, i), 'MMMM', { locale: fr }),
+  label: format(new Date(0, i), "MMMM", { locale: fr }),
 }));
 
+const PLATFORM_TYPE_KEYS = [
+  "abonnement",
+  "achat_complet",
+  "materiel",
+  "module_supplementaire",
+  "frais_de_maintenance",
+  "autre",
+];
+
+const createPlatformAccumulator = () => ({
+  invoices_count: 0,
+  total_ttc: 0,
+  total_ht: 0,
+  total_tva: 0,
+  commerce_ttc: 0,
+  revendeur_ttc: 0,
+  abonnement_ttc: 0,
+  achat_complet_ttc: 0,
+  materiel_ttc: 0,
+  module_supplementaire_ttc: 0,
+  frais_de_maintenance_ttc: 0,
+  autre_ttc: 0,
+});
+
+const addPlatformInvoiceToAccumulator = (target, invoice) => {
+  const amountTtc = Number(invoice.metadata?.amount_ttc ?? invoice.montant ?? 0);
+  const amountHt = Number(invoice.metadata?.amount_ht ?? (amountTtc / (1 + Number(invoice.tva_taux || 0) / 100)));
+  const amountTva = Number(invoice.metadata?.amount_tva ?? (amountTtc - amountHt));
+  const typeKey = PLATFORM_TYPE_KEYS.includes(invoice.type) ? invoice.type : "autre";
+  const segmentKey = invoice.recipient_type === "reseller" ? "revendeur_ttc" : "commerce_ttc";
+
+  target.invoices_count += 1;
+  target.total_ttc += amountTtc;
+  target.total_ht += amountHt;
+  target.total_tva += amountTva;
+  target[segmentKey] += amountTtc;
+  target[`${typeKey}_ttc`] += amountTtc;
+};
+
+const clonePlatformTotals = (source) => ({ ...source });
+
 export default function Comptabilite() {
-  const { filterByTenant } = useTenant();
-  const [viewMode, setViewMode] = useState('monthly');
+  const { filterByTenant, isPlatformAdmin, currentTenant, currentReseller } = useTenant();
+  const isPlatformAccountingView = isPlatformAdmin && !currentTenant && !currentReseller;
+
+  const [viewMode, setViewMode] = useState("monthly");
+  const [selectedDay, setSelectedDay] = useState(new Date());
   const [monthlyYear, setMonthlyYear] = useState(getYear(new Date()));
   const [monthlyMonth, setMonthlyMonth] = useState(getMonth(new Date()));
   const [annualYear, setAnnualYear] = useState(getYear(new Date()));
 
   const { data: profile, isLoading: isLoadingProfile } = useQuery({
-    queryKey: ['restaurantProfile'],
+    queryKey: ["restaurantProfile"],
     queryFn: async () => {
       const profiles = await appClient.entities.RestaurantProfile.filter(filterByTenant());
       return profiles[0] || null;
     },
+    enabled: !isPlatformAccountingView,
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: allOrders, isLoading: isLoadingOrders } = useQuery({
-    queryKey: ['allOrdersForReports'],
-    queryFn: () => appClient.entities.Order.filter(filterByTenant(), '-created_date', 10000),
+    queryKey: ["allOrdersForReports"],
+    queryFn: () => appClient.entities.Order.filter(filterByTenant(), "-created_date", 10000),
+    enabled: !isPlatformAccountingView,
     staleTime: 5 * 60 * 1000,
   });
 
-  const reportData = useMemo(() => {
-    if (!allOrders || !profile) return { items: [], totals: {}, tvaRates: [], periodLabel: "" };
+  const { data: platformInvoices = [], isLoading: isLoadingPlatformInvoices } = useQuery({
+    queryKey: ["platformAccountingInvoices"],
+    queryFn: async () => {
+      const invoices = await appClient.entities.TenantInvoice.list("-created_date");
+      return invoices.filter((invoice) => {
+        if (!isFinalInvoice(invoice) || invoice.statut !== "payee") return false;
+        return invoice.issuer_type === "platform" || (!invoice.issuer_type && (invoice.tenant_id || invoice.recipient_type === "tenant"));
+      });
+    },
+    enabled: isPlatformAccountingView,
+    staleTime: 5 * 60 * 1000,
+  });
 
-    const configuredTvaRates = (profile.tva_rates && profile.tva_rates.length > 0)
-      ? profile.tva_rates.map(r => Number(r.rate)).sort((a, b) => a - b)
-      : [5.5, 10, 20];
-
-    let interval;
-    let periodLabel;
-    let groupingFn, displayFormat;
-
-    if (viewMode === 'annual') {
-      const date = set(new Date(), { year: annualYear });
-      interval = { start: startOfYear(date), end: endOfYear(date) };
-      periodLabel = `Année ${annualYear}`;
-      groupingFn = (d) => format(d, 'yyyy-MM');
-      displayFormat = (key) => format(parseISO(`${key}-01`), 'MMMM yyyy', { locale: fr });
-    } else { // monthly
-      const date = set(new Date(), { year: monthlyYear, month: monthlyMonth });
-      interval = { start: startOfMonth(date), end: endOfMonth(date) };
-      periodLabel = format(date, 'MMMM yyyy', { locale: fr });
-      groupingFn = (d) => format(d, 'yyyy-MM-dd');
-      displayFormat = (key) => format(parseISO(key), 'eee dd/MM', { locale: fr });
+  const periodConfig = useMemo(() => {
+    if (viewMode === "daily") {
+      return {
+        interval: { start: startOfDay(selectedDay), end: endOfDay(selectedDay) },
+        periodLabel: format(selectedDay, "dd MMMM yyyy", { locale: fr }),
+        detailTitle: "Détail du jour",
+      };
     }
 
-    const ordersForPeriod = allOrders.filter(order => {
-        // Exclure les commandes annulées ET en_attente (cohérence avec Statistiques)
-        if (order.statut === 'annulee' || order.statut === 'en_attente' || !order.created_date) return false;
-        const orderDate = parseISO(order.created_date.replace(' ', 'T') + 'Z'); 
-        return isWithinInterval(orderDate, interval);
+    if (viewMode === "annual") {
+      const date = set(new Date(), { year: annualYear });
+      return {
+        interval: { start: startOfYear(date), end: endOfYear(date) },
+        periodLabel: `Année ${annualYear}`,
+        detailTitle: "Détail par mois",
+      };
+    }
+
+    const date = set(new Date(), { year: monthlyYear, month: monthlyMonth });
+    return {
+      interval: { start: startOfMonth(date), end: endOfMonth(date) },
+      periodLabel: format(date, "MMMM yyyy", { locale: fr }),
+      detailTitle: "Détail par jour",
+    };
+  }, [viewMode, selectedDay, monthlyYear, monthlyMonth, annualYear]);
+
+  const merchantReportData = useMemo(() => {
+    if (isPlatformAccountingView || !allOrders || !profile) return null;
+
+    const configuredTvaRates = (profile.tva_rates && profile.tva_rates.length > 0)
+      ? profile.tva_rates.map((r) => Number(r.rate)).sort((a, b) => a - b)
+      : [5.5, 10, 20];
+
+    const { interval, periodLabel, detailTitle } = periodConfig;
+
+    const groupingFn = viewMode === "annual"
+      ? (d) => format(d, "yyyy-MM")
+      : viewMode === "monthly"
+        ? (d) => format(d, "yyyy-MM-dd")
+        : () => "day";
+
+    const displayFormat = viewMode === "annual"
+      ? (key) => format(parseISO(`${key}-01`), "MMMM yyyy", { locale: fr })
+      : viewMode === "monthly"
+        ? (key) => format(parseISO(key), "eee dd/MM", { locale: fr })
+        : () => format(selectedDay, "dd MMMM yyyy", { locale: fr });
+
+    const ordersForPeriod = allOrders.filter((order) => {
+      if (order.statut === "annulee" || order.statut === "en_attente" || !order.created_date) return false;
+      const orderDate = parseISO(order.created_date.replace(" ", "T") + "Z");
+      return isWithinInterval(orderDate, interval);
     });
 
     const dataByGroup = {};
 
-    ordersForPeriod.forEach(order => {
-        const orderDate = parseISO(order.created_date.replace(' ', 'T') + 'Z');
-        const groupKey = groupingFn(orderDate);
+    ordersForPeriod.forEach((order) => {
+      const orderDate = parseISO(order.created_date.replace(" ", "T") + "Z");
+      const groupKey = groupingFn(orderDate);
 
-        if (!dataByGroup[groupKey]) {
-            dataByGroup[groupKey] = {
-                groupLabel: displayFormat(groupKey),
-                groupKey: groupKey, // AJOUT : garder la clé pour le tri
-                total_ttc: 0, total_ht: 0, tva_autres: 0, total_remises: 0,
-                payment_carte_bancaire: 0, payment_especes: 0, payment_ticket_restaurant: 0, payment_cheque: 0, payment_autres: 0,
-            };
-            configuredTvaRates.forEach(rate => {
-                dataByGroup[groupKey][`tva_${rate}`] = 0;
-            });
-        }
-        
-        const groupData = dataByGroup[groupKey];
-        const taxSummary = computeTaxSummaryFromArticles(order.articles || [], order.total_ttc || 0);
-        groupData.total_ttc += order.total_ttc || 0;
-        groupData.total_ht += taxSummary.totalHt;
-
-        (order.articles || []).forEach(article => {
-            const tvaRate = article.tva;
-            const totalLigne = article.total_ligne || 0;
-
-            if (article.product_id?.startsWith('discount-') || article.product_id?.startsWith('loyalty-') || article.product_id?.startsWith('promo-')) {
-                groupData.total_remises += totalLigne;
-            }
-
-            if (totalLigne > 0) {
-                const ht = totalLigne / (1 + (tvaRate / 100));
-                const tvaAmount = totalLigne - ht;
-                if (configuredTvaRates.includes(tvaRate)) {
-                    groupData[`tva_${tvaRate}`] += tvaAmount;
-                } else {
-                    groupData.tva_autres += tvaAmount;
-                }
-            }
+      if (!dataByGroup[groupKey]) {
+        dataByGroup[groupKey] = {
+          groupLabel: displayFormat(groupKey),
+          groupKey,
+          total_ttc: 0,
+          total_ht: 0,
+          tva_autres: 0,
+          total_remises: 0,
+          payment_carte_bancaire: 0,
+          payment_especes: 0,
+          payment_ticket_restaurant: 0,
+          payment_cheque: 0,
+          payment_autres: 0,
+        };
+        configuredTvaRates.forEach((rate) => {
+          dataByGroup[groupKey][`tva_${rate}`] = 0;
         });
+      }
 
-        if (order.payee && Array.isArray(order.mode_paiement)) {
-            order.mode_paiement.forEach(p => {
-                const montant = p.montant || 0;
-                if (p.methode === 'carte_bancaire') groupData.payment_carte_bancaire += montant;
-                else if (p.methode === 'especes') groupData.payment_especes += montant;
-                else if (p.methode === 'ticket_restaurant') groupData.payment_ticket_restaurant += montant;
-                else if (p.methode === 'cheque') groupData.payment_cheque += montant;
-                else groupData.payment_autres += montant;
-            });
+      const groupData = dataByGroup[groupKey];
+      const taxSummary = computeTaxSummaryFromArticles(order.articles || [], order.total_ttc || 0);
+      groupData.total_ttc += order.total_ttc || 0;
+      groupData.total_ht += taxSummary.totalHt;
+
+      (order.articles || []).forEach((article) => {
+        const tvaRate = article.tva;
+        const totalLigne = article.total_ligne || 0;
+
+        if (article.product_id?.startsWith("discount-") || article.product_id?.startsWith("loyalty-") || article.product_id?.startsWith("promo-")) {
+          groupData.total_remises += totalLigne;
         }
+
+        if (totalLigne > 0) {
+          const ht = totalLigne / (1 + (tvaRate / 100));
+          const tvaAmount = totalLigne - ht;
+          if (configuredTvaRates.includes(tvaRate)) {
+            groupData[`tva_${tvaRate}`] += tvaAmount;
+          } else {
+            groupData.tva_autres += tvaAmount;
+          }
+        }
+      });
+
+      if (order.payee && Array.isArray(order.mode_paiement)) {
+        order.mode_paiement.forEach((payment) => {
+          const montant = payment.montant || 0;
+          if (payment.methode === "carte_bancaire") groupData.payment_carte_bancaire += montant;
+          else if (payment.methode === "especes") groupData.payment_especes += montant;
+          else if (payment.methode === "ticket_restaurant") groupData.payment_ticket_restaurant += montant;
+          else if (payment.methode === "cheque") groupData.payment_cheque += montant;
+          else groupData.payment_autres += montant;
+        });
+      }
     });
-    
-    // CORRECTION : Tri chronologique par la clé de groupe (date)
+
     const items = Object.values(dataByGroup).sort((a, b) => a.groupKey.localeCompare(b.groupKey));
 
     const initialTotals = {
-        total_ttc: 0, total_ht: 0, tva_autres: 0, total_remises: 0,
-        payment_carte_bancaire: 0, payment_especes: 0, payment_ticket_restaurant: 0, payment_cheque: 0, payment_autres: 0,
+      total_ttc: 0,
+      total_ht: 0,
+      tva_autres: 0,
+      total_remises: 0,
+      payment_carte_bancaire: 0,
+      payment_especes: 0,
+      payment_ticket_restaurant: 0,
+      payment_cheque: 0,
+      payment_autres: 0,
     };
-    configuredTvaRates.forEach(rate => { initialTotals[`tva_${rate}`] = 0; });
+    configuredTvaRates.forEach((rate) => { initialTotals[`tva_${rate}`] = 0; });
 
     const totals = items.reduce((acc, item) => {
-        Object.keys(acc).forEach(key => acc[key] += item[key] || 0);
-        return acc;
+      Object.keys(acc).forEach((key) => { acc[key] += item[key] || 0; });
+      return acc;
     }, initialTotals);
-    
+
     const usedConfiguredRates = configuredTvaRates.filter((rate) =>
-      items.some((item) => Math.abs(item[`tva_${rate}`] || 0) > 0.0001) ||
-      Math.abs(totals[`tva_${rate}`] || 0) > 0.0001
+      items.some((item) => Math.abs(item[`tva_${rate}`] || 0) > 0.0001) || Math.abs(totals[`tva_${rate}`] || 0) > 0.0001
     );
 
-    return { items, totals, tvaRates: usedConfiguredRates, periodLabel };
-  }, [allOrders, profile, viewMode, monthlyYear, monthlyMonth, annualYear]);
+    return { items, totals, tvaRates: usedConfiguredRates, periodLabel, detailTitle };
+  }, [allOrders, profile, periodConfig, selectedDay, viewMode, isPlatformAccountingView]);
 
-  const { items, totals, tvaRates, periodLabel } = reportData;
-  const isLoading = isLoadingOrders || isLoadingProfile;
-  
+  const platformReportData = useMemo(() => {
+    if (!isPlatformAccountingView) return null;
+
+    const { interval, periodLabel, detailTitle } = periodConfig;
+    const groupingFn = viewMode === "annual"
+      ? (d) => format(d, "yyyy-MM")
+      : viewMode === "monthly"
+        ? (d) => format(d, "yyyy-MM-dd")
+        : () => "day";
+    const displayFormat = viewMode === "annual"
+      ? (key) => format(parseISO(`${key}-01`), "MMMM yyyy", { locale: fr })
+      : viewMode === "monthly"
+        ? (key) => format(parseISO(key), "eee dd/MM", { locale: fr })
+        : () => format(selectedDay, "dd MMMM yyyy", { locale: fr });
+
+    const invoicesForPeriod = platformInvoices.filter((invoice) => {
+      const sourceDate = invoice.date_paiement || invoice.created_date || invoice.date_facturation;
+      if (!sourceDate) return false;
+      const invoiceDate = toParisDateValue(sourceDate);
+      return invoiceDate ? isWithinInterval(invoiceDate, interval) : false;
+    });
+
+    const dataByGroup = {};
+    invoicesForPeriod.forEach((invoice) => {
+      const sourceDate = invoice.date_paiement || invoice.created_date || invoice.date_facturation;
+      const groupKey = groupingFn(toParisDateValue(sourceDate));
+
+      if (!dataByGroup[groupKey]) {
+        dataByGroup[groupKey] = {
+          groupLabel: displayFormat(groupKey),
+          groupKey,
+          ...createPlatformAccumulator(),
+        };
+      }
+
+      addPlatformInvoiceToAccumulator(dataByGroup[groupKey], invoice);
+    });
+
+    const items = Object.values(dataByGroup).sort((a, b) => a.groupKey.localeCompare(b.groupKey));
+    const totals = items.reduce((acc, item) => {
+      const next = clonePlatformTotals(acc);
+      Object.keys(createPlatformAccumulator()).forEach((key) => {
+        next[key] += item[key] || 0;
+      });
+      return next;
+    }, createPlatformAccumulator());
+
+    return { items, totals, periodLabel, detailTitle };
+  }, [isPlatformAccountingView, periodConfig, platformInvoices, selectedDay, viewMode]);
+
+  const reportData = isPlatformAccountingView ? platformReportData : merchantReportData;
+  const items = reportData?.items || [];
+  const totals = reportData?.totals || {};
+  const tvaRates = reportData?.tvaRates || [];
+  const periodLabel = reportData?.periodLabel || "";
+  const detailTitle = reportData?.detailTitle || "";
+
+  const isLoading = isPlatformAccountingView ? isLoadingPlatformInvoices : isLoadingOrders || isLoadingProfile;
+  const hasData = items.length > 0;
+
   const totalTVA = useMemo(() => {
-    if(!totals || !tvaRates) return 0;
+    if (isPlatformAccountingView) return Number(totals.total_tva || 0);
     let total = totals.tva_autres || 0;
-    tvaRates.forEach(rate => { total += totals[`tva_${rate}`] || 0; });
+    tvaRates.forEach((rate) => { total += totals[`tva_${rate}`] || 0; });
     return total;
-  }, [totals, tvaRates]);
+  }, [isPlatformAccountingView, totals, tvaRates]);
 
   const exportTo = (formatType) => {
-    if (!items || !tvaRates || !profile) return;
+    if (!hasData) return;
 
-    const headers = ["Période", "CA TTC", "CA HT", "Remises", ...tvaRates.map(r => `TVA ${r}%`), "TVA Autres", "Carte", "Espèces", "Ticket Resto.", "Chèque", "Paiem. Autres"];
-    
-    const bodyRows = items.map(item => [
+    if (isPlatformAccountingView) {
+      const headers = [
+        "Période",
+        "Factures",
+        "Total TTC",
+        "Total HT",
+        "Total TVA",
+        "Ventes commerces",
+        "Ventes revendeurs",
+        "Abonnements",
+        "Vente complete",
+        "Materiel",
+        "Module supplementaire",
+        "Maintenance",
+        "Autre",
+      ];
+
+      const bodyRows = items.map((item) => [
+        `"${item.groupLabel}"`,
+        item.invoices_count,
+        safeToFixed(item.total_ttc),
+        safeToFixed(item.total_ht),
+        safeToFixed(item.total_tva),
+        safeToFixed(item.commerce_ttc),
+        safeToFixed(item.revendeur_ttc),
+        safeToFixed(item.abonnement_ttc),
+        safeToFixed(item.achat_complet_ttc),
+        safeToFixed(item.materiel_ttc),
+        safeToFixed(item.module_supplementaire_ttc),
+        safeToFixed(item.frais_de_maintenance_ttc),
+        safeToFixed(item.autre_ttc),
+      ]);
+
+      const footerRow = [
+        "Total",
+        totals.invoices_count || 0,
+        safeToFixed(totals.total_ttc),
+        safeToFixed(totals.total_ht),
+        safeToFixed(totals.total_tva),
+        safeToFixed(totals.commerce_ttc),
+        safeToFixed(totals.revendeur_ttc),
+        safeToFixed(totals.abonnement_ttc),
+        safeToFixed(totals.achat_complet_ttc),
+        safeToFixed(totals.materiel_ttc),
+        safeToFixed(totals.module_supplementaire_ttc),
+        safeToFixed(totals.frais_de_maintenance_ttc),
+        safeToFixed(totals.autre_ttc),
+      ];
+
+      if (formatType === "csv") {
+        const csvContent = [
+          `Rapport Comptable Plateforme`,
+          `Période;"${periodLabel}"`,
+          "",
+          headers.join(";"),
+          ...bodyRows.map((row) => row.map((cell) => String(cell).replace(".", ",")).join(";")),
+          footerRow.map((cell) => String(cell).replace(".", ",")).join(";"),
+        ].join("\n");
+
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", `rapport_comptable_plateforme_${periodLabel.replace(/\s/g, "_")}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      const html = `
+        <html><head><meta charset="UTF-8"><title>Rapport Comptable Plateforme - ${periodLabel}</title>
+        <style>
+          body { font-family: sans-serif; font-size: 10px; }
+          h1, h2 { text-align: center; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ccc; padding: 4px; text-align: right; }
+          th:first-child, td:first-child { text-align: left; }
+          thead { background-color: #f2f2f2; }
+          tfoot { font-weight: bold; background: #f7f7f7; }
+        </style></head>
+        <body onload="window.print()">
+          <h1>Rapport Comptable Plateforme</h1>
+          <h2>Période: ${periodLabel}</h2>
+          <table>
+            <thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+            <tbody>${bodyRows.map((row) => `<tr>${row.map((cell, index) => `<td>${index === 0 ? String(cell).replace(/"/g, "") : cell}${index > 1 ? "€" : ""}</td>`).join("")}</tr>`).join("")}</tbody>
+            <tfoot><tr>${footerRow.map((cell, index) => `<td>${index === 0 ? cell : cell}${index > 1 ? "€" : ""}</td>`).join("")}</tr></tfoot>
+          </table>
+        </body></html>
+      `;
+      const win = window.open("", "_blank");
+      win.document.write(html);
+      win.document.close();
+      return;
+    }
+
+    const headers = ["Période", "CA TTC", "CA HT", "Remises", ...tvaRates.map((r) => `TVA ${r}%`), "TVA Autres", "Carte", "Espèces", "Ticket Resto.", "Chèque", "Paiem. Autres"];
+    const bodyRows = items.map((item) => [
       `"${item.groupLabel}"`,
       safeToFixed(item.total_ttc),
       safeToFixed(item.total_ht),
       safeToFixed(item.total_remises),
-      ...tvaRates.map(r => safeToFixed(item[`tva_${r}`])),
+      ...tvaRates.map((r) => safeToFixed(item[`tva_${r}`])),
       safeToFixed(item.tva_autres),
       safeToFixed(item.payment_carte_bancaire),
       safeToFixed(item.payment_especes),
@@ -198,13 +446,12 @@ export default function Comptabilite() {
       safeToFixed(item.payment_cheque),
       safeToFixed(item.payment_autres),
     ]);
-
     const footerRow = [
       "Total",
       safeToFixed(totals.total_ttc),
       safeToFixed(totals.total_ht),
       safeToFixed(totals.total_remises),
-      ...tvaRates.map(r => safeToFixed(totals[`tva_${r}`])),
+      ...tvaRates.map((r) => safeToFixed(totals[`tva_${r}`])),
       safeToFixed(totals.tva_autres),
       safeToFixed(totals.payment_carte_bancaire),
       safeToFixed(totals.payment_especes),
@@ -213,59 +460,51 @@ export default function Comptabilite() {
       safeToFixed(totals.payment_autres),
     ];
 
-    if (formatType === 'csv') {
-      const establishmentName = `Établissement;${profile.nom_etablissement || 'N/A'}\n`;
+    if (formatType === "csv") {
+      const establishmentName = `Établissement;${profile?.nom_etablissement || "N/A"}\n`;
       const periodInfo = `Période;${periodLabel}\n\n`;
-      
       const csvContent = [
-        headers.join(';'),
-        ...bodyRows.map(row => row.map(cell => String(cell).replace('.', ',')).join(';')),
-        footerRow.map(cell => typeof cell === 'string' ? cell : String(cell).replace('.', ',')).join(';')
-      ].join('\n');
+        headers.join(";"),
+        ...bodyRows.map((row) => row.map((cell) => String(cell).replace(".", ",")).join(";")),
+        footerRow.map((cell) => String(cell).replace(".", ",")).join(";"),
+      ].join("\n");
 
-      const fullCsv = establishmentName + periodInfo + csvContent;
-
-      const blob = new Blob(["\uFEFF" + fullCsv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(["\uFEFF" + establishmentName + periodInfo + csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `rapport_comptable_${periodLabel.replace(/\s/g, '_')}.csv`);
+      link.setAttribute("download", `rapport_comptable_${periodLabel.replace(/\s/g, "_")}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } else if (formatType === 'pdf') {
-      const html = `
-        <html><head><meta charset="UTF-8"><title>Rapport Comptable - ${periodLabel}</title>
-        <style>
-          body { font-family: sans-serif; font-size: 10px; }
-          h1, h2, h3 { text-align: center; }
-          h1 { font-size: 16px; }
-          h2 { font-size: 14px; font-weight: normal; }
-          h3 { font-size: 12px; font-weight: bold; margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
-          th { background-color: #f2f2f2; }
-          td.text-right, th.text-right { text-align: right; }
-          .text-red { color: #dc2626; }
-          tfoot { font-weight: bold; }
-        </style></head>
-        <body onload="window.print()">
-          <h1>Rapport Comptable</h1>
-          <h3>${profile.nom_etablissement || ''}</h3>
-          <h2>Période: ${periodLabel}</h2>
-          <table>
-            <thead><tr>${headers.map(h => `<th ${['CA', 'TVA', 'Remises', 'Carte', 'Espèces'].some(s => h.includes(s)) ? 'class="text-right"' : ''}>${h}</th>`).join('')}</tr></thead>
-            <tbody>${bodyRows.map(row => `<tr>${row.map((cell, i) => `<td class="${i === 3 ? 'text-red' : ''} ${i > 0 ? 'text-right' : ''}">${String(cell).replace(/"/g, '')}€</td>`).join('').replace(/Période€/g, 'Période')}</tr>`).join('')}</tbody>
-            <tfoot><tr>${footerRow.map((cell, i) => `<td class="${i === 3 ? 'text-red' : ''} ${i > 0 ? 'text-right' : ''}>${(typeof cell === 'number' ? safeToFixed(cell) : String(cell))}€</td>`).join('').replace(/Total€/g, 'Total')}</tr></tfoot>
-          </table>
-        </body></html>
-      `;
-      const win = window.open('', '_blank');
-      win.document.write(html);
-      win.document.close();
+      return;
     }
-  };
 
-  const hasData = items && items.length > 0;
+    const html = `
+      <html><head><meta charset="UTF-8"><title>Rapport Comptable - ${periodLabel}</title>
+      <style>
+        body { font-family: sans-serif; font-size: 10px; }
+        h1, h2, h3 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 4px; text-align: right; }
+        th:first-child, td:first-child { text-align: left; }
+        thead { background-color: #f2f2f2; }
+        tfoot { font-weight: bold; background: #f7f7f7; }
+      </style></head>
+      <body onload="window.print()">
+        <h1>Rapport Comptable</h1>
+        <h3>${profile?.nom_etablissement || ""}</h3>
+        <h2>Période: ${periodLabel}</h2>
+        <table>
+          <thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+          <tbody>${bodyRows.map((row) => `<tr>${row.map((cell, index) => `<td>${index === 0 ? String(cell).replace(/"/g, "") : cell}${index > 0 ? "€" : ""}</td>`).join("")}</tr>`).join("")}</tbody>
+          <tfoot><tr>${footerRow.map((cell, index) => `<td>${cell}${index > 0 ? "€" : ""}</td>`).join("")}</tr></tfoot>
+        </table>
+      </body></html>
+    `;
+    const win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+  };
 
   return (
     <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
@@ -273,43 +512,63 @@ export default function Comptabilite() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-              <BookCopy className="w-8 h-8 text-blue-600" /> Rapport Comptable
+              <BookCopy className="w-8 h-8 text-blue-600" /> {isPlatformAccountingView ? "Comptabilité Plateforme" : "Rapport Comptable"}
             </h1>
-            <p className="text-gray-500 mt-1">Analyse de votre chiffre d'affaires, paiements et TVA.</p>
+            <p className="text-gray-500 mt-1">
+              {isPlatformAccountingView
+                ? "Exports détaillés de vos ventes plateforme vers commerces et revendeurs."
+                : "Analyse de votre chiffre d'affaires, paiements et TVA."}
+            </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="bg-white" onClick={() => exportTo('csv')} disabled={!hasData || isLoading}>
+            <Button variant="outline" className="bg-white" onClick={() => exportTo("csv")} disabled={!hasData || isLoading}>
               <FileDown className="w-4 h-4 mr-2" /> CSV
             </Button>
-            <Button variant="outline" className="bg-white" onClick={() => exportTo('pdf')} disabled={!hasData || isLoading}>
+            <Button variant="outline" className="bg-white" onClick={() => exportTo("pdf")} disabled={!hasData || isLoading}>
               <FileType className="w-4 h-4 mr-2" /> PDF
             </Button>
           </div>
         </div>
 
         <Tabs value={viewMode} onValueChange={setViewMode}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="daily">Rapport Journalier</TabsTrigger>
             <TabsTrigger value="monthly">Rapport Mensuel</TabsTrigger>
             <TabsTrigger value="annual">Rapport Annuel</TabsTrigger>
           </TabsList>
+          <TabsContent value="daily">
+            <div className="flex justify-center items-center gap-2 my-4">
+              <Select value={format(selectedDay, "yyyy-MM-dd")} onValueChange={(val) => setSelectedDay(parseISO(`${val}T00:00:00`))}>
+                <SelectTrigger className="w-[220px] bg-white"><SelectValue placeholder="Jour" /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 31 }, (_, i) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    const value = format(date, "yyyy-MM-dd");
+                    return <SelectItem key={value} value={value}>{format(date, "dd MMMM yyyy", { locale: fr })}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          </TabsContent>
           <TabsContent value="monthly">
             <div className="flex justify-center items-center gap-2 my-4">
-                <Select value={monthlyMonth} onValueChange={(val) => setMonthlyMonth(Number(val))}>
-                  <SelectTrigger className="w-[150px] bg-white"><SelectValue placeholder="Mois" /></SelectTrigger>
-                  <SelectContent>{monthOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={monthlyYear} onValueChange={(val) => setMonthlyYear(Number(val))}>
-                  <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Année" /></SelectTrigger>
-                  <SelectContent>{generateYearOptions().map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
-                </Select>
+              <Select value={String(monthlyMonth)} onValueChange={(val) => setMonthlyMonth(Number(val))}>
+                <SelectTrigger className="w-[150px] bg-white"><SelectValue placeholder="Mois" /></SelectTrigger>
+                <SelectContent>{monthOptions.map((opt) => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}</SelectContent>
+              </Select>
+              <Select value={String(monthlyYear)} onValueChange={(val) => setMonthlyYear(Number(val))}>
+                <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Année" /></SelectTrigger>
+                <SelectContent>{generateYearOptions().map((opt) => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
           </TabsContent>
           <TabsContent value="annual">
-             <div className="flex justify-center items-center gap-2 my-4">
-                <Select value={annualYear} onValueChange={(val) => setAnnualYear(Number(val))}>
-                  <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Année" /></SelectTrigger>
-                  <SelectContent>{generateYearOptions().map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
-                </Select>
+            <div className="flex justify-center items-center gap-2 my-4">
+              <Select value={String(annualYear)} onValueChange={(val) => setAnnualYear(Number(val))}>
+                <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Année" /></SelectTrigger>
+                <SelectContent>{generateYearOptions().map((opt) => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
           </TabsContent>
         </Tabs>
@@ -318,71 +577,112 @@ export default function Comptabilite() {
           <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires TTC</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ttc)}€</p></CardContent></Card>
           <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Chiffre d'Affaires HT</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totals?.total_ht)}€</p></CardContent></Card>
           <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500">Total TVA</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{safeToFixed(totalTVA)}€</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-1">Total Remises<Percent className="w-4 h-4" /></CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-red-600">{safeToFixed(totals?.total_remises)}€</p></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-1">{isPlatformAccountingView ? "Nombre de factures" : "Total Remises"} {!isPlatformAccountingView && <Percent className="w-4 h-4" />}</CardTitle></CardHeader><CardContent><p className={`text-2xl font-bold ${isPlatformAccountingView ? "text-blue-600" : "text-red-600"}`}>{isPlatformAccountingView ? (totals?.invoices_count || 0) : `${safeToFixed(totals?.total_remises)}€`}</p></CardContent></Card>
         </div>
 
         <Card>
-          <CardHeader><CardTitle>Détail par {viewMode === 'monthly' ? 'jour' : 'mois'}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{detailTitle}</CardTitle></CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[60vh] w-full whitespace-nowrap">
               <Table>
                 <TableHeader className="sticky top-0 bg-gray-50 z-10">
                   <TableRow>
                     <TableHead className="min-w-[150px]">Période</TableHead>
-                    <TableHead className="text-right min-w-[120px]">CA TTC</TableHead>
-                    <TableHead className="text-right min-w-[120px]">CA HT</TableHead>
-                    <TableHead className="text-right min-w-[120px] text-red-600">Remises</TableHead>
-                    {(tvaRates || []).map(rate => <TableHead key={rate} className="text-right min-w-[100px]">TVA {rate}%</TableHead>)}
-                    <TableHead className="text-right min-w-[100px]">TVA Autres</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Carte</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Espèces</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Ticket Resto.</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Chèque</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Paiem. Autres</TableHead>
+                    {isPlatformAccountingView ? (
+                      <>
+                        <TableHead className="text-right min-w-[90px]">Factures</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Total TTC</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Total HT</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Total TVA</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Commerces</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Revendeurs</TableHead>
+                        {PLATFORM_TYPE_KEYS.map((type) => (
+                          <TableHead key={type} className="text-right min-w-[130px]">{getInvoiceTypeLabel(type)}</TableHead>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <TableHead className="text-right min-w-[120px]">CA TTC</TableHead>
+                        <TableHead className="text-right min-w-[120px]">CA HT</TableHead>
+                        <TableHead className="text-right min-w-[120px] text-red-600">Remises</TableHead>
+                        {tvaRates.map((rate) => <TableHead key={rate} className="text-right min-w-[100px]">TVA {rate}%</TableHead>)}
+                        <TableHead className="text-right min-w-[100px]">TVA Autres</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Carte</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Espèces</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Ticket Resto.</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Chèque</TableHead>
+                        <TableHead className="text-right min-w-[120px]">Paiem. Autres</TableHead>
+                      </>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={11 + (tvaRates?.length || 0)} className="text-center py-10">
-                        <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" />
-                        <p className="text-gray-500 mt-2">Chargement des données...</p>
-                    </TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 12 + PLATFORM_TYPE_KEYS.length : 11 + tvaRates.length} className="text-center py-10"><Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" /><p className="text-gray-500 mt-2">Chargement des données...</p></TableCell></TableRow>
                   ) : hasData ? (
                     items.map((item) => (
-                      <TableRow key={item.groupLabel}>
+                      <TableRow key={item.groupKey || item.groupLabel}>
                         <TableCell className="font-medium">{item.groupLabel}</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.total_ttc)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.total_ht)}€</TableCell>
-                        <TableCell className="text-right text-red-600">{safeToFixed(item.total_remises)}€</TableCell>
-                        {(tvaRates || []).map(rate => <TableCell key={rate} className="text-right">{safeToFixed(item[`tva_${rate}`])}€</TableCell>)}
-                        <TableCell className="text-right">{safeToFixed(item.tva_autres)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.payment_carte_bancaire)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.payment_especes)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.payment_ticket_restaurant)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.payment_cheque)}€</TableCell>
-                        <TableCell className="text-right">{safeToFixed(item.payment_autres)}€</TableCell>
+                        {isPlatformAccountingView ? (
+                          <>
+                            <TableCell className="text-right">{item.invoices_count}</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.total_ttc)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.total_ht)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.total_tva)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.commerce_ttc)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.revendeur_ttc)}€</TableCell>
+                            {PLATFORM_TYPE_KEYS.map((type) => <TableCell key={type} className="text-right">{safeToFixed(item[`${type}_ttc`])}€</TableCell>)}
+                          </>
+                        ) : (
+                          <>
+                            <TableCell className="text-right">{safeToFixed(item.total_ttc)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.total_ht)}€</TableCell>
+                            <TableCell className="text-right text-red-600">{safeToFixed(item.total_remises)}€</TableCell>
+                            {tvaRates.map((rate) => <TableCell key={rate} className="text-right">{safeToFixed(item[`tva_${rate}`])}€</TableCell>)}
+                            <TableCell className="text-right">{safeToFixed(item.tva_autres)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.payment_carte_bancaire)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.payment_especes)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.payment_ticket_restaurant)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.payment_cheque)}€</TableCell>
+                            <TableCell className="text-right">{safeToFixed(item.payment_autres)}€</TableCell>
+                          </>
+                        )}
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow><TableCell colSpan={11 + (tvaRates?.length || 0)} className="text-center py-10 text-gray-500">
-                        Aucune donnée de commande pour la période sélectionnée.
+                    <TableRow><TableCell colSpan={isPlatformAccountingView ? 12 + PLATFORM_TYPE_KEYS.length : 11 + tvaRates.length} className="text-center py-10 text-gray-500">
+                      {isPlatformAccountingView ? "Aucune vente plateforme pour la période sélectionnée." : "Aucune donnée de commande pour la période sélectionnée."}
                     </TableCell></TableRow>
                   )}
                 </TableBody>
-                {hasData && totals && (
+                {hasData && (
                   <TableFooter className="sticky bottom-0 bg-gray-100 font-bold">
                     <TableRow>
                       <TableCell>Total</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.total_ttc)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.total_ht)}€</TableCell>
-                      <TableCell className="text-right text-red-600">{safeToFixed(totals.total_remises)}€</TableCell>
-                      {(tvaRates || []).map(rate => <TableCell key={rate} className="text-right">{safeToFixed(totals[`tva_${rate}`])}€</TableCell>)}
-                      <TableCell className="text-right">{safeToFixed(totals.tva_autres)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.payment_carte_bancaire)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.payment_especes)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.payment_ticket_restaurant)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.payment_cheque)}€</TableCell>
-                      <TableCell className="text-right">{safeToFixed(totals.payment_autres)}€</TableCell>
+                      {isPlatformAccountingView ? (
+                        <>
+                          <TableCell className="text-right">{totals.invoices_count || 0}</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.total_ttc)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.total_ht)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.total_tva)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.commerce_ttc)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.revendeur_ttc)}€</TableCell>
+                          {PLATFORM_TYPE_KEYS.map((type) => <TableCell key={type} className="text-right">{safeToFixed(totals[`${type}_ttc`])}€</TableCell>)}
+                        </>
+                      ) : (
+                        <>
+                          <TableCell className="text-right">{safeToFixed(totals.total_ttc)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.total_ht)}€</TableCell>
+                          <TableCell className="text-right text-red-600">{safeToFixed(totals.total_remises)}€</TableCell>
+                          {tvaRates.map((rate) => <TableCell key={rate} className="text-right">{safeToFixed(totals[`tva_${rate}`])}€</TableCell>)}
+                          <TableCell className="text-right">{safeToFixed(totals.tva_autres)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.payment_carte_bancaire)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.payment_especes)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.payment_ticket_restaurant)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.payment_cheque)}€</TableCell>
+                          <TableCell className="text-right">{safeToFixed(totals.payment_autres)}€</TableCell>
+                        </>
+                      )}
                     </TableRow>
                   </TableFooter>
                 )}
@@ -395,4 +695,3 @@ export default function Comptabilite() {
     </div>
   );
 }
-
