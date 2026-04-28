@@ -44,6 +44,7 @@ const createEmptyResellerForm = () => ({
   status: 'active',
   contact_email: '',
   contact_phone: '',
+  company_name: '',
   address: '',
   siret: '',
   vat_number: '',
@@ -301,6 +302,7 @@ A bientot.`;
       status: selectedReseller.status || 'active',
       contact_email: selectedReseller.contact_email || '',
       contact_phone: selectedReseller.contact_phone || '',
+      company_name: selectedReseller.company_name || '',
       address: selectedReseller.address || '',
       siret: selectedReseller.siret || '',
       vat_number: selectedReseller.vat_number || '',
@@ -359,6 +361,7 @@ A bientot.`;
         status: newResellerForm.status,
         contact_email: newResellerForm.contact_email.trim() || null,
         contact_phone: newResellerForm.contact_phone.trim() || null,
+        company_name: newResellerForm.company_name.trim() || null,
         address: newResellerForm.address.trim() || null,
         siret: newResellerForm.siret.trim() || null,
         vat_number: newResellerForm.vat_number.trim() || null,
@@ -399,6 +402,7 @@ A bientot.`;
         status: resellerForm.status,
         contact_email: resellerForm.contact_email.trim() || null,
         contact_phone: resellerForm.contact_phone.trim() || null,
+        company_name: resellerForm.company_name.trim() || null,
         address: resellerForm.address.trim() || null,
         siret: resellerForm.siret.trim() || null,
         vat_number: resellerForm.vat_number.trim() || null,
@@ -1104,7 +1108,15 @@ A bientot.`;
                       <Input value={resellerForm.contact_phone} onChange={(event) => setResellerForm((prev) => ({ ...prev, contact_phone: event.target.value }))} />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label>Adresse</Label>
+                      <Label>Nom de la societe</Label>
+                      <Input
+                        value={resellerForm.company_name}
+                        onChange={(event) => setResellerForm((prev) => ({ ...prev, company_name: event.target.value }))}
+                        placeholder="Facultatif"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Adresse de la societe</Label>
                       <Textarea
                         value={resellerForm.address}
                         onChange={(event) => setResellerForm((prev) => ({ ...prev, address: event.target.value }))}
