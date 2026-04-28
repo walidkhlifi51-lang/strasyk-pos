@@ -75,6 +75,8 @@ import {
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 const RESELLER_STATS_COLORS = ['#2563eb', '#f97316', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4'];
+const getInvoiceBrandingColor = (invoice) => invoice?.issuer_snapshot?.primary_color || '#f97316';
+const getInvoiceIssuerName = (invoice) => invoice?.issuer_snapshot?.display_name || invoice?.issuer_snapshot?.legal_name || '';
 
 const createInvoiceTotals = () => ({
   paid_ttc: 0,
@@ -1058,12 +1060,22 @@ export default function ResellerPortal() {
                                     <p className="text-xs text-gray-500 mt-1">
                                       {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
                                     </p>
-                                    <p className="text-xs text-gray-600">
-                                      HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
-                                    </p>
-                                    {hasMonthlyPayments ? (
-                                      <p className="text-xs text-blue-700">
-                                        Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                              <p className="text-xs text-gray-600">
+                                HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                              </p>
+                              {getInvoiceIssuerName(invoice) ? (
+                                <div
+                                  className="rounded-lg border bg-white/70 p-3 text-xs text-gray-600"
+                                  style={{ borderLeft: `4px solid ${getInvoiceBrandingColor(invoice)}` }}
+                                >
+                                  <p className="font-semibold text-gray-900">{getInvoiceIssuerName(invoice)}</p>
+                                  {invoice.issuer_snapshot?.email ? <p>{invoice.issuer_snapshot.email}</p> : null}
+                                  {invoice.issuer_snapshot?.phone ? <p>{invoice.issuer_snapshot.phone}</p> : null}
+                                </div>
+                              ) : null}
+                              {hasMonthlyPayments ? (
+                                <p className="text-xs text-blue-700">
+                                  Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
                                       </p>
                                     ) : null}
                                     {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
@@ -1336,10 +1348,10 @@ export default function ResellerPortal() {
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-green-900">Factures payees</p>
-                      <Badge className="bg-green-100 text-green-800">{receivedResellerPaidInvoices.length}</Badge>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-green-900">Factures payees</p>
+                        <Badge className="bg-green-100 text-green-800">{receivedResellerPaidInvoices.length}</Badge>
                     </div>
                     {receivedResellerPaidInvoices.length === 0 ? (
                       <p className="text-sm text-gray-500">Aucune facture payee pour le moment.</p>
@@ -1362,6 +1374,16 @@ export default function ResellerPortal() {
                               <p className="text-xs text-gray-600">
                                 HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
                               </p>
+                              {getInvoiceIssuerName(invoice) ? (
+                                <div
+                                  className="rounded-lg border bg-white/80 p-3 text-xs text-gray-600"
+                                  style={{ borderLeft: `4px solid ${getInvoiceBrandingColor(invoice)}` }}
+                                >
+                                  <p className="font-semibold text-gray-900">{getInvoiceIssuerName(invoice)}</p>
+                                  {invoice.issuer_snapshot?.email ? <p>{invoice.issuer_snapshot.email}</p> : null}
+                                  {invoice.issuer_snapshot?.phone ? <p>{invoice.issuer_snapshot.phone}</p> : null}
+                                </div>
+                              ) : null}
                               {invoice.date_paiement ? (
                                 <p className="text-xs text-green-700">
                                   Paiement valide le {new Date(invoice.date_paiement).toLocaleDateString('fr-FR')}
@@ -1390,10 +1412,10 @@ export default function ResellerPortal() {
                 receivedResellerInvoices.map((invoice) => {
                   const amounts = getInvoiceAmounts(invoice);
                   return (
-                  <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900">
+                                <div key={invoice.id} className="border rounded-xl p-4 flex items-start justify-between gap-4">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-gray-900">
                           {Number(invoice.montant || 0).toFixed(2)} EUR - {invoice.type}
                         </p>
                         {invoice.is_devis ? <Badge variant="secondary">DEVIS</Badge> : null}
@@ -1402,12 +1424,33 @@ export default function ResellerPortal() {
                       <p className="text-xs text-gray-500 mt-1">
                         {invoice.numero_facture || invoice.id?.substring(0, 8) || 'N/A'} - {invoice.date_facturation ? new Date(invoice.date_facturation).toLocaleDateString('fr-FR') : 'Date inconnue'}
                       </p>
-                      <p className="text-xs text-gray-600">
-                        HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
-                      </p>
-                      {hasMonthlyPayments ? (
-                        <p className="text-xs text-blue-700">
-                          Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
+                                    <p className="text-xs text-gray-600">
+                                      HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
+                                    </p>
+                                    {getInvoiceIssuerName(invoice) ? (
+                                      <div
+                                        className="rounded-lg border bg-gray-50 p-3 text-xs text-gray-600"
+                                        style={{ borderLeft: `4px solid ${getInvoiceBrandingColor(invoice)}` }}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          {invoice.issuer_snapshot?.logo_url ? (
+                                            <img
+                                              src={invoice.issuer_snapshot.logo_url}
+                                              alt={getInvoiceIssuerName(invoice)}
+                                              className="w-10 h-10 rounded object-contain border bg-white"
+                                            />
+                                          ) : null}
+                                          <div>
+                                            <p className="font-semibold text-gray-900">{getInvoiceIssuerName(invoice)}</p>
+                                            {invoice.issuer_snapshot?.email ? <p>{invoice.issuer_snapshot.email}</p> : null}
+                                            {invoice.issuer_snapshot?.phone ? <p>{invoice.issuer_snapshot.phone}</p> : null}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                    {hasMonthlyPayments ? (
+                                      <p className="text-xs text-blue-700">
+                                        Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois
                         </p>
                       ) : null}
                       {invoice.description ? <p className="text-sm text-gray-600 mt-2">{invoice.description}</p> : null}
@@ -1483,6 +1526,27 @@ export default function ResellerPortal() {
                         <p className="text-xs text-gray-600">
                           HT: {amounts.amountHT.toFixed(2)} EUR | TVA: {amounts.amountTVA.toFixed(2)} EUR | TTC: {amounts.amountTTC.toFixed(2)} EUR
                         </p>
+                        {getInvoiceIssuerName(invoice) ? (
+                          <div
+                            className="rounded-lg border bg-gray-50 p-3 text-xs text-gray-600"
+                            style={{ borderLeft: `4px solid ${getInvoiceBrandingColor(invoice)}` }}
+                          >
+                            <div className="flex items-center gap-3">
+                              {invoice.issuer_snapshot?.logo_url ? (
+                                <img
+                                  src={invoice.issuer_snapshot.logo_url}
+                                  alt={getInvoiceIssuerName(invoice)}
+                                  className="w-10 h-10 rounded object-contain border bg-white"
+                                />
+                              ) : null}
+                              <div>
+                                <p className="font-semibold text-gray-900">{getInvoiceIssuerName(invoice)}</p>
+                                {invoice.issuer_snapshot?.email ? <p>{invoice.issuer_snapshot.email}</p> : null}
+                                {invoice.issuer_snapshot?.phone ? <p>{invoice.issuer_snapshot.phone}</p> : null}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                         {hasMonthlyPayments ? (
                           <p className="text-xs text-blue-700">
                             Abonnement: {amounts.monthlyAmountTTC.toFixed(2)} EUR / mois sur {Object.keys(invoice.monthly_payments).length} mois

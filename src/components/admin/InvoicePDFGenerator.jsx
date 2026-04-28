@@ -24,7 +24,34 @@ const writeBlock = (doc, lines, x, y) => {
   return y + (lines.length * 5);
 };
 
-export const generateInvoicePDF = (invoice, tenant) => {
+const parseHexColor = (value, fallback = [249, 115, 22]) => {
+  const safe = `${value || ''}`.trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(safe)) return fallback;
+  return [
+    parseInt(safe.slice(0, 2), 16),
+    parseInt(safe.slice(2, 4), 16),
+    parseInt(safe.slice(4, 6), 16),
+  ];
+};
+
+const loadImageAsDataUrl = async (url) => {
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+export const generateInvoicePDF = async (invoice, tenant) => {
   const doc = new jsPDF();
   const issuer = {
     ...PLATFORM_ISSUER_SNAPSHOT,
@@ -38,14 +65,28 @@ export const generateInvoicePDF = (invoice, tenant) => {
   const issuerName = issuer.display_name || issuer.legal_name || 'Strasyk';
   const issuerTagline = issuer.tagline || '';
   const issuerEmail = issuer.email || '';
+  const issuerPhone = issuer.phone || '';
   const issuerWebsite = issuer.website || '';
   const recipientName = recipient.recipient_name || tenant?.nom_commercial || 'Client';
   const recipientEmail = recipient.contact_email || tenant?.owner_email || '';
   const recipientAddress = recipient.address || '';
   const recipientPhone = recipient.phone || '';
+  const [primaryR, primaryG, primaryB] = parseHexColor(issuer.primary_color, [249, 115, 22]);
+  const [secondaryR, secondaryG, secondaryB] = parseHexColor(issuer.secondary_color, [29, 78, 216]);
+  const logoDataUrl = await loadImageAsDataUrl(issuer.logo_url);
 
-  doc.setFillColor(249, 115, 22);
+  doc.setFillColor(primaryR, primaryG, primaryB);
   doc.rect(0, 0, 210, 40, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(145, 8, 50, 24, 4, 4, 'F');
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', 149, 10, 18, 18);
+    } catch {
+      // Ignore logo rendering errors and keep the PDF generation working.
+    }
+  }
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
@@ -53,6 +94,14 @@ export const generateInvoicePDF = (invoice, tenant) => {
 
   doc.setFontSize(10);
   doc.text(`No ${invoice?.numero_facture || invoice?.id?.substring(0, 8)?.toUpperCase() || 'N/A'}`, 15, 30);
+  doc.setTextColor(primaryR, primaryG, primaryB);
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(11);
+  doc.text(issuerName, logoDataUrl ? 171 : 149, 18);
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(8);
+  if (issuerEmail) doc.text(issuerEmail, logoDataUrl ? 171 : 149, 24);
+  else if (issuerWebsite) doc.text(issuerWebsite, logoDataUrl ? 171 : 149, 24);
 
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(10);
@@ -61,7 +110,8 @@ export const generateInvoicePDF = (invoice, tenant) => {
   doc.setFont(undefined, 'normal');
   if (issuerTagline) doc.text(issuerTagline, 15, 55);
   if (issuerEmail) doc.text(issuerEmail, 15, 60);
-  if (issuerWebsite) doc.text(issuerWebsite, 15, 65);
+  if (issuerPhone) doc.text(`Tel: ${issuerPhone}`, 15, 65);
+  if (issuerWebsite) doc.text(issuerWebsite, 15, issuerPhone ? 70 : 65);
 
   doc.setFont(undefined, 'bold');
   doc.text('FACTURE A :', 120, 50);
@@ -92,8 +142,9 @@ export const generateInvoicePDF = (invoice, tenant) => {
   }
 
   let yPos = 110;
-  doc.setFillColor(240, 240, 240);
+  doc.setFillColor(secondaryR, secondaryG, secondaryB);
   doc.rect(15, yPos, 180, 8, 'F');
+  doc.setTextColor(255, 255, 255);
   doc.setFont(undefined, 'bold');
   doc.text('Description', 20, yPos + 5);
   doc.text('Montant HT', 140, yPos + 5);
@@ -102,6 +153,7 @@ export const generateInvoicePDF = (invoice, tenant) => {
 
   yPos += 12;
   doc.setFont(undefined, 'normal');
+  doc.setTextColor(0, 0, 0);
 
   let totalHT = 0;
   let totalTVA = 0;
