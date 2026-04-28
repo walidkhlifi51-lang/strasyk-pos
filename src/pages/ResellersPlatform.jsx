@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appClient } from '@/api/appClient';
 import { useTenant } from '@/components/contexts/TenantContext';
@@ -63,7 +63,9 @@ const createEmptyResellerUserForm = () => ({
   status: 'active',
 });
 
-const currency = (value) => `${Number(value || 0).toFixed(2)}€`;
+const isEmbeddedImageUrl = (value) => `${value || ''}`.startsWith('data:image/');
+
+const currency = (value) => `${Number(value || 0).toFixed(2)}â‚¬`;
 
 const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
   const activeLinks = resellerTenants.filter((item) => item.status === 'active').length;
@@ -212,7 +214,7 @@ A bientot.`;
 
     await navigator.clipboard.writeText(message);
     toast({
-      title: '✅ Invitation copiee',
+      title: 'âœ… Invitation copiee',
       description: 'Le lien d activation revendeur a ete copie.',
     });
   }, [getResellerInviteLink, selectedReseller?.name, toast]);
@@ -251,7 +253,7 @@ A bientot.`;
   const copyTenantOwnerInvite = React.useCallback(async (tenant) => {
     if (!tenant?.id || !tenant?.owner_email) {
       toast({
-        title: '❌ Invitation impossible',
+        title: 'âŒ Invitation impossible',
         description: 'Email proprietaire introuvable pour ce commerce.',
         variant: 'destructive',
       });
@@ -265,7 +267,7 @@ A bientot.`;
     }));
 
     toast({
-      title: '✅ Invitation proprietaire copiee',
+      title: 'âœ… Invitation proprietaire copiee',
       description: `Lien d activation pret pour ${tenant.nom_commercial}.`,
     });
   }, [toast]);
@@ -356,13 +358,13 @@ A bientot.`;
       return created;
     },
     onSuccess: async (created) => {
-      toast({ title: '✅ Revendeur cree', description: created.name });
+      toast({ title: 'âœ… Revendeur cree', description: created.name });
       setNewResellerForm(createEmptyResellerForm());
       setSelectedResellerId(created.id);
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -381,11 +383,11 @@ A bientot.`;
       });
     },
     onSuccess: async () => {
-      toast({ title: '✅ Fiche revendeur enregistree' });
+      toast({ title: 'âœ… Fiche revendeur enregistree' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -412,11 +414,11 @@ A bientot.`;
       return appClient.entities.ResellerBranding.create(payload);
     },
     onSuccess: async () => {
-      toast({ title: '✅ Branding revendeur enregistre' });
+      toast({ title: 'âœ… Branding revendeur enregistre' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -427,7 +429,7 @@ A bientot.`;
     const allowedLogoTypes = ['image/png', 'image/jpeg', 'image/webp'];
     if (!file.type || !allowedLogoTypes.includes(file.type)) {
       toast({
-        title: '❌ Fichier non valide',
+        title: 'âŒ Fichier non valide',
         description: 'Le logo doit etre une image PNG, JPG ou WEBP.',
         variant: 'destructive',
       });
@@ -440,12 +442,12 @@ A bientot.`;
       const { file_url } = await appClient.integrations.Core.UploadFile({ file });
       setBrandingForm((prev) => ({ ...prev, logo_url: file_url }));
       toast({
-        title: '✅ Logo telecharge',
+        title: 'âœ… Logo telecharge',
         description: 'Le logo a ete charge. Enregistre le branding pour le sauvegarder.',
       });
     } catch (error) {
       toast({
-        title: '❌ Erreur',
+        title: 'âŒ Erreur',
         description: error.message || 'Echec du telechargement du logo.',
         variant: 'destructive',
       });
@@ -481,11 +483,11 @@ A bientot.`;
       return appClient.entities.ResellerPricingRule.create(payload);
     },
     onSuccess: async () => {
-      toast({ title: '✅ Tarif revendeur enregistre' });
+      toast({ title: 'âœ… Tarif revendeur enregistre' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -520,12 +522,12 @@ A bientot.`;
       });
     },
     onSuccess: async () => {
-      toast({ title: '✅ Commerce rattache' });
+      toast({ title: 'âœ… Commerce rattache' });
       setTenantToAttach('');
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -542,35 +544,35 @@ A bientot.`;
       });
     },
     onSuccess: async () => {
-      toast({ title: '✅ Utilisateur revendeur ajoute' });
+      toast({ title: 'âœ… Utilisateur revendeur ajoute' });
       await copyResellerInviteLink(newResellerUserForm.user_email.trim().toLowerCase(), newResellerUserForm.role, selectedReseller.id);
       setNewResellerUserForm(createEmptyResellerUserForm());
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
   const updateResellerUserMutation = useMutation({
     mutationFn: async ({ id, status }) => appClient.entities.ResellerUser.update(id, { status }),
     onSuccess: async () => {
-      toast({ title: '✅ Statut utilisateur mis a jour' });
+      toast({ title: 'âœ… Statut utilisateur mis a jour' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
   const detachTenantMutation = useMutation({
     mutationFn: async (assignmentId) => appClient.entities.ResellerTenant.delete(assignmentId),
     onSuccess: async () => {
-      toast({ title: '✅ Rattachement supprime' });
+      toast({ title: 'âœ… Rattachement supprime' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -651,12 +653,12 @@ A bientot.`;
       return appClient.entities.TenantInvoice.create(invoiceData);
     },
     onSuccess: async () => {
-      toast({ title: '✅ Facture revendeur creee' });
+      toast({ title: 'âœ… Facture revendeur creee' });
       setResellerInvoiceForm(createInvoiceForm());
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -684,11 +686,11 @@ A bientot.`;
       });
     },
     onSuccess: async () => {
-      toast({ title: '✅ Paiement valide' });
+      toast({ title: 'âœ… Paiement valide' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -731,11 +733,11 @@ A bientot.`;
       });
     },
     onSuccess: async () => {
-      toast({ title: '✅ Paiement mensuel mis a jour' });
+      toast({ title: 'âœ… Paiement mensuel mis a jour' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -766,11 +768,11 @@ A bientot.`;
       return appClient.entities.TenantInvoice.delete(invoice.id);
     },
     onSuccess: async () => {
-      toast({ title: '✅ Facture revendeur supprimee' });
+      toast({ title: 'âœ… Facture revendeur supprimee' });
       await invalidateResellers();
     },
     onError: (error) => {
-      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
+      toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -1106,7 +1108,25 @@ A bientot.`;
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label>URL logo</Label>
-                      <Input value={brandingForm.logo_url} onChange={(event) => setBrandingForm((prev) => ({ ...prev, logo_url: event.target.value }))} placeholder="https://..." />
+                      {isEmbeddedImageUrl(brandingForm.logo_url) ? (
+                        <div className="rounded-xl border bg-blue-50 p-4 text-sm text-blue-900 space-y-3">
+                          <p>Logo telecharge localement. L URL brute est masquee pour eviter le bloc de texte.</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBrandingForm((prev) => ({ ...prev, logo_url: '' }))}
+                          >
+                            Remplacer par une URL manuelle
+                          </Button>
+                        </div>
+                      ) : (
+                        <Input
+                          value={brandingForm.logo_url}
+                          onChange={(event) => setBrandingForm((prev) => ({ ...prev, logo_url: event.target.value }))}
+                          placeholder="https://..."
+                        />
+                      )}
                     </div>
                     <div className="space-y-3 md:col-span-2">
                       <Label>Telecharger un logo</Label>
@@ -1135,7 +1155,9 @@ A bientot.`;
                           />
                           <div className="text-sm text-gray-600">
                             <p className="font-medium text-gray-900">Apercu du logo</p>
-                            <p className="break-all">{brandingForm.logo_url}</p>
+                            <p className="break-all">
+                              {isEmbeddedImageUrl(brandingForm.logo_url) ? 'Image telechargee localement' : brandingForm.logo_url}
+                            </p>
                           </div>
                         </div>
                       ) : null}
@@ -1774,3 +1796,4 @@ A bientot.`;
     </div>
   );
 }
+
