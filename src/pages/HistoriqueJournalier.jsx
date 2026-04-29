@@ -731,6 +731,11 @@ export default function HistoriqueJournalier() {
                                 Table {order.table_name}
                               </div>
                             ) : null}
+                            {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
+                              <div className="text-xs font-medium text-blue-600 mt-1">
+                                Bippeur {order.numero_bipeur}
+                              </div>
+                            ) : null}
                             {order.from_web && (
                               <span className="text-xs text-blue-600 font-medium">🌐 Web</span>
                             )}

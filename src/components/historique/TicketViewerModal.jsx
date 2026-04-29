@@ -63,6 +63,8 @@ export default function TicketViewerModal({ order, customer, profile, isOpen, on
             <p><strong>Date:</strong> {new Date(order.created_date.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}</p>
             {customer && <p><strong>Client:</strong> {customer.prenom} {customer.nom}</p>}
             <p><strong>Type:</strong> {order.type_commande}</p>
+            {order.type_commande === 'sur_place' && order.table_name && <p><strong>Table:</strong> {order.table_name}</p>}
+            {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur && <p><strong>Bippeur:</strong> {order.numero_bipeur}</p>}
           </div>
 
           <hr className="my-2 border-dashed" />

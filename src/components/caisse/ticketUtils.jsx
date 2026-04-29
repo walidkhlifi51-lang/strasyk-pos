@@ -35,6 +35,7 @@ export async function generateTicketHtml(order, customer, profile) {
     };
     const orderTypeLabel = orderTypeLabels[order.type_commande] || 'COMMANDE';
     let tableLabel = order?.table?.nom || order?.table_name || order?.table_nom || order?.nom_table || null;
+    const beeperLabel = order?.numero_bipeur ? String(order.numero_bipeur) : null;
 
     if (!tableLabel && order?.table_id) {
         try {
@@ -295,6 +296,11 @@ export async function generateTicketHtml(order, customer, profile) {
         ${order.type_commande === 'sur_place' && tableLabel ? `
         <div class="center" style="font-size: 18px; font-weight: bold; margin: 8px 0; padding: 6px 12px; border: 2px solid #000; display: inline-block;">
             TABLE ${tableLabel}
+        </div>
+        ` : ''}
+        ${((order.type_commande === 'sur_place' || order.type_commande === 'emporter') && beeperLabel) ? `
+        <div class="center" style="font-size: 18px; font-weight: bold; margin: 8px 0; padding: 6px 12px; border: 2px solid #1d4ed8; color: #1d4ed8; display: inline-block;">
+            BIPPEUR ${beeperLabel}
         </div>
         ` : ''}
         ${order.customer_name ? `

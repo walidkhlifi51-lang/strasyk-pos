@@ -93,6 +93,11 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                 Table {order.table?.nom || order.table_name}
               </div>
             ) : null}
+            {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
+              <div className="text-sm font-semibold text-blue-600 mb-2">
+                Bippeur {order.numero_bipeur}
+              </div>
+            ) : null}
             <div className="flex items-center gap-2 flex-wrap">
               {/* MODIFICATION : Affichage "EN ATTENTE" seulement pour en_attente */}
               {isWaitingOrder ? (
@@ -259,6 +264,11 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                 {order.type_commande === 'sur_place' && (order.table?.nom || order.table_name) ? (
                   <div className="text-[11px] font-bold mt-2 border-2 border-black inline-block px-3 py-1">
                     TABLE {order.table?.nom || order.table_name}
+                  </div>
+                ) : null}
+                {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
+                  <div className="text-[11px] font-bold mt-2 border-2 border-blue-700 text-blue-700 inline-block px-3 py-1">
+                    BIPPEUR {order.numero_bipeur}
                   </div>
                 ) : null}
               </div>
