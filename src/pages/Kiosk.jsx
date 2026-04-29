@@ -31,7 +31,6 @@ export default function Kiosk() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [orderType, setOrderType] = useState(null); // 'sur_place' ou 'emporter'
   const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(false);
-  const [tenantLookupFailed, setTenantLookupFailed] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -56,13 +55,9 @@ export default function Kiosk() {
         const tenants = await appClient.entities.Tenant.filter({ id: tenantIdFromUrl });
         if (tenants.length > 0) {
           setTenantData(tenants[0]);
-          setTenantLookupFailed(false);
-        } else {
-          setTenantLookupFailed(true);
         }
       } catch (error) {
         console.error("Erreur chargement tenant:", error);
-        setTenantLookupFailed(true);
       }
     };
 
@@ -372,19 +367,13 @@ export default function Kiosk() {
       <div className="flex items-center justify-center h-screen bg-amber-50 p-4">
         <div className="text-center p-8 bg-white rounded-xl shadow-lg max-w-xl">
           <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">
-            {tenantLookupFailed ? 'Lien borne invalide' : 'Acces public non configure'}
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Acces public non configure</h1>
           <p className="text-gray-600 mb-4">
-            {tenantLookupFailed
-              ? "Ce lien ne correspond a aucun commerce accessible."
-              : "La borne ne peut pas charger les donnees publiques de ce commerce pour le moment."}
+            La borne ne peut pas charger les donnees publiques de ce commerce pour le moment.
           </p>
-          {!tenantLookupFailed && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-              Executez le script <strong>docs/SUPABASE_KIOSK_PUBLIC_RLS.sql</strong> dans Supabase pour autoriser la lecture publique minimale de la borne.
-            </div>
-          )}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+            Executez le script <strong>docs/SUPABASE_KIOSK_PUBLIC_RLS.sql</strong> dans Supabase pour autoriser la lecture publique minimale de la borne.
+          </div>
         </div>
       </div>
     );
