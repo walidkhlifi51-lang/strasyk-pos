@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import QRCode from 'qrcode';
 import { appClient } from '@/api/appClient';
+import { toParisDate as toParisDateValue } from '@/lib/dateParsing';
 
 /**
  * Génère le HTML d'un ticket de caisse pour impression thermique
@@ -15,15 +16,16 @@ export async function generateTicketHtml(order, customer, profile) {
     console.log('🎫 [generateTicketHtml] Commande:', order);
     console.log('🎫 [generateTicketHtml] cagnotte_spent:', order.cagnotte_spent);
 
-    // Convertir la date en fuseau horaire local (Paris) - même logique que OrdersList
-    const toParisDate = (date) => {
-        return new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
-    };
-    
-    const dateStrInput = (order.created_date || '').replace(' ', 'T');
-    let orderDate = new Date(dateStrInput.endsWith('Z') ? dateStrInput : dateStrInput + 'Z');
-    orderDate = toParisDate(orderDate);
-    const dateStr = orderDate.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const orderDate = toParisDateValue(order.created_date);
+    const dateStr = orderDate && !Number.isNaN(orderDate.getTime())
+        ? orderDate.toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        : 'Date invalide';
 
     // Type de commande
     const orderTypeLabels = {
