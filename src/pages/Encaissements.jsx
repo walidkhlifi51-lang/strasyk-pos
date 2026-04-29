@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Banknote,
@@ -15,6 +16,9 @@ import {
   Trash2,
   Truck,
   User,
+  Receipt,
+  ShoppingBag,
+  Save,
 } from 'lucide-react';
 
 import { appClient } from '@/api/appClient';
@@ -32,6 +36,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import NumericKeyboard from '../components/encaissements/NumericKeyboard';
 import { toParisDate } from '@/lib/dateParsing';
+import { createPageUrl } from '@/utils';
 
 const safeToFixed = (value, decimals = 2) => {
   const num = Number(value);
@@ -55,6 +60,12 @@ const isDeliveryOrder = (order) => {
 const isSettlementCandidate = (order) => isDeliveryOrder(order) && !order.payee;
 const isSettlementHistoryCandidate = (order) => isDeliveryOrder(order) && order.payee;
 const isDriverVerificationCandidate = (order) => isDeliveryOrder(order);
+const isCashDeskCandidate = (order) => {
+  if (!order) return false;
+  if (order.statut === 'annulee') return false;
+  if (isDeliveryOrder(order)) return false;
+  return order.type_commande === 'sur_place' || order.type_commande === 'emporter';
+};
 
 const LABELS = {
   especes: 'Especes',
@@ -521,19 +532,128 @@ const DriverCalculatorView = ({
   );
 };
 
+const CashDeskSettlementView = ({
+  date,
+  setDate,
+  orders,
+  bipeurDrafts,
+  setBipeurDrafts,
+  onSaveBipeur,
+  onOpenSettlement,
+}) => (
+  <Card className="shadow-lg">
+    <CardHeader>
+      <div className="flex items-center justify-between">
+        <CardTitle className="flex items-center gap-3">
+          <Receipt className="h-6 w-6 text-orange-500" />
+          Encaissements caisse / bipeurs
+        </CardTitle>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              {format(date, 'dd/MM/yyyy', { locale: fr })}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar mode="single" selected={date} onSelect={(value) => value && setDate(value)} initialFocus locale={fr} />
+          </PopoverContent>
+        </Popover>
+      </div>
+    </CardHeader>
+    <CardContent>
+      <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+        Saisissez un numero de bipeur pour les commandes a emporter ou sur place. Vous pouvez aussi ouvrir directement l'encaissement de la commande.
+      </div>
+
+      {orders.length > 0 ? (
+        <div className="space-y-3">
+          {orders.map((order) => {
+            const draftValue = bipeurDrafts[order.id] ?? order.numero_bipeur ?? '';
+            const orderDate = toParisDate(order.created_date);
+            return (
+              <div key={order.id} className="rounded-xl border bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-bold text-gray-900">
+                        Commande #{order.numero_caisse || order.numero_commande?.slice(-6) || ''}
+                      </p>
+                      <Badge className={order.type_commande === 'sur_place' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}>
+                        <span className="flex items-center gap-1">
+                          {order.type_commande === 'sur_place' ? <Receipt className="h-3 w-3" /> : <ShoppingBag className="h-3 w-3" />}
+                          {order.type_commande === 'sur_place' ? 'Sur place' : 'Emporter'}
+                        </span>
+                      </Badge>
+                      <Badge className={order.payee ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {order.payee ? 'Payee' : 'Non payee'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {orderDate ? format(orderDate, 'dd/MM/yyyy HH:mm', { locale: fr }) : 'Date invalide'}
+                    </p>
+                    <p className="text-xl font-bold text-gray-900">{safeToFixed(order.total_ttc)}€</p>
+                    {order.numero_bipeur ? (
+                      <p className="text-sm font-medium text-orange-700">Bipeur actuel : {order.numero_bipeur}</p>
+                    ) : (
+                      <p className="text-sm text-gray-500">Aucun bipeur enregistre</p>
+                    )}
+                  </div>
+
+                  <div className="flex w-full flex-col gap-3 lg:w-[360px]">
+                    <div className="space-y-2">
+                      <Label htmlFor={`bipeur-${order.id}`}>Numero de bipeur</Label>
+                      <Input
+                        id={`bipeur-${order.id}`}
+                        value={draftValue}
+                        onChange={(e) => setBipeurDrafts((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                        placeholder="Ex: 12"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => onSaveBipeur(order.id, draftValue)}>
+                        <Save className="mr-2 h-4 w-4" />
+                        Enregistrer
+                      </Button>
+                      {!order.payee && (
+                        <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => onOpenSettlement(order.id)}>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Encaisser
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="py-12 text-center text-gray-500">
+          <Receipt className="mx-auto mb-4 h-12 w-12 opacity-50" />
+          <p>Aucune commande sur place ou emporter pour le {format(date, 'dd MMMM yyyy', { locale: fr })}</p>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
+
 export default function Encaissements() {
   const { filterByTenant, currentTenant, currentUser, withTenant } = useTenant();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('encaissement');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [encaissementDate, setEncaissementDate] = useState(new Date());
   const [verificationDate, setVerificationDate] = useState(new Date());
+  const [cashDeskDate, setCashDeskDate] = useState(new Date());
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [selectedVerificationDriver, setSelectedVerificationDriver] = useState(null);
   const [payments, setPayments] = useState(emptyPayments());
   const [verificationPayments, setVerificationPayments] = useState(emptyPayments());
+  const [bipeurDrafts, setBipeurDrafts] = useState({});
 
   const { data: cagnotteRule } = useQuery({
     queryKey: ['cagnotteRule', currentTenant?.id],
@@ -551,16 +671,17 @@ export default function Encaissements() {
     enabled: !!currentTenant,
   });
 
-  const { data: allDriverOrders = [], isLoading: isLoadingOrders } = useQuery({
-    queryKey: ['allDriverOrders', currentTenant?.id],
+  const { data: allOrders = [], isLoading: isLoadingOrders } = useQuery({
+    queryKey: ['allOrdersForSettlement', currentTenant?.id],
     queryFn: async () => {
-      const orders = await appClient.entities.Order.filter(filterByTenant(), '-created_date', 2000);
-      return orders.filter(isDeliveryOrder);
+      return await appClient.entities.Order.filter(filterByTenant(), '-created_date', 2000);
     },
     refetchOnWindowFocus: false,
     staleTime: 60 * 1000,
     enabled: !!currentTenant,
   });
+
+  const allDriverOrders = useMemo(() => allOrders.filter(isDeliveryOrder), [allOrders]);
 
   const { data: settledOrdersData = [], isLoading: isLoadingHistory } = useQuery({
     queryKey: ['settledOrders', selectedDate.toDateString(), currentTenant?.id],
@@ -584,6 +705,11 @@ export default function Encaissements() {
     const dateKey = format(verificationDate, 'yyyy-MM-dd');
     return allDriverOrders.filter((order) => isDriverVerificationCandidate(order) && getParisDateKey(order.created_date) === dateKey);
   }, [allDriverOrders, verificationDate]);
+
+  const cashDeskOrders = useMemo(() => {
+    const dateKey = format(cashDeskDate, 'yyyy-MM-dd');
+    return allOrders.filter((order) => isCashDeskCandidate(order) && getParisDateKey(order.created_date) === dateKey);
+  }, [allOrders, cashDeskDate]);
 
   const augmentedDeliveryPeople = useMemo(() => {
     return rawDeliveryPeople.map((driver) => {
@@ -648,6 +774,33 @@ export default function Encaissements() {
 
     return Object.values(settlementsMap).sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [settledOrdersData, augmentedDeliveryPeople]);
+
+  const handleSaveBipeur = async (orderId, value) => {
+    try {
+      await appClient.entities.Order.update(orderId, withTenant({
+        numero_bipeur: String(value || '').trim() || null,
+      }));
+
+      toast({
+        title: 'Bipeur enregistre',
+        description: 'Le numero de bipeur a ete mis a jour.',
+        variant: 'success',
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['allOrdersForSettlement', currentTenant?.id] });
+    } catch (error) {
+      console.error('Erreur enregistrement bipeur:', error);
+      toast({
+        title: 'Erreur',
+        description: "Impossible d'enregistrer le numero de bipeur.",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleOpenCashDeskSettlement = (orderId) => {
+    navigate(createPageUrl(`StrasykPos?order_to_settle=${orderId}`));
+  };
 
   const handleCancelSettlement = async (orderIds) => {
     if (!confirm("Etes-vous sur de vouloir annuler cet encaissement ?")) return;
@@ -840,6 +993,10 @@ export default function Encaissements() {
                 <FileText className="h-4 w-4" />
                 Verification livreur
               </TabsTrigger>
+              <TabsTrigger value="caisse" className="gap-2">
+                <Receipt className="h-4 w-4" />
+                Caisse / Bipeurs
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="encaissement">
@@ -877,6 +1034,18 @@ export default function Encaissements() {
                 countKey="verification_count"
                 subtitleBuilder={(driver) => `${driver.verification_paid_count || 0} payee(s) · ${driver.verification_unpaid_count || 0} non payee(s)`}
                 emptyLabel="Aucune commande livreur"
+              />
+            </TabsContent>
+
+            <TabsContent value="caisse">
+              <CashDeskSettlementView
+                date={cashDeskDate}
+                setDate={setCashDeskDate}
+                orders={cashDeskOrders}
+                bipeurDrafts={bipeurDrafts}
+                setBipeurDrafts={setBipeurDrafts}
+                onSaveBipeur={handleSaveBipeur}
+                onOpenSettlement={handleOpenCashDeskSettlement}
               />
             </TabsContent>
           </Tabs>
