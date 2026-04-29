@@ -497,38 +497,30 @@ export default function Kiosk() {
           }}
         >
           <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-[1700px] flex-col rounded-[2rem] bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between gap-6 border-b px-10 py-8">
+            <div className="flex items-center justify-center gap-6 border-b px-10 py-8">
               <div className="flex items-center gap-6 min-w-0">
                 {profile?.logo_url && (
                   <img
                     src={profile.logo_url}
                     alt="Logo"
-                    className="h-24 w-24 shrink-0 rounded-2xl object-contain bg-white"
+                    className="h-28 w-28 shrink-0 rounded-2xl object-contain bg-white"
                   />
                 )}
-                <div className="min-w-0">
-                  <h1 className="truncate text-5xl font-black tracking-tight text-gray-900">
+                <div className="min-w-0 text-center">
+                  <h1 className="truncate text-6xl font-black tracking-tight text-gray-900">
                     {tenantData?.nom_commercial || profile?.nom_etablissement || "Bienvenue"}
                   </h1>
-                  <p className="mt-2 text-xl text-gray-500">
-                    {profile?.telephone || "Commande tactile grand ecran"}
+                  <p className="mt-3 text-2xl text-gray-500">
+                    {profile?.telephone || ""}
                   </p>
                 </div>
               </div>
-              <div
-                className="rounded-2xl px-6 py-3 text-lg font-bold text-white shadow-lg"
-                style={{
-                  background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                }}
-              >
-                Borne de commande
-              </div>
             </div>
 
-            <div className="grid flex-1 grid-cols-[1.15fr_0.85fr] gap-0">
-              <div className="flex items-center justify-center bg-slate-50 p-8">
+            <div className="flex flex-1 flex-col bg-slate-50">
+              <div className="flex flex-1 items-center justify-center p-8">
                 {welcomeImages.length > 0 ? (
-                  <div className="relative h-full max-h-[720px] w-full overflow-hidden rounded-[2rem] shadow-xl">
+                  <div className="relative h-full max-h-[720px] w-full max-w-[1320px] overflow-hidden rounded-[2rem] shadow-xl">
                     {welcomeImages.map((imgUrl, idx) => (
                       <img
                         key={idx}
@@ -547,7 +539,7 @@ export default function Kiosk() {
                   </div>
                 ) : (
                   <div
-                    className="flex h-full min-h-[520px] w-full items-center justify-center rounded-[2rem] p-10 text-center text-white shadow-xl"
+                    className="flex h-full min-h-[520px] w-full max-w-[1320px] items-center justify-center rounded-[2rem] p-10 text-center text-white shadow-xl"
                     style={{
                       background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
                     }}
@@ -562,70 +554,22 @@ export default function Kiosk() {
                 )}
               </div>
 
-              <div className="flex flex-col justify-center p-10">
-                <p className="text-lg font-semibold uppercase tracking-[0.3em] text-gray-400">
-                  Choisissez votre commande
+              <div className="border-t bg-white px-10 py-8 text-center">
+                <p className="mx-auto max-w-5xl text-2xl leading-relaxed text-gray-600">
+                  {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
                 </p>
-                <h2 className="mt-4 text-6xl font-black leading-[1.05] text-gray-900">
-                  Sur place
-                  <br />
-                  ou a emporter
-                </h2>
-                <p className="mt-6 text-2xl leading-relaxed text-gray-500">
-                  Touchez une option pour commencer votre commande. L interface borne grand ecran utilise toute la largeur utile.
-                </p>
-
-                <div className="mt-10 grid grid-cols-1 gap-5">
-                  <button
-                    onClick={() => {
-                      setOrderType('sur_place');
-                      setShowWelcome(false);
-                      setShowOrderTypeSelection(false);
-                    }}
-                    className="rounded-[2rem] border-2 border-transparent bg-white px-8 py-8 text-left shadow-lg transition-all hover:-translate-y-1 hover:shadow-2xl"
-                    style={{ borderColor: `${primaryColor}55` }}
-                  >
-                    <div className="flex items-center gap-5">
-                      <div
-                        className="flex h-20 w-20 items-center justify-center rounded-2xl text-white"
-                        style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
-                      >
-                        <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-4xl font-black text-gray-900">Sur place</div>
-                        <div className="mt-2 text-xl text-gray-500">Je consomme ici</div>
-                      </div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setOrderType('emporter');
-                      setShowWelcome(false);
-                      setShowOrderTypeSelection(false);
-                    }}
-                    className="rounded-[2rem] border-2 border-transparent bg-white px-8 py-8 text-left shadow-lg transition-all hover:-translate-y-1 hover:shadow-2xl"
-                    style={{ borderColor: `${secondaryColor}55` }}
-                  >
-                    <div className="flex items-center gap-5">
-                      <div
-                        className="flex h-20 w-20 items-center justify-center rounded-2xl text-white"
-                        style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
-                      >
-                        <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-4xl font-black text-gray-900">A emporter</div>
-                        <div className="mt-2 text-xl text-gray-500">Je repars avec ma commande</div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setShowWelcome(false);
+                    setShowOrderTypeSelection(true);
+                  }}
+                  className="mt-8 rounded-[1.5rem] px-12 py-6 text-3xl font-black text-white shadow-xl transition-all hover:scale-105"
+                  style={{
+                    background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
+                  }}
+                >
+                  Commencer ma commande
+                </button>
               </div>
             </div>
 
