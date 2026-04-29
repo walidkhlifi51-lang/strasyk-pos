@@ -12,6 +12,21 @@ import { generateTicketHtml, triggerPrint } from "../components/caisse/ticketUti
 import { calculateOfferDiscounts } from "@/utils/offerUtils";
 import { computeTaxSummaryFromArticles } from "../components/utils/taxUtils";
 
+const normalizeKioskWelcomeImages = (images = []) => (
+  Array.isArray(images)
+    ? images.map((item) => {
+        if (typeof item === 'string') {
+          return { image_url: item, title: '' };
+        }
+
+        return {
+          image_url: item?.image_url || item?.url || '',
+          title: item?.title || '',
+        };
+      }).filter((item) => item.image_url)
+    : []
+);
+
 const getWelcomeImageLabel = (imageUrl) => {
   if (!imageUrl || typeof imageUrl !== 'string') return '';
 
@@ -160,7 +175,7 @@ export default function Kiosk() {
 
   // Carrousel d'images - DOIT être avant les retours conditionnels
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const welcomeImages = profile?.kiosk_welcome_images || [];
+  const welcomeImages = normalizeKioskWelcomeImages(profile?.kiosk_welcome_images);
   
   useEffect(() => {
     if (welcomeImages.length > 1) {
@@ -171,7 +186,8 @@ export default function Kiosk() {
     }
   }, [welcomeImages.length]);
 
-  const currentWelcomeImageLabel = getWelcomeImageLabel(welcomeImages[currentImageIndex]);
+  const currentWelcomeImage = welcomeImages[currentImageIndex];
+  const currentWelcomeImageLabel = currentWelcomeImage?.title || getWelcomeImageLabel(currentWelcomeImage?.image_url);
 
   const onOrderCreated = (newOrder) => {
     setIsCreatingOrder(false);
@@ -554,13 +570,13 @@ export default function Kiosk() {
                       </p>
                     </div>
                     <div className="relative h-[58vh] min-h-[520px] max-h-[720px] w-full overflow-hidden rounded-[2rem] shadow-xl">
-                      {welcomeImages.map((imgUrl, idx) => (
-                        <img
-                          key={idx}
-                          src={imgUrl}
-                          alt={`Image ${idx + 1}`}
-                          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
-                            idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
+                    {welcomeImages.map((imageItem, idx) => (
+                      <img
+                        key={idx}
+                        src={imageItem.image_url}
+                        alt={`Image ${idx + 1}`}
+                        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
+                          idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
                           }`}
                         />
                       ))}
@@ -634,10 +650,10 @@ export default function Kiosk() {
           
           {welcomeImages.length > 0 && (
             <div className="relative w-full max-h-64 mb-6 overflow-hidden rounded-xl">
-              {welcomeImages.map((imgUrl, idx) => (
+              {welcomeImages.map((imageItem, idx) => (
                 <img 
                   key={idx}
-                  src={imgUrl} 
+                  src={imageItem.image_url} 
                   alt={`Image ${idx + 1}`}
                   className={`w-full h-64 object-cover transition-opacity duration-1000 ${
                     idx === currentImageIndex ? 'opacity-100' : 'opacity-0 absolute top-0 left-0'
