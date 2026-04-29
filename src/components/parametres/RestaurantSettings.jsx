@@ -364,12 +364,22 @@ export default function RestaurantSettings({ data, onDataChange }) {
                     {localProfile.manages_kiosk && (
                         <>
                             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <p className="text-sm font-medium text-blue-900 mb-2">URL de la borne :</p>
+                                <p className="text-sm font-medium text-blue-900 mb-2">Lien borne telephone :</p>
                                 <code className="text-xs bg-white px-3 py-2 rounded border block overflow-x-auto">
                                     {window.location.origin}/Kiosk?tenant={currentTenant?.id}
                                 </code>
                                 <p className="text-xs text-blue-700 mt-2">
-                                    Ouvrez cette URL sur votre tablette dédiée à la borne.
+                                    Conservez ce lien pour le QR code et l usage smartphone.
+                                </p>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                <p className="text-sm font-medium text-slate-900 mb-2">Lien borne grand ecran :</p>
+                                <code className="text-xs bg-white px-3 py-2 rounded border block overflow-x-auto">
+                                    {window.location.origin}/KioskTerminal?tenant={currentTenant?.id}
+                                </code>
+                                <p className="text-xs text-slate-700 mt-2">
+                                    Ouvrez ce lien sur votre vraie borne 22 pouces ou votre ecran tactile en mode kiosque.
                                 </p>
                             </div>
 

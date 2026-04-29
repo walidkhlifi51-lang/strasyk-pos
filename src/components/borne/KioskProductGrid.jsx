@@ -10,7 +10,8 @@ export default function KioskProductGrid({
   menus,
   onAddToCart,
   cart,
-  hasMobileCartBar = false
+  hasMobileCartBar = false,
+  terminalMode = false,
 }) {
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -147,7 +148,7 @@ export default function KioskProductGrid({
       {/* Catégories ou Produits */}
       <div className={`flex-1 overflow-y-auto p-3 md:p-4 ${hasMobileCartBar ? 'pb-4' : ''}`}>
         {!selectedCategoryId && !searchTerm ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 ${terminalMode ? 'xl:grid-cols-5 2xl:grid-cols-6' : ''} gap-3 md:gap-4`}>
             {rootCategories.map(category => {
               const imgDisplay = category.image_display;
               const shouldShowImage = category.image_url && (
@@ -178,7 +179,7 @@ export default function KioskProductGrid({
             })}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 ${terminalMode ? 'xl:grid-cols-5 2xl:grid-cols-6' : ''} gap-3 md:gap-4`}>
             {filteredProducts.map(product => {
               const imgDisplayP = product.image_display;
               const shouldShowImage = product.image_url && (

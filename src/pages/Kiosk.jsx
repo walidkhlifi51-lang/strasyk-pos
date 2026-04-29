@@ -37,6 +37,7 @@ export default function Kiosk() {
   // Récupérer le tenant_id depuis l'URL (format: /kiosk?tenant=xxx)
   const urlParams = new URLSearchParams(window.location.search);
   const tenantIdFromUrl = urlParams.get('tenant');
+  const isTerminalMode = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
 
   // Charger les données du tenant
   useEffect(() => {
@@ -401,13 +402,13 @@ export default function Kiosk() {
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
       >
-        <div className="text-center max-w-5xl w-full">
+        <div className={`text-center w-full ${isTerminalMode ? 'max-w-[1600px]' : 'max-w-5xl'}`}>
           <h1 className="text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4">
             Comment souhaitez-vous consommer ?
           </h1>
           <p className="text-base md:text-2xl text-gray-600 mb-6 md:mb-12">Choisissez votre mode de commande</p>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 max-w-4xl mx-auto">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 mx-auto ${isTerminalMode ? 'max-w-[1400px]' : 'max-w-4xl'}`}>
             {/* Sur place */}
             <button
               onClick={() => {
@@ -477,7 +478,7 @@ export default function Kiosk() {
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
       >
-        <div className="text-center p-6 md:p-12 bg-white rounded-3xl shadow-2xl max-w-2xl w-full">
+        <div className={`text-center bg-white rounded-3xl shadow-2xl w-full ${isTerminalMode ? 'max-w-[1500px] p-8 md:p-14' : 'max-w-2xl p-6 md:p-12'}`}>
           {profile?.logo_url && (
             <img 
               src={profile.logo_url} 
@@ -655,7 +656,7 @@ export default function Kiosk() {
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
       >
-        <div className="text-center max-w-3xl w-full bg-white rounded-3xl shadow-2xl p-6 md:p-12">
+        <div className={`text-center w-full bg-white rounded-3xl shadow-2xl ${isTerminalMode ? 'max-w-[1500px] p-8 md:p-14' : 'max-w-3xl p-6 md:p-12'}`}>
           <div className="w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6"
             style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
           >
@@ -724,7 +725,7 @@ export default function Kiosk() {
 
           <div className="mb-6">
             <p className="text-xl font-semibold text-gray-700 mb-4">Comment souhaitez-vous payer ?</p>
-            <div className={`grid ${cardPaymentEnabled ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+            <div className={`grid ${cardPaymentEnabled ? 'grid-cols-2' : 'grid-cols-1'} ${isTerminalMode ? 'gap-6 max-w-[1200px] mx-auto' : 'gap-4'}`}>
               {cardPaymentEnabled && (
                 <button
                   onClick={handleCardPayment}
@@ -879,18 +880,19 @@ export default function Kiosk() {
       <div className="flex-1 flex overflow-hidden">
         {/* Grille de produits */}
         <div className="flex-1 overflow-hidden">
-          <KioskProductGrid
-            products={products}
-            categories={categories}
-            menus={menus}
-            onAddToCart={handleAddToCart}
-            cart={cart}
-            hasMobileCartBar={cart.length > 0}
-          />
-        </div>
+            <KioskProductGrid
+              products={products}
+              categories={categories}
+              menus={menus}
+              onAddToCart={handleAddToCart}
+              cart={cart}
+              hasMobileCartBar={cart.length > 0}
+              terminalMode={isTerminalMode}
+            />
+          </div>
 
-        {/* Panier - desktop uniquement */}
-        <div className="hidden md:flex flex-col w-96 border-l bg-white">
+          {/* Panier - desktop uniquement */}
+        <div className={`hidden md:flex flex-col border-l bg-white ${isTerminalMode ? 'w-[30rem]' : 'w-96'}`}>
           <KioskCart
             cart={cart}
             onUpdateQuantity={handleUpdateQuantity}
@@ -899,6 +901,7 @@ export default function Kiosk() {
             offers={borneOffers}
             orderType={orderType || 'emporter'}
             products={products}
+            terminalMode={isTerminalMode}
           />
         </div>
       </div>
@@ -946,6 +949,7 @@ export default function Kiosk() {
               offers={borneOffers}
               orderType={orderType || 'emporter'}
               products={products}
+              terminalMode={isTerminalMode}
             />
           </div>
         </div>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { calculateOfferDiscounts } from "@/utils/offerUtils";
 
-export default function KioskCart({ cart, onUpdateQuantity, onRemoveItem, onValidate, offers = [], orderType = 'emporter', products = [] }) {
+export default function KioskCart({ cart, onUpdateQuantity, onRemoveItem, onValidate, offers = [], orderType = 'emporter', products = [], terminalMode = false }) {
   const baseTotal = cart.reduce((sum, item) => sum + item.prix_unitaire * item.quantite, 0);
   const offerDiscounts = calculateOfferDiscounts(cart, offers, orderType, products);
   const offerDiscountTotal = offerDiscounts.reduce((sum, d) => sum + d.amount, 0);
@@ -22,12 +22,12 @@ export default function KioskCart({ cart, onUpdateQuantity, onRemoveItem, onVali
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-4 border-b bg-orange-50">
+      <div className={`border-b bg-orange-50 ${terminalMode ? 'p-5' : 'p-4'}`}>
         <h2 className="text-2xl font-bold text-gray-800">Votre commande</h2>
         <p className="text-sm text-gray-600">{cart.length} article(s)</p>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className={`flex-1 ${terminalMode ? 'p-5' : 'p-4'}`}>
         <div className="space-y-3">
           {cart.map((item, index) => (
             <div key={index} className="bg-white rounded-lg p-4 border-2 border-gray-200">
@@ -89,7 +89,7 @@ export default function KioskCart({ cart, onUpdateQuantity, onRemoveItem, onVali
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t bg-white">
+      <div className={`border-t bg-white ${terminalMode ? 'p-5' : 'p-4'}`}>
         <div className="mb-4">
           {offerDiscounts.length > 0 && (
             <div className="space-y-1 mb-2">

@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CustomerCagnotte from './pages/CustomerCagnotte';
 import Auth from './pages/Auth';
+import Kiosk from './pages/Kiosk';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -20,7 +21,7 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
-  const publicPaths = ['/Auth', '/RequestAccess', '/InviteSignup', '/DeliveryAppPublic', '/CustomerDisplay', '/Kiosk', '/OrderOnline', '/RestaurantSite', '/LandingPage'];
+  const publicPaths = ['/Auth', '/RequestAccess', '/InviteSignup', '/DeliveryAppPublic', '/CustomerDisplay', '/Kiosk', '/KioskTerminal', '/OrderOnline', '/RestaurantSite', '/LandingPage'];
   const isPublicPath = publicPaths.some((path) => window.location.pathname === path);
 
   // Show loading spinner while checking app public settings or auth
@@ -41,6 +42,7 @@ const AuthenticatedApp = () => {
         return (
           <Routes>
             <Route path="/Auth" element={<Auth />} />
+            <Route path="/KioskTerminal" element={<Kiosk />} />
             <Route path="/" element={
               <LayoutWrapper currentPageName={mainPageKey}>
                 <MainPage />
@@ -72,6 +74,7 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route path="/Auth" element={<Auth />} />
+      <Route path="/KioskTerminal" element={<Kiosk />} />
       <Route path="/" element={
         <LayoutWrapper currentPageName={mainPageKey}>
           <MainPage />
