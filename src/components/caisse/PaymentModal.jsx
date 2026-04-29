@@ -38,7 +38,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   const [isReadyForNewInput, setIsReadyForNewInput] = useState(false);
   const [inputBuffer, setInputBuffer] = useState('');
   const { toast } = useToast();
-  const showBipeurField = orderType === 'sur_place' || orderType === 'emporter';
+  const showBipeurField = profile?.bipeur_enabled === true && (orderType === 'sur_place' || orderType === 'emporter');
   const quickBipeurNumbers = useMemo(() => Array.from({ length: 20 }, (_, index) => String(index + 1)), []);
 
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.montant) || 0), 0) + (Number(cagnotteSpent) || 0);

@@ -17,6 +17,7 @@ alter table public.restaurant_profiles
   add column if not exists manages_delivery_app boolean not null default false,
   add column if not exists delivery_app_allowed boolean not null default false,
   add column if not exists table_plan_allowed boolean not null default false,
+  add column if not exists bipeur_enabled boolean not null default false,
   add column if not exists customer_display_enabled boolean not null default false,
   add column if not exists manages_web_ordering boolean not null default false,
   add column if not exists web_ordering_closed boolean not null default false,

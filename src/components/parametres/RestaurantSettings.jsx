@@ -33,6 +33,7 @@ const RESTAURANT_PROFILE_SCHEMA_FIELDS = new Set([
     'manages_deliveries',
     'manages_table_plan',
     'table_plan_allowed',
+    'bipeur_enabled',
     'manages_kiosk',
     'kiosk_welcome_message',
     'kiosk_welcome_images',
@@ -82,6 +83,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 zone_livraison_km: 5,
                 manages_deliveries: true,
                 manages_table_plan: false,
+                bipeur_enabled: false,
                 delivery_app_allowed: false,
                 manages_delivery_app: false,
                 force_immediate_payment: false,
@@ -575,6 +577,14 @@ export default function RestaurantSettings({ data, onDataChange }) {
                         <label htmlFor="force_immediate_payment">Forcer le paiement immédiat (pas de mise en crédit)</label>
                     </div>
                     
+                    <div className="flex items-center space-x-2 pt-4 border-t">
+                        <Switch id="bipeur_enabled" checked={localProfile.bipeur_enabled || false} onCheckedChange={(checked) => handleFieldChange('bipeur_enabled', checked)} />
+                        <div>
+                            <label htmlFor="bipeur_enabled" className="font-medium cursor-pointer">Afficher le bipeur en caisse</label>
+                            <p className="text-sm text-gray-500">Affiche le choix du numero de bipeur dans la fenetre de reglement pour les commandes sur place et a emporter</p>
+                        </div>
+                    </div>
+
                     <div className="flex items-center space-x-2 pt-4 border-t">
                         <Switch id="prix_differencies_par_mode" checked={localProfile.prix_differencies_par_mode || false} onCheckedChange={(checked) => handleFieldChange('prix_differencies_par_mode', checked)} />
                         <div>
