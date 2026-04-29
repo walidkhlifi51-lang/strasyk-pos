@@ -264,21 +264,17 @@ export default function ResellerPortal() {
     },
   ]), [platformChargesTotals, resellerNetTotals, resellerSalesTotals]);
 
-  const pendingCommissions = commissions
-    .filter((item) => item.status === 'pending')
-    .reduce((sum, item) => sum + Number(item.commission_amount || 0), 0);
+  const pendingCommissions = platformChargesTotals.unpaid_ttc;
 
-  const paidCommissions = commissions
-    .filter((item) => item.status === 'paid')
-    .reduce((sum, item) => sum + Number(item.commission_amount || 0), 0);
+  const paidCommissions = platformChargesTotals.paid_ttc;
 
   const createdByPortalCount = linkedTenants.filter((item) => item.assignment.acquisition_channel === 'reseller_portal').length;
 
   const cards = [
     { title: 'Commerces actifs', value: linkedTenants.filter((item) => item.assignment.status === 'active').length, icon: Store, accent: 'bg-blue-600' },
     { title: 'Crees par vous', value: createdByPortalCount, icon: Plus, accent: 'bg-orange-500' },
-    { title: 'Commissions pending', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
-    { title: 'Commissions payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
+    { title: 'Charges plateforme en attente', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
+    { title: 'Charges plateforme payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
   ];
 
   React.useEffect(() => {
@@ -1652,24 +1648,68 @@ export default function ResellerPortal() {
         <TabsContent value="commissions" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Commissions et paiements</CardTitle>
+              <CardTitle>Finance revendeur</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {commissions.length === 0 ? (
-                <p className="text-sm text-gray-500">Aucune commission enregistree.</p>
+              <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <Card className="border border-gray-200 shadow-none">
+                  <CardContent className="pt-6">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme en attente TTC</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{currency(platformChargesTotals.unpaid_ttc)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-none">
+                  <CardContent className="pt-6">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme payees TTC</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{currency(platformChargesTotals.paid_ttc)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-none">
+                  <CardContent className="pt-6">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Ventes clients payees TTC</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{currency(resellerSalesTotals.paid_ttc)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-none">
+                  <CardContent className="pt-6">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Net revendeur paye TTC</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{currency(resellerNetTotals.paid_ttc)}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
+                  <p>Charges en attente: HT {platformChargesTotals.unpaid_ht.toFixed(2)} EUR | TVA {platformChargesTotals.unpaid_tva.toFixed(2)} EUR</p>
+                  <p>Charges payees: HT {platformChargesTotals.paid_ht.toFixed(2)} EUR | TVA {platformChargesTotals.paid_tva.toFixed(2)} EUR</p>
+                  <p>Ventes clients en attente: HT {resellerSalesTotals.unpaid_ht.toFixed(2)} EUR | TVA {resellerSalesTotals.unpaid_tva.toFixed(2)} EUR</p>
+                  <p>Ventes clients payees: HT {resellerSalesTotals.paid_ht.toFixed(2)} EUR | TVA {resellerSalesTotals.paid_tva.toFixed(2)} EUR</p>
+                </div>
+                <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
+                  <p>Cette vue est basee sur les lignes de paiement et factures finales reelles.</p>
+                  <p>Commissions manuelles enregistrees: {commissions.length}</p>
+                  <p>Payouts manuels enregistres: {payouts.length}</p>
+                </div>
+              </div>
+
+              {receivedResellerInvoices.length > 0 ? (
+                receivedResellerInvoices.slice(0, 12).map((item) => {
+                  const amounts = getInvoiceAmounts(item);
+                  return (
+                    <div key={item.id} className="border rounded-xl p-4 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{getInvoiceTypeLabel(item.type)}</p>
+                        <p className="text-xs text-gray-500 mt-1">{item.numero_facture || 'Sans reference'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-900">{currency(amounts.amountTTC)}</p>
+                        <Badge variant="outline" className="mt-2">{item.statut}</Badge>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                commissions.slice(0, 12).map((item) => (
-                  <div key={item.id} className="border rounded-xl p-4 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-gray-900">{item.source_type}</p>
-                      <p className="text-xs text-gray-500 mt-1">{item.source_reference || 'Sans reference'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">{currency(item.commission_amount)}</p>
-                      <Badge variant="outline" className="mt-2">{item.status}</Badge>
-                    </div>
-                  </div>
-                ))
+                <p className="text-sm text-gray-500">Aucun mouvement plateforme enregistre pour le moment.</p>
               )}
 
               {payouts.length > 0 && (

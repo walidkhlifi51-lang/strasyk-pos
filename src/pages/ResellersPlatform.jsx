@@ -109,6 +109,31 @@ const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
   ];
 };
 
+const createInvoiceBucketTotals = () => ({
+  paid_ttc: 0,
+  paid_ht: 0,
+  paid_tva: 0,
+  unpaid_ttc: 0,
+  unpaid_ht: 0,
+  unpaid_tva: 0,
+});
+
+const sumInvoiceBuckets = (invoices = []) => (
+  invoices.reduce((accumulator, invoice) => {
+    const amounts = getInvoiceAmounts(invoice);
+    if (isFinalInvoice(invoice) && invoice.statut === 'payee') {
+      accumulator.paid_ttc += amounts.amountTTC;
+      accumulator.paid_ht += amounts.amountHT;
+      accumulator.paid_tva += amounts.amountTVA;
+    } else if (isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee') {
+      accumulator.unpaid_ttc += amounts.amountTTC;
+      accumulator.unpaid_ht += amounts.amountHT;
+      accumulator.unpaid_tva += amounts.amountTVA;
+    }
+    return accumulator;
+  }, createInvoiceBucketTotals())
+);
+
 export default function ResellersPlatform() {
   const { isPlatformAdmin } = useTenant();
   const { toast } = useToast();
@@ -193,12 +218,29 @@ export default function ResellersPlatform() {
   const selectedResellerInvoices = sortInvoicesByDateDesc(
     invoices.filter((invoice) => isInvoiceForReseller(invoice, selectedResellerId)),
   );
+  const selectedResellerClientInvoices = sortInvoicesByDateDesc(
+    invoices.filter((invoice) => invoice.issuer_type === 'reseller' && invoice.issuer_id === selectedResellerId),
+  );
   const selectedResellerUnpaidInvoices = selectedResellerInvoices.filter(
     (invoice) => isPaymentRequestInvoice(invoice) && invoice.statut !== 'payee',
   );
   const selectedResellerPaidInvoices = selectedResellerInvoices.filter(
     (invoice) => isFinalInvoice(invoice) && invoice.statut === 'payee',
   );
+  const selectedResellerChargeTotals = React.useMemo(
+    () => sumInvoiceBuckets(selectedResellerInvoices),
+    [selectedResellerInvoices],
+  );
+  const selectedResellerSalesTotals = React.useMemo(
+    () => sumInvoiceBuckets(selectedResellerClientInvoices),
+    [selectedResellerClientInvoices],
+  );
+  const selectedResellerNetTotals = React.useMemo(() => ({
+    paid_ttc: selectedResellerSalesTotals.paid_ttc - selectedResellerChargeTotals.paid_ttc,
+    paid_ht: selectedResellerSalesTotals.paid_ht - selectedResellerChargeTotals.paid_ht,
+    unpaid_ttc: selectedResellerSalesTotals.unpaid_ttc - selectedResellerChargeTotals.unpaid_ttc,
+    unpaid_ht: selectedResellerSalesTotals.unpaid_ht - selectedResellerChargeTotals.unpaid_ht,
+  }), [selectedResellerChargeTotals, selectedResellerSalesTotals]);
   const resellerInvoiceAmounts = computeInvoiceAmounts(resellerInvoiceForm.montant, resellerInvoiceForm.tva_taux);
 
   const getResellerInviteLink = React.useCallback((email, role, resellerId) => {
@@ -1989,45 +2031,115 @@ A bientot.`;
                 </TabsContent>
 
                 <TabsContent value="finance" className="space-y-4 mt-4">
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <Card className="border border-gray-200 shadow-none">
                       <CardContent className="pt-6">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Commissions pending</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme en attente TTC</p>
                         <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {currency(selectedCommissions.filter((item) => item.status === 'pending').reduce((sum, item) => sum + Number(item.commission_amount || 0), 0))}
+                          {currency(selectedResellerChargeTotals.unpaid_ttc)}
                         </p>
                       </CardContent>
                     </Card>
                     <Card className="border border-gray-200 shadow-none">
                       <CardContent className="pt-6">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Commissions payees</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Charges plateforme payees TTC</p>
                         <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {currency(selectedCommissions.filter((item) => item.status === 'paid').reduce((sum, item) => sum + Number(item.commission_amount || 0), 0))}
+                          {currency(selectedResellerChargeTotals.paid_ttc)}
                         </p>
                       </CardContent>
                     </Card>
                     <Card className="border border-gray-200 shadow-none">
                       <CardContent className="pt-6">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Payouts</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{selectedPayouts.length}</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Ventes clients payees TTC</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{currency(selectedResellerSalesTotals.paid_ttc)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardContent className="pt-6">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Net revendeur paye TTC</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{currency(selectedResellerNetTotals.paid_ttc)}</p>
                       </CardContent>
                     </Card>
                   </div>
 
-                  <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-600">
-                    La v1 pose la structure finance. Les ecrans avances de commissions, facturation revendeur et remuneration seront branches sur ces tables sans refaire le socle.
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardHeader>
+                        <CardTitle className="text-base">Resume HT / TVA plateforme</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm text-gray-700">
+                        <p>Charges en attente: HT {selectedResellerChargeTotals.unpaid_ht.toFixed(2)} EUR | TVA {selectedResellerChargeTotals.unpaid_tva.toFixed(2)} EUR</p>
+                        <p>Charges payees: HT {selectedResellerChargeTotals.paid_ht.toFixed(2)} EUR | TVA {selectedResellerChargeTotals.paid_tva.toFixed(2)} EUR</p>
+                        <p>Ventes clients en attente: HT {selectedResellerSalesTotals.unpaid_ht.toFixed(2)} EUR | TVA {selectedResellerSalesTotals.unpaid_tva.toFixed(2)} EUR</p>
+                        <p>Ventes clients payees: HT {selectedResellerSalesTotals.paid_ht.toFixed(2)} EUR | TVA {selectedResellerSalesTotals.paid_tva.toFixed(2)} EUR</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-gray-200 shadow-none">
+                      <CardHeader>
+                        <CardTitle className="text-base">Vue reelle finance</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm text-gray-700">
+                        <p>Cette vue est maintenant basee sur les factures revendeur et les charges plateforme reelles.</p>
+                        <p>Payouts manuels enregistres: {selectedPayouts.length}</p>
+                        <p>Commissions manuelles enregistrees: {selectedCommissions.length}</p>
+                      </CardContent>
+                    </Card>
                   </div>
 
-                  {selectedCommissions.length > 0 && (
+                  <Card className="border border-gray-200 shadow-none">
+                    <CardHeader>
+                      <CardTitle className="text-base">Derniers mouvements plateforme / revendeur</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {selectedResellerInvoices.length === 0 && selectedResellerClientInvoices.length === 0 ? (
+                        <p className="text-sm text-gray-500">Aucun mouvement financier detecte pour ce revendeur.</p>
+                      ) : (
+                        sortInvoicesByDateDesc([...selectedResellerInvoices, ...selectedResellerClientInvoices])
+                          .slice(0, 10)
+                          .map((item) => {
+                            const amounts = getInvoiceAmounts(item);
+                            const direction = item.issuer_type === 'platform' ? 'Plateforme -> Revendeur' : 'Revendeur -> Client';
+                            return (
+                              <div key={item.id} className="border rounded-xl p-4 flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="font-medium text-gray-900">{direction}</p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {item.numero_facture || item.id?.substring(0, 8) || 'N/A'} - {getInvoiceTypeLabel(item.type)}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold text-gray-900">{currency(amounts.amountTTC)}</p>
+                                  <Badge variant="outline" className="mt-2">{item.statut || 'en_attente'}</Badge>
+                                </div>
+                              </div>
+                            );
+                          })
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {(selectedCommissions.length > 0 || selectedPayouts.length > 0) && (
                     <div className="space-y-3">
                       {selectedCommissions.slice(0, 8).map((item) => (
-                        <div key={item.id} className="border rounded-xl p-4 flex items-center justify-between gap-4">
+                        <div key={`commission-${item.id}`} className="border rounded-xl p-4 flex items-center justify-between gap-4">
                           <div>
-                            <p className="font-medium text-gray-900">{item.source_type}</p>
+                            <p className="font-medium text-gray-900">Commission manuelle - {item.source_type}</p>
                             <p className="text-xs text-gray-500 mt-1">{item.source_reference || 'Sans reference'}</p>
                           </div>
                           <div className="text-right">
                             <p className="font-semibold text-gray-900">{currency(item.commission_amount)}</p>
+                            <Badge variant="outline" className="mt-2">{item.status}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                      {selectedPayouts.slice(0, 6).map((item) => (
+                        <div key={`payout-${item.id}`} className="border rounded-xl p-4 flex items-center justify-between gap-4">
+                          <div>
+                            <p className="font-medium text-gray-900">Payout manuel</p>
+                            <p className="text-xs text-gray-500 mt-1">{item.payment_reference || 'Sans reference de paiement'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-gray-900">{currency(item.total_amount)}</p>
                             <Badge variant="outline" className="mt-2">{item.status}</Badge>
                           </div>
                         </div>
