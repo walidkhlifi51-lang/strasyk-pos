@@ -958,12 +958,18 @@ export default function StrasykPos() {
           onPayment={webOrderToSettle
             ? async (paymentData) => {
                 const cagnotteUsed = paymentData.cagnotte_spent || 0;
-                await appClient.entities.Order.update(webOrderToSettle.id, withTenant({ payee: true, statut: 'payé', mode_paiement: paymentData.mode_paiement || [], cagnotte_spent: (webOrderToSettle.cagnotte_spent || 0) + cagnotteUsed }));
+                await appClient.entities.Order.update(webOrderToSettle.id, withTenant({
+                  payee: true,
+                  statut: 'payé',
+                  mode_paiement: paymentData.mode_paiement || [],
+                  cagnotte_spent: (webOrderToSettle.cagnotte_spent || 0) + cagnotteUsed,
+                  numero_bipeur: paymentData.numero_bipeur || null,
+                }));
                 if (cagnotteUsed > 0 && webOrderCustomer) {
                   const newBalance = Math.max(0, (webOrderCustomer.cagnotte_balance || 0) - cagnotteUsed);
                   await appClient.entities.Customer.update(webOrderCustomer.id, withTenant({ cagnotte_balance: newBalance }));
                 }
-                const updatedOrder = { ...webOrderToSettle, payee: true, statut: 'payé', mode_paiement: paymentData.mode_paiement || [] };
+                const updatedOrder = { ...webOrderToSettle, payee: true, statut: 'payé', mode_paiement: paymentData.mode_paiement || [], numero_bipeur: paymentData.numero_bipeur || null };
                 setWebOrderToSettle(null); setWebOrderCustomer(null);
                 return updatedOrder;
               }
@@ -974,6 +980,7 @@ export default function StrasykPos() {
           customerCagnotte={webOrderToSettle ? (webOrderCustomer?.cagnotte_balance || 0) : (currentOrder?.customer?.cagnotte_balance || 0)}
           cagnotteRule={cagnotteRule}
           orderType={webOrderToSettle ? (webOrderToSettle.type_commande || 'emporter') : (currentOrder?.orderType || 'sur_place')}
+          initialBipeurNumber={webOrderToSettle?.numero_bipeur || currentOrder?.editingInfo?.numero_bipeur || currentOrder?.numero_bipeur || ''}
           profile={profile}
         />
       )}

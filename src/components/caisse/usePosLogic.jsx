@@ -113,6 +113,7 @@ export function usePosLogic({
           total_ttc: paymentInfo.totalAmount,
           payee: paymentInfo.payee,
           mode_paiement: paymentInfo.mode_paiement || [],
+          numero_bipeur: paymentInfo.numero_bipeur || null,
           statut: paymentInfo.payee ? 'prete' : 'en_attente_paiement',
           notes: notes || '',
           created_date: new Date().toISOString(),
@@ -170,6 +171,7 @@ export function usePosLogic({
           total_tva: (editingInfo.total_tva || 0) + (feeAmount - (feeAmount / (1 + (feeItem.tva_rate / 100)))),
           articles: [...(editingInfo.articles || []), newFeeArticle],
           mode_paiement: [...(Array.isArray(editingInfo.mode_paiement) ? editingInfo.mode_paiement : []), ...paymentInfo.mode_paiement],
+          numero_bipeur: paymentInfo.numero_bipeur || editingInfo.numero_bipeur || null,
           notes: `${editingInfo.notes ? editingInfo.notes + '\n' : ''} (Convertie en livraison - supplément payé)`
         });
         
@@ -303,6 +305,7 @@ export function usePosLogic({
           statut: newStatus,
           mode_paiement: paymentInfo.mode_paiement || [],
           mode_paiement_prevu: paymentInfo.plannedPaymentMethod || null,
+          numero_bipeur: paymentInfo.numero_bipeur || null,
           payee: paymentInfo.payee,
           numero_caisse: numeroCaisse,
           notes: notes || '',

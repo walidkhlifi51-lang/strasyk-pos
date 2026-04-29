@@ -117,6 +117,7 @@ export function useOrderPayment({
           total_ttc: totalForPayment,
           payee: paymentInfo.payee,
           mode_paiement: paymentInfo.mode_paiement || [],
+          numero_bipeur: paymentInfo.numero_bipeur || null,
           statut: paymentInfo.payee ? 'prete' : 'en_attente_paiement',
           notes: notes || '',
           created_date: new Date().toISOString(),
@@ -174,6 +175,7 @@ export function useOrderPayment({
           total_tva: (editingInfo.total_tva || 0) + (feeAmount - (feeAmount / (1 + (feeItem.tva_rate / 100)))),
           articles: [...(editingInfo.articles || []), newFeeArticle],
           mode_paiement: [...(Array.isArray(editingInfo.mode_paiement) ? editingInfo.mode_paiement : []), ...paymentInfo.mode_paiement],
+          numero_bipeur: paymentInfo.numero_bipeur || editingInfo.numero_bipeur || null,
           notes: `${editingInfo.notes ? editingInfo.notes + '\n' : ''} (Convertie en livraison - supplément payé)`
         });
         
@@ -304,6 +306,7 @@ export function useOrderPayment({
             ? [...(Array.isArray(currentOrder.editingInfo.mode_paiement) ? currentOrder.editingInfo.mode_paiement : []), ...(paymentInfo.mode_paiement || [])]
             : (paymentInfo.mode_paiement || []),
           mode_paiement_prevu: paymentInfo.plannedPaymentMethod || null,
+          numero_bipeur: paymentInfo.numero_bipeur || null,
           payee: paymentInfo.payee,
           numero_caisse: numeroCaisse,
           notes: notes || '',

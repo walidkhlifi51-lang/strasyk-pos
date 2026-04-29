@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from "@/components/ui/use-toast";
 import { Trash2 } from 'lucide-react';
 import NumericKeyboard from '../encaissements/NumericKeyboard';
+import { Input } from '@/components/ui/input';
 
 const safeToFixed = (value, decimals = 2) => {
   const num = Number(value);
@@ -26,15 +27,18 @@ const methodColors = {
   cheque: 'bg-purple-500 hover:bg-purple-600',
 };
 
-export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, totalAmount, customerCagnotte = 0, cagnotteRule, orderType, profile }) {
+export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, totalAmount, customerCagnotte = 0, cagnotteRule, orderType, profile, initialBipeurNumber = '' }) {
   const [isCredit, setIsCredit] = useState(false);
   const [payments, setPayments] = useState([]);
   const [cagnotteSpent, setCagnotteSpent] = useState(0);
   const [plannedPaymentMethod, setPlannedPaymentMethod] = useState('especes');
+  const [numeroBipeur, setNumeroBipeur] = useState('');
   const [activeInputId, setActiveInputId] = useState(null);
   const [isReadyForNewInput, setIsReadyForNewInput] = useState(false);
   const [inputBuffer, setInputBuffer] = useState('');
   const { toast } = useToast();
+  const showBipeurField = orderType === 'sur_place' || orderType === 'emporter';
+  const quickBipeurNumbers = useMemo(() => Array.from({ length: 20 }, (_, index) => String(index + 1)), []);
 
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.montant) || 0), 0) + (Number(cagnotteSpent) || 0);
   const remainingAmount = totalAmount - totalPaid;
@@ -46,11 +50,12 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
       setPayments([]);
       setCagnotteSpent(0);
       setPlannedPaymentMethod('especes');
+      setNumeroBipeur(initialBipeurNumber ? String(initialBipeurNumber) : '');
       setActiveInputId(null);
       setIsReadyForNewInput(false);
       setInputBuffer('');
     }
-  }, [isOpen]);
+  }, [isOpen, initialBipeurNumber]);
 
   useEffect(() => {
     if (isCredit) {
@@ -120,6 +125,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
         mode_paiement: isCredit ? [] : payments.map(({ id, isAutoAdded, ...rest }) => rest),
         cagnotte_spent: cagnotteSpent,
         plannedPaymentMethod: (isCredit && orderType === 'livraison') ? plannedPaymentMethod : null,
+        numero_bipeur: showBipeurField ? (String(numeroBipeur || '').trim() || null) : null,
       };
       const orderResult = await onPayment(paymentData);
       if (orderResult) {
@@ -232,6 +238,40 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
                       {m.emoji} {m.label}
                     </Button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {showBipeurField && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+                <div>
+                  <p className="font-semibold text-sm text-indigo-900">Numero de bipeur</p>
+                  <p className="text-xs text-indigo-700">A remettre au client au moment de la commande.</p>
+                </div>
+                <Input
+                  type="text"
+                  value={numeroBipeur}
+                  onChange={(e) => setNumeroBipeur(e.target.value)}
+                  placeholder="Ex: 12"
+                  className="bg-white"
+                />
+                <div className="grid grid-cols-5 gap-2">
+                  {quickBipeurNumbers.map((number) => (
+                    <Button
+                      key={number}
+                      type="button"
+                      variant={numeroBipeur === number ? 'default' : 'outline'}
+                      className="h-10"
+                      onClick={() => setNumeroBipeur(number)}
+                    >
+                      {number}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setNumeroBipeur('')}>
+                    Effacer
+                  </Button>
                 </div>
               </div>
             )}
