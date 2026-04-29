@@ -794,7 +794,7 @@ export default function OrderPanel({
 
   const isCheckoutDisabled = (
     // Livraison : besoin client avec adresse complète
-    (managesDeliveries && currentOrderType === "livraison" && (!currentOrder?.customer || !currentOrder.customer.adresse || !currentOrder.customer.telephone || !currentOrder.customer.nom)) || 
+    (managesDeliveries && currentOrderType === "livraison" && (!currentOrder?.customer || !(currentOrder.customer.selectedAdresse || currentOrder.customer.adresse) || !currentOrder.customer.telephone || !currentOrder.customer.nom)) || 
     // Table : besoin d'une table SEULEMENT si c'est une NOUVELLE commande (pas en édition)
     (managesTablePlan && currentOrderType === "sur_place" && !currentOrder?.table && !currentOrder?.id) || 
     // Panier vide
