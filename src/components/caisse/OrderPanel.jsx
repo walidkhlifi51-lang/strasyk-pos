@@ -23,6 +23,23 @@ const safeToFixed = (value, decimals = 2) => {
   return num.toFixed(decimals);
 };
 
+const formatCustomerAddress = (address, fallbackLabel = 'Adresse') => {
+  if (!address) {
+    return { title: fallbackLabel, value: '' };
+  }
+
+  const addressLine = [address.adresse, address.code_postal, address.ville].filter(Boolean).join(', ');
+  const details = [
+    address.etage ? `Etage ${address.etage}` : null,
+    address.interphone ? `Interphone ${address.interphone}` : null,
+  ].filter(Boolean).join(' · ');
+
+  return {
+    title: address.label || fallbackLabel,
+    value: [addressLine, details].filter(Boolean).join(' · '),
+  };
+};
+
 // New OrderSummary component as per outline, containing calculation logic
 const OrderSummary = ({ currentOrder }) => {
   const { subTotal, offerDiscountValue, loyaltyDiscValue, promoDiscValue, total } = useMemo(() => {
@@ -292,11 +309,25 @@ const CustomerSearch = ({
         return;
     }
     try {
+      const primaryAddress = newCustomer.adresse?.trim()
+        ? {
+            label: 'Principale',
+            adresse: newCustomer.adresse.trim(),
+            code_postal: newCustomer.code_postal?.trim() || '',
+            ville: newCustomer.ville?.trim() || '',
+            etage: newCustomer.etage?.trim() || '',
+            interphone: newCustomer.interphone?.trim() || '',
+          }
+        : null;
       const createdCustomer = await appClient.entities.Customer.create({
         ...newCustomer,
+        adresses: [],
         tenant_id: currentTenant.id
       });
-      setCustomer(createdCustomer); // Use setCustomer
+      const selectedAdresse = primaryAddress
+        ? formatCustomerAddress(primaryAddress, 'Principale').value
+        : '';
+      setCustomer({ ...createdCustomer, selectedAdresse }); // Use setCustomer
       toast({ title: "Succès", description: "Nouveau client ajouté.", variant: "success"});
       setShowAddForm(false);
       setSearchTerm("");
@@ -342,6 +373,17 @@ const CustomerSearch = ({
 
   if (customer) {
     const adresseDisplay = customer.selectedAdresse || (customer.adresse ? `${customer.adresse}, ${customer.code_postal || ''} ${customer.ville || ''}`.trim() : '');
+    const allAddresses = [
+      customer.adresse ? {
+        label: 'Principale',
+        adresse: customer.adresse,
+        code_postal: customer.code_postal,
+        ville: customer.ville,
+        etage: customer.etage,
+        interphone: customer.interphone,
+      } : null,
+      ...(customer.adresses || []),
+    ].filter((address) => address?.adresse);
     return (
       <>
         <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -358,6 +400,36 @@ const CustomerSearch = ({
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => setCustomer(null)}>Changer</Button>
           </div>
+          {orderType === 'livraison' && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-green-900">Choix de l'adresse de livraison</p>
+              {allAddresses.length > 0 ? (
+                <div className="space-y-2">
+                  {allAddresses.map((address, index) => {
+                    const formattedAddress = formatCustomerAddress(address, index === 0 ? 'Principale' : `Adresse ${index + 1}`);
+                    return (
+                      <button
+                        key={`${address.adresse}-${index}`}
+                        type="button"
+                        onClick={() => setCustomer((prev) => ({ ...prev, selectedAdresse: formattedAddress.value }))}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                          customer.selectedAdresse === formattedAddress.value
+                            ? 'border-green-600 bg-white text-green-900'
+                            : 'border-green-200 bg-white/80 text-gray-700 hover:border-green-400'
+                        }`}
+                      >
+                        <span className="block font-semibold">{formattedAddress.title}</span>
+                        <span className="block text-[11px] text-gray-500">{formattedAddress.value}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-orange-600">Aucune adresse enregistree pour ce client.</p>
+              )}
+              <AddAddressInline customer={customer} setCustomer={setCustomer} />
+            </div>
+          )}
         </div>
         <Button
           type="button"
@@ -390,8 +462,11 @@ const CustomerSearch = ({
             <div
               key={c.id}
               onClick={() => {
-                const mainAddr = c.adresse ? `${c.adresse}, ${c.code_postal || ''} ${c.ville || ''}`.trim() : '';
-                setCustomer({ ...c, selectedAdresse: mainAddr });
+                const fallbackAddress = c.adresse
+                  ? { adresse: c.adresse, code_postal: c.code_postal, ville: c.ville, etage: c.etage, interphone: c.interphone, label: 'Principale' }
+                  : (c.adresses || [])[0] || null;
+                const selectedAdresse = fallbackAddress ? formatCustomerAddress(fallbackAddress, 'Principale').value : '';
+                setCustomer({ ...c, selectedAdresse });
                 toast({
                     title: `Client sélectionné : ${c.prenom} ${c.nom}`,
                     description: `Solde cagnotte: ${(c.cagnotte_balance || 0).toFixed(2)}€`,

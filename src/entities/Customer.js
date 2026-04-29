@@ -13,6 +13,8 @@ export const Customer = createEntity('Customer', {
     etage: { type: 'string' },
     interphone: { type: 'string' },
     notes: { type: 'string' },
+    adresses: { type: 'array' },
+    cagnotte_balance: { type: 'number' },
   },
 });
 
