@@ -949,16 +949,21 @@ export default function OrderPanel({
               customer={currentOrder?.customer}
               setCustomer={(c) => {
                 console.log('[OrderPanel] Setting customer:', c);
-                setCurrentOrder(prev => ({...(prev || { 
-                  articles: [], 
-                  orderType: currentOrderType, // Use the determined type for new order
-                  notes: '', 
-                  discounts: [], 
-                  table: null, 
-                  loyaltyDiscount: null, 
-                  promoCode: null, 
-                  customer: null 
-                }), customer: c}));
+                setCurrentOrder(prev => {
+                  const baseOrder = prev || {
+                    articles: [],
+                    orderType: currentOrderType,
+                    notes: '',
+                    discounts: [],
+                    table: null,
+                    loyaltyDiscount: null,
+                    promoCode: null,
+                    customer: null,
+                  };
+
+                  const nextCustomer = typeof c === 'function' ? c(baseOrder.customer) : c;
+                  return { ...baseOrder, customer: nextCustomer };
+                });
               }}
               orderType={currentOrderType} // Use currentOrderType
               onViewCustomerHistory={onViewCustomerHistory}
