@@ -33,6 +33,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   const [cagnotteSpent, setCagnotteSpent] = useState(0);
   const [plannedPaymentMethod, setPlannedPaymentMethod] = useState('especes');
   const [numeroBipeur, setNumeroBipeur] = useState('');
+  const [showBipeurPicker, setShowBipeurPicker] = useState(false);
   const [activeInputId, setActiveInputId] = useState(null);
   const [isReadyForNewInput, setIsReadyForNewInput] = useState(false);
   const [inputBuffer, setInputBuffer] = useState('');
@@ -51,6 +52,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
       setCagnotteSpent(0);
       setPlannedPaymentMethod('especes');
       setNumeroBipeur(initialBipeurNumber ? String(initialBipeurNumber) : '');
+      setShowBipeurPicker(false);
       setActiveInputId(null);
       setIsReadyForNewInput(false);
       setInputBuffer('');
@@ -243,36 +245,50 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
             )}
 
             {showBipeurField && (
-              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
-                <div>
-                  <p className="font-semibold text-sm text-indigo-900">Numero de bipeur</p>
-                  <p className="text-xs text-indigo-700">A remettre au client au moment de la commande.</p>
-                </div>
-                <Input
-                  type="text"
-                  value={numeroBipeur}
-                  onChange={(e) => setNumeroBipeur(e.target.value)}
-                  placeholder="Ex: 12"
-                  className="bg-white"
-                />
-                <div className="grid grid-cols-5 gap-2">
-                  {quickBipeurNumbers.map((number) => (
-                    <Button
-                      key={number}
-                      type="button"
-                      variant={numeroBipeur === number ? 'default' : 'outline'}
-                      className="h-10"
-                      onClick={() => setNumeroBipeur(number)}
-                    >
-                      {number}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setNumeroBipeur('')}>
-                    Effacer
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={showBipeurPicker ? 'default' : 'outline'}
+                    onClick={() => setShowBipeurPicker((value) => !value)}
+                    className="h-11"
+                  >
+                    Bippeur
                   </Button>
+                  <Input
+                    type="text"
+                    value={numeroBipeur}
+                    onChange={(e) => setNumeroBipeur(e.target.value)}
+                    placeholder="Numero"
+                    className="h-11 bg-white"
+                  />
+                  {numeroBipeur ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNumeroBipeur('')}>
+                      Effacer
+                    </Button>
+                  ) : null}
                 </div>
+                {showBipeurPicker && (
+                  <div className="rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 p-3">
+                    <p className="mb-3 text-sm font-semibold text-indigo-900">Choisir un numero de bippeur</p>
+                    <div className="grid grid-cols-5 gap-2">
+                      {quickBipeurNumbers.map((number) => (
+                        <button
+                          key={number}
+                          type="button"
+                          onClick={() => setNumeroBipeur(number)}
+                          className={`h-14 rounded-xl border-2 text-lg font-bold shadow-sm transition-all ${
+                            numeroBipeur === number
+                              ? 'border-indigo-700 bg-indigo-600 text-white shadow-md scale-[1.02]'
+                              : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-100'
+                          }`}
+                        >
+                          {number}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
