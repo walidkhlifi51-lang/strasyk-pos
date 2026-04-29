@@ -172,7 +172,19 @@ export default function StrasykPos() {
     const nextNumeroCaisse = maxNumeroCaisse + 1;
     const formattedDateForOrderNumber = format(workingDateInParis, 'ddMMyy');
     const nextNumeroCommande = `${nextNumeroCaisse}-${formattedDateForOrderNumber}`;
-    const orders = allOrdersForDay.filter(order => order.statut !== 'annulee').sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    const tablesMap = (allTables || []).reduce((acc, table) => {
+      acc[table.id] = table;
+      return acc;
+    }, {});
+
+    const orders = allOrdersForDay
+      .filter(order => order.statut !== 'annulee')
+      .map((order) => ({
+        ...order,
+        table: order.table_id ? tablesMap[order.table_id] || null : null,
+        table_name: order.table_id ? tablesMap[order.table_id]?.nom || null : null,
+      }))
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     const customers = (customersList || []).reduce((acc, customer) => {
       if (customer?.id) acc[customer.id] = customer;
       return acc;
