@@ -284,13 +284,15 @@ export default function PlanDeTables() {
     const fetchTablesAndOrders = async () => {
         try {
             const tablesData = await appClient.entities.Table.filter(filterByTenant());
-            // await new Promise(resolve => setTimeout(resolve, 200)); // Petit délai - kept this commented as it's typically for testing latency
-            const ordersData = await appClient.entities.Order.filter({ 
-                ...filterByTenant(),
-                type_commande: 'sur_place',
-                statut: { '$nin': ['livree', 'annulee'] }
+            const allOrdersData = await appClient.entities.Order.filter(filterByTenant(), '-created_date', 500);
+            const tableOrderIds = new Set((tablesData || []).map((table) => table.order_id).filter(Boolean));
+            const ordersData = (allOrdersData || []).filter((order) => {
+                if (!order) return false;
+                if (order.type_commande !== 'sur_place') return false;
+                if (order.statut === 'livree' || order.statut === 'annulee') return false;
+                return tableOrderIds.has(order.id) || !!order.table_id;
             });
-            return { tables: tablesData || [], orders: ordersData || [] };
+            return { tables: tablesData || [], orders: ordersData };
         } catch (error) {
             console.error("Erreur chargement tables:", error);
             // Return empty arrays to prevent app crash and allow continued operation
