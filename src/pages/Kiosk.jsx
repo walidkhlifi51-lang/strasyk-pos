@@ -414,7 +414,7 @@ export default function Kiosk() {
     
     return (
       <div 
-        className="flex items-center justify-center min-h-screen p-4 md:p-8"
+        className={`flex min-h-screen p-4 md:p-8 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
@@ -490,7 +490,7 @@ export default function Kiosk() {
     
     return (
       <div 
-        className="flex items-center justify-center min-h-screen p-4"
+        className={`flex min-h-screen p-4 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
@@ -668,7 +668,7 @@ export default function Kiosk() {
     
     return (
       <div 
-        className="flex items-center justify-center min-h-screen p-4 md:p-8"
+        className={`flex min-h-screen p-4 md:p-8 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}

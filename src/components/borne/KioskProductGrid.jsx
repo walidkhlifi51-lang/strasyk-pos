@@ -19,6 +19,7 @@ export default function KioskProductGrid({
   const rootCategories = useMemo(() => {
     return categories.filter(cat => !cat.parent_id && cat.disponible);
   }, [categories]);
+  const shouldShowCategoryHome = !selectedCategoryId && !searchTerm && rootCategories.length > 0;
 
   const getSubCategories = (parentId) => {
     return categories.filter(cat => cat.parent_id === parentId && cat.disponible);
@@ -147,7 +148,7 @@ export default function KioskProductGrid({
 
       {/* Catégories ou Produits */}
       <div className={`flex-1 overflow-y-auto p-3 md:p-4 ${hasMobileCartBar ? 'pb-4' : ''}`}>
-        {!selectedCategoryId && !searchTerm ? (
+        {shouldShowCategoryHome ? (
           <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 ${terminalMode ? 'xl:grid-cols-5 2xl:grid-cols-6' : ''} gap-3 md:gap-4`}>
             {rootCategories.map(category => {
               const imgDisplay = category.image_display;
@@ -259,6 +260,13 @@ export default function KioskProductGrid({
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {!shouldShowCategoryHome && filteredProducts.length === 0 && filteredMenus.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
+            <p className="text-xl font-semibold">Aucun produit visible</p>
+            <p className="mt-2 text-sm">Verifiez les categories, les produits ou les droits publics de la borne.</p>
           </div>
         )}
       </div>

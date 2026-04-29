@@ -44,6 +44,20 @@ for select
 to anon
 using (manages_kiosk = true);
 
+drop policy if exists categories_select_kiosk_public on public.categories;
+create policy categories_select_kiosk_public
+on public.categories
+for select
+to anon
+using (public.kiosk_tenant_is_public(tenant_id));
+
+drop policy if exists products_select_kiosk_public on public.products;
+create policy products_select_kiosk_public
+on public.products
+for select
+to anon
+using (public.kiosk_tenant_is_public(tenant_id));
+
 drop policy if exists offers_select_kiosk_public on public.offers;
 create policy offers_select_kiosk_public
 on public.offers
