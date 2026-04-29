@@ -106,10 +106,10 @@ export default function RequestAccess() {
         }
 
         const [requestsResult, ownedTenantsResult, userAccessResult, platformAdminResult] = await Promise.allSettled([
-          appClient.entities.InscriptionRequest.list('-created_date', 50),
-          appClient.entities.Tenant.list('-created_date', 20),
-          appClient.entities.UserAccess.list('-created_date', 50),
-          appClient.entities.PlatformAdminAccess.list('-created_date', 20),
+          appClient.entities.InscriptionRequest.filter({ email: currentUser.email }, '-created_date', 50),
+          appClient.entities.Tenant.filter({ owner_email: currentUser.email }, '-created_date', 20),
+          appClient.entities.UserAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 50),
+          appClient.entities.PlatformAdminAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 20),
         ]);
 
         const requests = requestsResult.status === 'fulfilled'
@@ -125,8 +125,8 @@ export default function RequestAccess() {
           ? platformAdminResult.value.filter((entry) => normalizeEmail(entry.user_email) === userEmail && entry.is_active === true)
           : [];
 
-        const ownedTenant = ownedTenants.find((tenant) => normalizeEmail(tenant.owner_email) === userEmail);
-        if (ownedTenant) {
+        const hasActiveAccess = ownedTenants.length > 0 || userAccesses.length > 0 || platformAdminEntries.length > 0;
+        if (hasActiveAccess) {
           goToDashboard();
           return;
         }
@@ -137,11 +137,6 @@ export default function RequestAccess() {
         const pendingRequest = sortedRequests.find((request) => request.statut === 'en_attente');
         const refusedRequest = sortedRequests.find((request) => request.statut === 'refuse');
         const latestRequest = acceptedRequest || pendingRequest || refusedRequest || sortedRequests[0];
-
-        if (!latestRequest && (userAccesses.length > 0 || platformAdminEntries.length > 0)) {
-          setScreenState('session_active');
-          return;
-        }
 
         if (latestRequest?.statut === 'en_attente') {
           setFormData((prev) => ({
