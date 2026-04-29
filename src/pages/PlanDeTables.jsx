@@ -197,8 +197,8 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
                 </div>
             )}
              
-             {/* Menu simplifié - SEULEMENT "Régler la note" si non payée */}
-             {!isEditing && table.statut === 'occupee' && table.order_id && table.order && !table.order.payee && (
+             {/* Menu rapide d'encaissement */}
+             {!isEditing && table.order_id && table.order && !table.order.payee && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -232,15 +232,32 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
                 
                 {/* Affichage du montant */}
                 {table.order && (
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-col items-center gap-2">
                         <span className={`font-bold text-3xl ${table.order.payee ? 'text-green-600' : 'text-gray-900'}`}>
                             {table.order.total_ttc?.toFixed(2) || '0.00'}€
                         </span>
-                        {table.order.payee && (
-                            <div className="flex items-center justify-center gap-1 text-sm text-green-600 mt-1">
-                                <CheckCircle className="w-4 h-4" />
-                                <span>Payée</span>
-                            </div>
+                        <Badge className={table.order.payee ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}>
+                            {table.order.payee ? (
+                                <span className="flex items-center gap-1">
+                                    <CheckCircle className="w-4 h-4" />
+                                    Payée
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-1">
+                                    <DollarSign className="w-4 h-4" />
+                                    Non payée
+                                </span>
+                            )}
+                        </Badge>
+                        {!isEditing && !table.order.payee && (
+                            <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white shadow-md"
+                                onClick={(e) => handleNavigation(e, createPageUrl(`StrasykPos?order_to_settle=${table.order_id}`))}
+                            >
+                                <DollarSign className="w-4 h-4 mr-1" />
+                                Encaisser
+                            </Button>
                         )}
                     </div>
                 )}
