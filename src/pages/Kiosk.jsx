@@ -520,7 +520,7 @@ export default function Kiosk() {
             <div className="flex flex-1 flex-col bg-slate-50">
               <div className="flex flex-1 items-center justify-center p-8">
                 {welcomeImages.length > 0 ? (
-                  <div className="relative h-full max-h-[720px] w-full max-w-[1320px] overflow-hidden rounded-[2rem] shadow-xl">
+                  <div className="relative h-[58vh] min-h-[520px] max-h-[720px] w-full max-w-[1320px] overflow-hidden rounded-[2rem] shadow-xl">
                     {welcomeImages.map((imgUrl, idx) => (
                       <img
                         key={idx}
