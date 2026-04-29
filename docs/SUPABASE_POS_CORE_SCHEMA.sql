@@ -215,6 +215,23 @@ alter table public.cloture_caisse
   add column if not exists updated_date timestamptz not null default now();
 
 create index if not exists idx_cloture_caisse_tenant_id on public.cloture_caisse(tenant_id);
+
+with ranked_clotures as (
+  select
+    id,
+    row_number() over (
+      partition by tenant_id, ((date_cloture at time zone 'UTC')::date)
+      order by updated_date desc nulls last, created_date desc nulls last, id desc
+    ) as row_num
+  from public.cloture_caisse
+)
+delete from public.cloture_caisse
+where id in (
+  select id
+  from ranked_clotures
+  where row_num > 1
+);
+
 create unique index if not exists uq_cloture_caisse_tenant_day
   on public.cloture_caisse(tenant_id, ((date_cloture at time zone 'UTC')::date));
 
