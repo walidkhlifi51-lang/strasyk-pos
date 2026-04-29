@@ -12,6 +12,31 @@ import { generateTicketHtml, triggerPrint } from "../components/caisse/ticketUti
 import { calculateOfferDiscounts } from "@/utils/offerUtils";
 import { computeTaxSummaryFromArticles } from "../components/utils/taxUtils";
 
+const getWelcomeImageLabel = (imageUrl) => {
+  if (!imageUrl || typeof imageUrl !== 'string') return '';
+
+  if (imageUrl.startsWith('data:')) {
+    return 'Visuel d accueil';
+  }
+
+  try {
+    const url = new URL(imageUrl, window.location.origin);
+    const lastSegment = url.pathname.split('/').filter(Boolean).pop() || '';
+    const decoded = decodeURIComponent(lastSegment);
+    const withoutExtension = decoded.replace(/\.[a-z0-9]+$/i, '');
+    const cleaned = withoutExtension
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return cleaned
+      ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+      : 'Visuel d accueil';
+  } catch (error) {
+    return 'Visuel d accueil';
+  }
+};
+
 export default function Kiosk() {
   const [cart, setCart] = useState([]);
   const [customizingProduct, setCustomizingProduct] = useState(null);
@@ -145,6 +170,8 @@ export default function Kiosk() {
       return () => clearInterval(interval);
     }
   }, [welcomeImages.length]);
+
+  const currentWelcomeImageLabel = getWelcomeImageLabel(welcomeImages[currentImageIndex]);
 
   const onOrderCreated = (newOrder) => {
     setIsCreatingOrder(false);
@@ -520,21 +547,28 @@ export default function Kiosk() {
             <div className="flex flex-1 flex-col bg-slate-50">
               <div className="flex flex-1 items-center justify-center p-8">
                 {welcomeImages.length > 0 ? (
-                  <div className="relative h-[58vh] min-h-[520px] max-h-[720px] w-full max-w-[1320px] overflow-hidden rounded-[2rem] shadow-xl">
-                    {welcomeImages.map((imgUrl, idx) => (
-                      <img
-                        key={idx}
-                        src={imgUrl}
-                        alt={`Image ${idx + 1}`}
-                        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
-                          idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
-                        }`}
-                      />
-                    ))}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-8 pb-8 pt-24">
-                      <p className="text-3xl font-bold text-white">
-                        {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
+                  <div className="w-full max-w-[1320px]">
+                    <div className="mb-5 text-center">
+                      <p className="text-4xl font-black tracking-tight text-gray-900">
+                        {currentWelcomeImageLabel}
                       </p>
+                    </div>
+                    <div className="relative h-[58vh] min-h-[520px] max-h-[720px] w-full overflow-hidden rounded-[2rem] shadow-xl">
+                      {welcomeImages.map((imgUrl, idx) => (
+                        <img
+                          key={idx}
+                          src={imgUrl}
+                          alt={`Image ${idx + 1}`}
+                          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
+                            idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        />
+                      ))}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-8 pb-8 pt-24">
+                        <p className="text-3xl font-bold text-white">
+                          {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ) : (
