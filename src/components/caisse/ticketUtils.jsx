@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import QRCode from 'qrcode';
+import { appClient } from '@/api/appClient';
 
 /**
  * Génère le HTML d'un ticket de caisse pour impression thermique
@@ -31,6 +32,16 @@ export async function generateTicketHtml(order, customer, profile) {
         'livraison': 'LIVRAISON'
     };
     const orderTypeLabel = orderTypeLabels[order.type_commande] || 'COMMANDE';
+    let tableLabel = order?.table?.nom || order?.table_name || order?.table_nom || order?.nom_table || null;
+
+    if (!tableLabel && order?.table_id) {
+        try {
+            const tables = await appClient.entities.Table.filter({ id: order.table_id }, '-created_date', 1);
+            tableLabel = tables?.[0]?.nom || null;
+        } catch (error) {
+            console.warn('[generateTicketHtml] Impossible de charger la table:', error);
+        }
+    }
 
     // Calculer les totaux par taux de TVA
     const tvaBreakdown = {};
@@ -279,6 +290,11 @@ export async function generateTicketHtml(order, customer, profile) {
         <div class="center" style="font-size: 15px; font-weight: bold; margin: 8px 0;">
             ${dateStr}
         </div>
+        ${order.type_commande === 'sur_place' && tableLabel ? `
+        <div class="center" style="font-size: 18px; font-weight: bold; margin: 8px 0; padding: 6px 12px; border: 2px solid #000; display: inline-block;">
+            TABLE ${tableLabel}
+        </div>
+        ` : ''}
         ${order.customer_name ? `
         <div class="center" style="font-size: 18px; font-weight: bold; margin: 8px 0; padding: 6px 12px; border: 2px solid #000; display: inline-block;">
             👤 ${order.customer_name}
@@ -922,3 +938,5 @@ export async function triggerPrint(html, onComplete) {
         }
     }
 }
+
+

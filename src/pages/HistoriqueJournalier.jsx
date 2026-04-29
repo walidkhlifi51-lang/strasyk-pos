@@ -125,10 +125,16 @@ export default function HistoriqueJournalier() {
   const { data: queryData, isLoading: ordersLoading, error, refetch } = useQuery({
     queryKey: ['historyData', selectedDateStr, currentTenant?.id],
     queryFn: async () => {
-      const [allOrders, allCustomers] = await Promise.all([
+      const [allOrders, allCustomers, allTables] = await Promise.all([
         appClient.entities.Order.filter(filterByTenant(), '-created_date', 2000),
         appClient.entities.Customer.filter(filterByTenant()),
+        appClient.entities.Table.filter(filterByTenant()).catch(() => []),
       ]);
+
+      const tablesMap = (allTables || []).reduce((acc, table) => {
+        acc[table.id] = table;
+        return acc;
+      }, {});
 
       const filteredOrdersByDateAndStatus = allOrders.filter(order => {
         // Exclure les brouillons (en_attente) SAUF les commandes web (from_web)
@@ -149,7 +155,13 @@ export default function HistoriqueJournalier() {
         return orderDayStr === selectedDateStr;
       });
 
-      return { allOrders: filteredOrdersByDateAndStatus, allCustomers };
+      return {
+        allOrders: filteredOrdersByDateAndStatus.map((order) => ({
+          ...order,
+          table_name: order.table_id ? tablesMap[order.table_id]?.nom || null : null,
+        })),
+        allCustomers,
+      };
     },
     staleTime: 30 * 1000,
     cacheTime: 10 * 60 * 1000,
@@ -267,7 +279,7 @@ export default function HistoriqueJournalier() {
     try {
       const customer = order.customer;
       const orderForPrint = { ...order }; 
-      const ticketHtml = generateTicketHtml(orderForPrint, customer, profile); 
+      const ticketHtml = await generateTicketHtml(orderForPrint, customer, profile); 
       if (ticketHtml) {
         triggerPrint(ticketHtml);
       } else {
@@ -299,6 +311,7 @@ export default function HistoriqueJournalier() {
       const clientName = order.customer
         ? `${order.customer.prenom || ''} ${order.customer.nom || ''}`.trim()
         : 'Anonyme';
+      const tableLabel = order.type_commande === 'sur_place' && order.table_name ? `Table ${order.table_name}` : '';
       const paymentStatus = order.statut === 'annulee' ? '-' : (order.payee ? 'Payée' : 'Non payée');
       const totalValue = order.total_ttc?.toFixed(2).replace('.', ',') || '0,00';
 
@@ -310,7 +323,7 @@ export default function HistoriqueJournalier() {
         `"${order.created_date && orderParisDate && !isNaN(orderParisDate.getTime()) ? format(orderParisDate, 'dd/MM/yyyy', { locale: fr }) : ''}"`,
         `"${order.created_date && orderParisDate && !isNaN(orderParisDate.getTime()) ? format(orderParisDate, 'HH:mm', { locale: fr }) : ''}"`,
         `"${ORDER_TYPE_LABELS[order.type_commande] || order.type_commande}"`,
-        `"${clientName.replace(/"/g, '""')}"`,
+        `"${[clientName, tableLabel].filter(Boolean).join(' - ').replace(/"/g, '""')}"`,
         `"${ORDER_STATUS_LABELS[order.statut] || order.statut}"`,
         `"${paymentStatus}"`,
         `"${totalValue}"`
@@ -713,6 +726,11 @@ export default function HistoriqueJournalier() {
                             <div className="font-semibold text-gray-900">
                               #{order.from_web ? 'W' : order.from_kiosk ? 'B' : ''}{order.numero_commande || order.numero_caisse || order.id?.slice(-4)}
                             </div>
+                            {order.type_commande === 'sur_place' && order.table_name ? (
+                              <div className="text-xs font-medium text-orange-600 mt-1">
+                                Table {order.table_name}
+                              </div>
+                            ) : null}
                             {order.from_web && (
                               <span className="text-xs text-blue-600 font-medium">🌐 Web</span>
                             )}
