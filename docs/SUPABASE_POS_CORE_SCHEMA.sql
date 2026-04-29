@@ -115,6 +115,7 @@ create table if not exists public.tables (
   tenant_id uuid not null,
   nom text not null,
   capacite integer not null default 1,
+  forme text not null default 'carree',
   statut text not null default 'disponible',
   order_id uuid,
   position_x numeric(10,2),
@@ -123,6 +124,7 @@ create table if not exists public.tables (
   created_date timestamptz not null default now(),
   updated_date timestamptz not null default now(),
   constraint tables_capacite_positive_check check (capacite > 0),
+  constraint tables_forme_check check (forme in ('carree', 'ronde', 'rectangulaire')),
   constraint tables_statut_check check (statut in ('disponible', 'occupee', 'reservee', 'a_nettoyer'))
 );
 
@@ -130,6 +132,7 @@ alter table public.tables
   add column if not exists tenant_id uuid,
   add column if not exists nom text,
   add column if not exists capacite integer not null default 1,
+  add column if not exists forme text not null default 'carree',
   add column if not exists statut text not null default 'disponible',
   add column if not exists order_id uuid,
   add column if not exists position_x numeric(10,2),
@@ -137,6 +140,23 @@ alter table public.tables
   add column if not exists zone text,
   add column if not exists created_date timestamptz not null default now(),
   add column if not exists updated_date timestamptz not null default now();
+
+update public.tables
+set forme = coalesce(forme, 'carree')
+where forme is null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'tables_forme_check'
+  ) then
+    alter table public.tables
+      add constraint tables_forme_check
+      check (forme in ('carree', 'ronde', 'rectangulaire')) not valid;
+  end if;
+end $$;
 
 create index if not exists idx_tables_tenant_id on public.tables(tenant_id);
 create index if not exists idx_tables_order_id on public.tables(order_id);
