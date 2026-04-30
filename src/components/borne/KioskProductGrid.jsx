@@ -154,7 +154,9 @@ export default function KioskProductGrid({
               const imgDisplay = category.image_display;
               const shouldShowImage = category.image_url && (
                 !imgDisplay ||
-                (Array.isArray(imgDisplay) ? imgDisplay.includes('borne') : (imgDisplay === 'both' || imgDisplay === 'borne'))
+                (Array.isArray(imgDisplay)
+                  ? (terminalMode && imgDisplay.includes('borne'))
+                  : (imgDisplay === 'both' || (terminalMode && imgDisplay === 'borne')))
               );
               
               return (
@@ -185,7 +187,9 @@ export default function KioskProductGrid({
               const imgDisplayP = product.image_display;
               const shouldShowImage = product.image_url && (
                 !imgDisplayP ||
-                (Array.isArray(imgDisplayP) ? imgDisplayP.includes('borne') : (imgDisplayP === 'both' || imgDisplayP === 'borne'))
+                (Array.isArray(imgDisplayP)
+                  ? (terminalMode && imgDisplayP.includes('borne'))
+                  : (imgDisplayP === 'both' || (terminalMode && imgDisplayP === 'borne')))
               );
               
               return (
@@ -228,7 +232,9 @@ export default function KioskProductGrid({
               const imgDisplayM = menu.image_display;
               const shouldShowImage = menu.image_url && (
                 !imgDisplayM ||
-                (Array.isArray(imgDisplayM) ? imgDisplayM.includes('borne') : (imgDisplayM === 'both' || imgDisplayM === 'borne'))
+                (Array.isArray(imgDisplayM)
+                  ? (terminalMode && imgDisplayM.includes('borne'))
+                  : (imgDisplayM === 'both' || (terminalMode && imgDisplayM === 'borne')))
               );
               
               return (
