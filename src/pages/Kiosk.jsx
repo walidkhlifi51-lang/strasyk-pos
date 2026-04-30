@@ -99,10 +99,6 @@ export default function Kiosk() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [orderType, setOrderType] = useState(null); // 'sur_place' ou 'emporter'
   const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(false);
-  const [viewportSize, setViewportSize] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -111,8 +107,7 @@ export default function Kiosk() {
   const tenantIdFromUrl = urlParams.get('tenant');
   const forceMobileMode = urlParams.get('display') === 'mobile';
   const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
-  const canUseTerminalLayout = viewportSize.width >= 1024 && viewportSize.height >= 700;
-  const isTerminalMode = !forceMobileMode && terminalRouteRequested && canUseTerminalLayout;
+  const isTerminalMode = !forceMobileMode && terminalRouteRequested;
 
   // Charger les données du tenant
   useEffect(() => {
@@ -149,18 +144,6 @@ export default function Kiosk() {
     enabled: !!tenantIdFromUrl,
     refetchInterval: 5000  // Recharger toutes les 5 secondes pour détecter les changements
   });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setViewportSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', tenantIdFromUrl],
