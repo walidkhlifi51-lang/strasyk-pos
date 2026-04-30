@@ -973,7 +973,8 @@ export default function Kiosk() {
 
   if (orderSuccess) {
     const primaryColor = profile?.kiosk_primary_color || '#f97316';
-    
+    const isPaidOrder = completedOrder?.payee === true;
+
     const handlePrintTicket = () => {
       if (completedOrder) {
         const ticketHtml = generateTicketHtml(completedOrder, null, profile);
@@ -987,6 +988,44 @@ export default function Kiosk() {
         }
       }
     };
+
+    if (isTerminalMode) {
+      return (
+        <div
+          className="flex min-h-screen items-center justify-center p-4 md:p-8"
+          style={{
+            background: `linear-gradient(135deg, ${primaryColor}22 0%, #ecfeff 100%)`
+          }}
+        >
+          <div className="w-full max-w-[min(92vw,70rem)] rounded-[2rem] bg-white p-[clamp(1.75rem,3vw,3.5rem)] text-center shadow-2xl">
+            <CheckCircle className="mx-auto mb-6 h-[clamp(4.5rem,8vw,7rem)] w-[clamp(4.5rem,8vw,7rem)] text-green-500" />
+            <h1 className="mb-3 text-[clamp(2rem,4vw,4rem)] font-black text-gray-900">Merci !</h1>
+            <p className="text-[clamp(1.1rem,1.8vw,1.8rem)] text-gray-600">Votre commande</p>
+            <p
+              className="mb-5 text-[clamp(3rem,7vw,6rem)] font-black"
+              style={{ color: primaryColor }}
+            >
+              B{orderNumber}
+            </p>
+
+            <div className="mx-auto mb-6 max-w-3xl rounded-[1.5rem] border border-slate-200 bg-slate-50 px-6 py-5">
+              <p className="text-[clamp(1.05rem,1.6vw,1.5rem)] font-bold text-gray-800">
+                {isPaidOrder ? 'Commande payee' : 'Commande a regler a la caisse'}
+              </p>
+              <p className="mt-2 text-[clamp(1rem,1.45vw,1.35rem)] text-gray-600">
+                La commande B{orderNumber} est en preparation.
+              </p>
+            </div>
+
+            <div className="mx-auto max-w-3xl rounded-[1.5rem] border-2 border-dashed border-orange-300 bg-orange-50 px-6 py-5">
+              <p className="text-[clamp(1rem,1.45vw,1.3rem)] font-semibold text-orange-900">
+                Si vous souhaitez un vrai ticket detaille, demandez-le a la caisse.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-green-50 to-blue-50">
@@ -996,6 +1035,9 @@ export default function Kiosk() {
           <p className="text-lg md:text-2xl text-gray-600 mb-2">Votre commande :</p>
           <p className="text-4xl md:text-6xl font-bold mb-4 md:mb-6" style={{ color: primaryColor }}>B{orderNumber}</p>
           <p className="text-base md:text-lg text-gray-600 mb-4">La commande B{orderNumber} est en préparation</p>
+          <p className="text-sm md:text-base font-semibold text-gray-700 mb-2">
+            {isPaidOrder ? 'Commande payee' : 'Commande a regler a la caisse'}
+          </p>
           
           {completedOrder && (
             <button
