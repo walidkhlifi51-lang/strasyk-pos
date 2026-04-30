@@ -52,6 +52,34 @@ const getWelcomeImageLabel = (imageUrl) => {
   }
 };
 
+const getWelcomeTitleSizeClass = (size) => {
+  switch (size) {
+    case 'medium':
+      return 'text-[clamp(1.2rem,1.8vw,2.2rem)]';
+    case 'xlarge':
+      return 'text-[clamp(1.9rem,2.9vw,3.8rem)]';
+    case 'hero':
+      return 'text-[clamp(2.2rem,3.4vw,4.6rem)]';
+    case 'large':
+    default:
+      return 'text-[clamp(1.6rem,2.4vw,3.1rem)]';
+  }
+};
+
+const getWelcomeTitleStyleClass = (style) => {
+  switch (style) {
+    case 'italic':
+      return 'italic font-semibold tracking-[0.01em]';
+    case 'serif':
+      return 'font-serif font-bold tracking-[0.01em]';
+    case 'caps':
+      return 'font-black uppercase tracking-[0.22em]';
+    case 'bold':
+    default:
+      return 'font-black tracking-tight';
+  }
+};
+
 export default function Kiosk() {
   const [cart, setCart] = useState([]);
   const [customizingProduct, setCustomizingProduct] = useState(null);
@@ -188,6 +216,8 @@ export default function Kiosk() {
 
   const currentWelcomeImage = welcomeImages[currentImageIndex];
   const currentWelcomeImageLabel = currentWelcomeImage?.title || getWelcomeImageLabel(currentWelcomeImage?.image_url);
+  const welcomeTitleSizeClass = getWelcomeTitleSizeClass(profile?.kiosk_welcome_title_size);
+  const welcomeTitleStyleClass = getWelcomeTitleStyleClass(profile?.kiosk_welcome_title_style);
 
   const onOrderCreated = (newOrder) => {
     setIsCreatingOrder(false);
@@ -565,7 +595,7 @@ export default function Kiosk() {
                 {welcomeImages.length > 0 ? (
                   <div className="w-full max-w-[min(88vw,84rem)]">
                     <div className="mb-[clamp(0.75rem,1.5vh,1.25rem)] text-center">
-                      <p className="text-[clamp(1.6rem,2.4vw,3.1rem)] font-black tracking-tight text-gray-900">
+                      <p className={`${welcomeTitleSizeClass} ${welcomeTitleStyleClass} text-gray-900`}>
                         {currentWelcomeImageLabel}
                       </p>
                     </div>

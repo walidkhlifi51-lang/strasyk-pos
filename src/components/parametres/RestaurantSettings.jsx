@@ -37,6 +37,8 @@ const RESTAURANT_PROFILE_SCHEMA_FIELDS = new Set([
     'manages_kiosk',
     'kiosk_welcome_message',
     'kiosk_welcome_images',
+    'kiosk_welcome_title_size',
+    'kiosk_welcome_title_style',
     'kiosk_primary_color',
     'kiosk_secondary_color',
     'kiosk_card_payment_enabled',
@@ -108,6 +110,8 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 prix_differencies_par_mode: false,
                 logo_url: '',
                 kiosk_welcome_images: [],
+                kiosk_welcome_title_size: 'large',
+                kiosk_welcome_title_style: 'bold',
                 tva_rates: [
                     { rate: 20, label: "Taux Normal" },
                     { rate: 10, label: "Taux Intermédiaire" },
@@ -501,6 +505,40 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                             </label>
                                         </Button>
                                         <p className="text-xs text-gray-500 mt-2">Les images défileront automatiquement sur l'écran d'accueil</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="kiosk_welcome_title_size">Taille du titre des photos</Label>
+                                        <select
+                                            id="kiosk_welcome_title_size"
+                                            value={localProfile.kiosk_welcome_title_size || 'large'}
+                                            onChange={(e) => handleFieldChange('kiosk_welcome_title_size', e.target.value)}
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        >
+                                            <option value="medium">Moyenne</option>
+                                            <option value="large">Grande</option>
+                                            <option value="xlarge">Tres grande</option>
+                                            <option value="hero">Geante</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500">Pour ajuster le titre selon le commerce et la taille de la borne.</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="kiosk_welcome_title_style">Style d'ecriture du titre</Label>
+                                        <select
+                                            id="kiosk_welcome_title_style"
+                                            value={localProfile.kiosk_welcome_title_style || 'bold'}
+                                            onChange={(e) => handleFieldChange('kiosk_welcome_title_style', e.target.value)}
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        >
+                                            <option value="bold">Classique gras</option>
+                                            <option value="italic">Italique elegant</option>
+                                            <option value="serif">Serif raffine</option>
+                                            <option value="caps">Majuscules espacees</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500">Le style choisi s applique au titre affiche au-dessus des photos sur la vraie borne.</p>
                                     </div>
                                 </div>
                                 

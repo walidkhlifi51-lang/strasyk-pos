@@ -6,6 +6,8 @@ alter table public.restaurant_profiles
   add column if not exists tva_intracommunautaire text,
   add column if not exists kiosk_welcome_message text,
   add column if not exists kiosk_welcome_images jsonb not null default '[]'::jsonb,
+  add column if not exists kiosk_welcome_title_size text not null default 'large',
+  add column if not exists kiosk_welcome_title_style text not null default 'bold',
   add column if not exists kiosk_primary_color text,
   add column if not exists kiosk_secondary_color text,
   add column if not exists kiosk_card_payment_enabled boolean not null default false,
