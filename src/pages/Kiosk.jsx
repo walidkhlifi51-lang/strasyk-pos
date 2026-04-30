@@ -975,15 +975,44 @@ export default function Kiosk() {
     const primaryColor = profile?.kiosk_primary_color || '#f97316';
     const isPaidOrder = completedOrder?.payee === true;
 
+    const printTicketFromWindow = (ticketHtml) => {
+      const printWindow = window.open('', '_blank', 'width=420,height=720');
+      if (!printWindow) {
+        triggerPrint(ticketHtml);
+        return;
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(ticketHtml);
+      printWindow.document.close();
+
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        setTimeout(() => {
+          printWindow.close();
+        }, 800);
+      }, 500);
+    };
+
     const handlePrintTicket = async () => {
       if (completedOrder) {
         const ticketHtml = await generateTicketHtml(completedOrder, null, profile);
         if (ticketHtml) {
-          triggerPrint(ticketHtml, () => {
-            toast({
-              title: "Ticket imprimé",
-              description: "Récupérez votre ticket à l'imprimante"
+          if (isTerminalMode) {
+            printTicketFromWindow(ticketHtml);
+          } else {
+            triggerPrint(ticketHtml, () => {
+              toast({
+                title: "Ticket imprimé",
+                description: "Récupérez votre ticket à l'imprimante"
+              });
             });
+          }
+
+          toast({
+            title: "Ticket imprimé",
+            description: "Récupérez votre ticket à l'imprimante"
           });
         }
       }
