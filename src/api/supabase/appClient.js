@@ -192,8 +192,36 @@ const createEntityApi = (entityName) => {
       return maybeReturnSuccess(error);
     },
 
-    subscribe() {
-      return () => {};
+    subscribe(listener) {
+      const supabase = getSupabaseBrowserClient();
+      const channelName = `entity-${tableName}-${Math.random().toString(36).slice(2, 10)}`;
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: tableName },
+          (payload) => {
+            const eventTypeMap = {
+              INSERT: 'create',
+              UPDATE: 'update',
+              DELETE: 'delete',
+            };
+
+            const normalizedType = eventTypeMap[payload.eventType] || payload.eventType?.toLowerCase?.() || 'update';
+            const data = normalizedType === 'delete' ? payload.old : payload.new;
+            listener?.({
+              type: normalizedType,
+              action: normalizedType,
+              data,
+              raw: payload,
+            });
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     },
   };
 };
