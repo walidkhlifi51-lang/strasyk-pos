@@ -90,6 +90,7 @@ export default function Kiosk() {
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [tableNumber, setTableNumber] = useState("");
   const [promoInput, setPromoInput] = useState("");
   const [promoApplied, setPromoApplied] = useState(null);
   const [promoError, setPromoError] = useState("");
@@ -237,6 +238,7 @@ export default function Kiosk() {
       setCart([]);
       setCompletedOrder(null);
       setCustomerName("");
+      setTableNumber("");
     }, 8000);
   };
 
@@ -789,6 +791,7 @@ export default function Kiosk() {
         statut: "en_attente_paiement",
         payee: false,
         customer_name: customerName.trim() || null,
+        numero_table: kioskOrderType === 'sur_place' ? (tableNumber.trim() || null) : null,
         notes: "Commande depuis la borne - Paiement à la caisse",
         from_kiosk: true,
         print_at_counter: true,
@@ -809,6 +812,7 @@ export default function Kiosk() {
           statut: "payé",
           payee: true,
           customer_name: customerName.trim() || null,
+          numero_table: kioskOrderType === 'sur_place' ? (tableNumber.trim() || null) : null,
           mode_paiement: [{ methode: 'carte_bancaire', montant: totalTTC }],
           notes: "Commande depuis la borne - Payée par carte",
           from_kiosk: true,
@@ -879,16 +883,31 @@ export default function Kiosk() {
           </div>
 
           {/* Champ prénom */}
-          <div className="mb-6">
-            <label className="block text-lg font-semibold text-gray-700 mb-2">Votre prénom (optionnel)</label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Ex: Marie"
-              maxLength={30}
-              className="w-full text-xl border-2 border-gray-300 focus:border-orange-400 rounded-xl px-5 py-4 outline-none text-center font-medium"
-            />
+          <div className={`mb-6 grid gap-4 ${kioskOrderType === 'sur_place' ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+            <div>
+              <label className="block text-lg font-semibold text-gray-700 mb-2">Votre prénom (optionnel)</label>
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Ex: Marie"
+                maxLength={30}
+                className="w-full text-xl border-2 border-gray-300 focus:border-orange-400 rounded-xl px-5 py-4 outline-none text-center font-medium"
+              />
+            </div>
+            {kioskOrderType === 'sur_place' && (
+              <div>
+                <label className="block text-lg font-semibold text-gray-700 mb-2">Numéro de table</label>
+                <input
+                  type="text"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value)}
+                  placeholder="Ex: 12"
+                  maxLength={12}
+                  className="w-full text-xl border-2 border-gray-300 focus:border-orange-400 rounded-xl px-5 py-4 outline-none text-center font-medium"
+                />
+              </div>
+            )}
           </div>
 
           <div className="mb-6">

@@ -34,7 +34,7 @@ export async function generateTicketHtml(order, customer, profile) {
         'livraison': 'LIVRAISON'
     };
     const orderTypeLabel = orderTypeLabels[order.type_commande] || 'COMMANDE';
-    let tableLabel = order?.table?.nom || order?.table_name || order?.table_nom || order?.nom_table || null;
+    let tableLabel = order?.table?.nom || order?.table_name || order?.table_nom || order?.nom_table || order?.numero_table || null;
     const beeperLabel = order?.numero_bipeur ? String(order.numero_bipeur) : null;
 
     if (!tableLabel && order?.table_id) {

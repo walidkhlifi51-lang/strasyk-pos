@@ -88,9 +88,9 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
             <div className="font-bold text-lg text-gray-900 mb-1">
               Commande #{order.from_kiosk ? 'B' : ''}{order.numero_commande || order.numero_caisse || order.id?.slice(-4) || '...'}
             </div>
-            {order.type_commande === 'sur_place' && (order.table?.nom || order.table_name) ? (
+            {order.type_commande === 'sur_place' && (order.table?.nom || order.table_name || order.numero_table) ? (
               <div className="text-sm font-semibold text-orange-600 mb-2">
-                Table {order.table?.nom || order.table_name}
+                Table {order.table?.nom || order.table_name || order.numero_table}
               </div>
             ) : null}
             {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
@@ -261,9 +261,9 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                   {typeConfig[order.type_commande]?.label}
                 </div>
                 <div className="text-[10px] mt-1">{orderDate.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                {order.type_commande === 'sur_place' && (order.table?.nom || order.table_name) ? (
+                {order.type_commande === 'sur_place' && (order.table?.nom || order.table_name || order.numero_table) ? (
                   <div className="text-[11px] font-bold mt-2 border-2 border-black inline-block px-3 py-1">
-                    TABLE {order.table?.nom || order.table_name}
+                    TABLE {order.table?.nom || order.table_name || order.numero_table}
                   </div>
                 ) : null}
                 {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
