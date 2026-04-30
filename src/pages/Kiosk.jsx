@@ -678,33 +678,6 @@ export default function Kiosk() {
             />
           )}
           
-          {welcomeImages.length > 0 && (
-            <div className="relative w-full max-h-64 mb-6 overflow-hidden rounded-xl">
-              {welcomeImages.map((imageItem, idx) => (
-                <img 
-                  key={idx}
-                  src={imageItem.image_url} 
-                  alt={`Image ${idx + 1}`}
-                  className={`w-full h-64 object-cover transition-opacity duration-1000 ${
-                    idx === currentImageIndex ? 'opacity-100' : 'opacity-0 absolute top-0 left-0'
-                  }`}
-                />
-              ))}
-              {welcomeImages.length > 1 && (
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2">
-                  {welcomeImages.map((_, idx) => (
-                    <div 
-                      key={idx}
-                      className={`w-2 h-2 rounded-full transition-all ${
-                        idx === currentImageIndex ? 'bg-white w-6' : 'bg-white/50'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          
           <h1 className="text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4">
             {tenantData?.nom_commercial || "Bienvenue"}
           </h1>
