@@ -99,13 +99,19 @@ export default function Kiosk() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [orderType, setOrderType] = useState(null); // 'sur_place' ou 'emporter'
   const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(false);
+  const [viewportSize, setViewportSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Récupérer le tenant_id depuis l'URL (format: /kiosk?tenant=xxx)
   const urlParams = new URLSearchParams(window.location.search);
   const tenantIdFromUrl = urlParams.get('tenant');
-  const isTerminalMode = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
+  const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
+  const canUseTerminalLayout = viewportSize.width >= 1024 && viewportSize.height >= 700;
+  const isTerminalMode = terminalRouteRequested && canUseTerminalLayout;
 
   // Charger les données du tenant
   useEffect(() => {
@@ -142,6 +148,18 @@ export default function Kiosk() {
     enabled: !!tenantIdFromUrl,
     refetchInterval: 5000  // Recharger toutes les 5 secondes pour détecter les changements
   });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', tenantIdFromUrl],
