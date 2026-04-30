@@ -22,6 +22,7 @@ grant select on public.tenants to anon;
 grant select on public.products to anon;
 grant select on public.categories to anon;
 grant select on public.restaurant_profiles to anon;
+grant select, insert on public.orders to anon;
 grant select on public.offers to anon;
 grant select on public.ingredients to anon;
 grant select on public.product_ingredients to anon;
@@ -43,6 +44,26 @@ on public.restaurant_profiles
 for select
 to anon
 using (manages_kiosk = true);
+
+drop policy if exists orders_select_kiosk_public on public.orders;
+create policy orders_select_kiosk_public
+on public.orders
+for select
+to anon
+using (
+  from_kiosk = true
+  and public.kiosk_tenant_is_public(tenant_id)
+);
+
+drop policy if exists orders_insert_kiosk_public on public.orders;
+create policy orders_insert_kiosk_public
+on public.orders
+for insert
+to anon
+with check (
+  from_kiosk = true
+  and public.kiosk_tenant_is_public(tenant_id)
+);
 
 drop policy if exists categories_select_kiosk_public on public.categories;
 create policy categories_select_kiosk_public
