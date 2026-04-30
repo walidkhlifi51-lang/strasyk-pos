@@ -975,9 +975,9 @@ export default function Kiosk() {
     const primaryColor = profile?.kiosk_primary_color || '#f97316';
     const isPaidOrder = completedOrder?.payee === true;
 
-    const handlePrintTicket = () => {
+    const handlePrintTicket = async () => {
       if (completedOrder) {
-        const ticketHtml = generateTicketHtml(completedOrder, null, profile);
+        const ticketHtml = await generateTicketHtml(completedOrder, null, profile);
         if (ticketHtml) {
           triggerPrint(ticketHtml, () => {
             toast({
@@ -1022,6 +1022,16 @@ export default function Kiosk() {
                 Si vous souhaitez un vrai ticket detaille, demandez-le a la caisse.
               </p>
             </div>
+
+            {completedOrder && (
+              <button
+                onClick={handlePrintTicket}
+                className="mt-6 inline-flex items-center justify-center gap-3 rounded-[1.25rem] bg-blue-600 px-[clamp(1.75rem,3vw,3rem)] py-[clamp(1rem,1.8vh,1.35rem)] text-[clamp(1rem,1.4vw,1.3rem)] font-bold text-white shadow-lg transition-all hover:scale-[1.02] hover:bg-blue-700"
+              >
+                <Printer className="h-6 w-6" />
+                Imprimer mon ticket
+              </button>
+            )}
           </div>
         </div>
       );
