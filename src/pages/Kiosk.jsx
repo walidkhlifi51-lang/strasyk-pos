@@ -109,9 +109,10 @@ export default function Kiosk() {
   // Récupérer le tenant_id depuis l'URL (format: /kiosk?tenant=xxx)
   const urlParams = new URLSearchParams(window.location.search);
   const tenantIdFromUrl = urlParams.get('tenant');
+  const forceMobileMode = urlParams.get('display') === 'mobile';
   const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
   const canUseTerminalLayout = viewportSize.width >= 1024 && viewportSize.height >= 700;
-  const isTerminalMode = terminalRouteRequested && canUseTerminalLayout;
+  const isTerminalMode = !forceMobileMode && terminalRouteRequested && canUseTerminalLayout;
 
   // Charger les données du tenant
   useEffect(() => {
@@ -221,7 +222,7 @@ export default function Kiosk() {
 
   // Carrousel d'images - DOIT être avant les retours conditionnels
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const welcomeImages = normalizeKioskWelcomeImages(profile?.kiosk_welcome_images);
+  const welcomeImages = isTerminalMode ? normalizeKioskWelcomeImages(profile?.kiosk_welcome_images) : [];
   
   useEffect(() => {
     if (welcomeImages.length > 1) {

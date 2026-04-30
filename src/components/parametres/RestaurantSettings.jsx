@@ -389,7 +389,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                                 <p className="text-sm font-medium text-blue-900 mb-2">Lien borne telephone :</p>
                                 <code className="text-xs bg-white px-3 py-2 rounded border block overflow-x-auto">
-                                    {window.location.origin}/Kiosk?tenant={currentTenant?.id}
+                                    {window.location.origin}/Kiosk?tenant={currentTenant?.id}&display=mobile
                                 </code>
                                 <p className="text-xs text-blue-700 mt-2">
                                     Conservez ce lien pour le QR code et l usage smartphone.
@@ -406,7 +406,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                 </p>
                             </div>
 
-                            <KioskQRCode url={`${window.location.origin}/Kiosk?tenant=${currentTenant?.id}`} profile={localProfile} />
+                            <KioskQRCode url={`${window.location.origin}/Kiosk?tenant=${currentTenant?.id}&display=mobile`} profile={localProfile} />
                             
                             <div className="space-y-4 pt-4 border-t">
                                 <h4 className="font-semibold text-sm">Personnalisation de la borne</h4>
