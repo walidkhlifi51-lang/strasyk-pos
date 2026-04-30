@@ -222,7 +222,9 @@ export default function Kiosk() {
 
   // Carrousel d'images - DOIT être avant les retours conditionnels
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const welcomeImages = isTerminalMode ? normalizeKioskWelcomeImages(profile?.kiosk_welcome_images) : [];
+  const welcomeImages = isTerminalMode
+    ? normalizeKioskWelcomeImages(profile?.kiosk_terminal_welcome_images || profile?.kiosk_welcome_images)
+    : [];
   
   useEffect(() => {
     if (welcomeImages.length > 1) {

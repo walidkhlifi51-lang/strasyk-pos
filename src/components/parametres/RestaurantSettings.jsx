@@ -37,6 +37,7 @@ const RESTAURANT_PROFILE_SCHEMA_FIELDS = new Set([
     'manages_kiosk',
     'kiosk_welcome_message',
     'kiosk_welcome_images',
+    'kiosk_terminal_welcome_images',
     'kiosk_welcome_title_size',
     'kiosk_welcome_title_style',
     'kiosk_primary_color',
@@ -90,6 +91,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
             setLocalProfile({
                 ...profile,
                 kiosk_welcome_images: normalizeKioskWelcomeImages(profile.kiosk_welcome_images),
+                kiosk_terminal_welcome_images: normalizeKioskWelcomeImages(profile.kiosk_terminal_welcome_images || profile.kiosk_welcome_images),
             });
         } else {
             setLocalProfile({
@@ -110,6 +112,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 prix_differencies_par_mode: false,
                 logo_url: '',
                 kiosk_welcome_images: [],
+                kiosk_terminal_welcome_images: [],
                 kiosk_welcome_title_size: 'large',
                 kiosk_welcome_title_style: 'bold',
                 tva_rates: [
@@ -423,11 +426,11 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                 </div>
                                 
                                 <div className="space-y-2">
-                                    <Label>Images d'accueil de la borne (carrousel)</Label>
+                                    <Label>Images d'accueil de la vraie borne (grand ecran)</Label>
                                     
-                                    {(localProfile.kiosk_welcome_images || []).length > 0 && (
+                                    {(localProfile.kiosk_terminal_welcome_images || []).length > 0 && (
                                         <div className="space-y-3 mb-3">
-                                            {localProfile.kiosk_welcome_images.map((imageItem, idx) => (
+                                            {localProfile.kiosk_terminal_welcome_images.map((imageItem, idx) => (
                                                 <div key={idx} className="grid grid-cols-[120px_1fr_auto] gap-3 items-start rounded-lg border p-3 bg-white">
                                                     <img src={imageItem.image_url} alt={`Image ${idx + 1}`} className="w-full h-24 rounded-md object-cover border" />
                                                     <div className="space-y-2">
@@ -436,21 +439,21 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                                             id={`kiosk-image-title-${idx}`}
                                                             value={imageItem.title || ''}
                                                             onChange={(e) => {
-                                                                const newImages = [...(localProfile.kiosk_welcome_images || [])];
+                                                                const newImages = [...(localProfile.kiosk_terminal_welcome_images || [])];
                                                                 newImages[idx] = { ...newImages[idx], title: e.target.value };
-                                                                handleFieldChange('kiosk_welcome_images', newImages);
+                                                                handleFieldChange('kiosk_terminal_welcome_images', newImages);
                                                             }}
                                                             placeholder={`Ex: Burger maison ${idx + 1}`}
                                                         />
-                                                        <p className="text-xs text-gray-500">Ce titre s affichera au-dessus de la photo sur la borne.</p>
+                                                        <p className="text-xs text-gray-500">Ce titre s affichera au-dessus de la photo sur la vraie borne uniquement.</p>
                                                     </div>
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.preventDefault();
-                                                            const newImages = [...(localProfile.kiosk_welcome_images || [])];
+                                                            const newImages = [...(localProfile.kiosk_terminal_welcome_images || [])];
                                                             newImages.splice(idx, 1);
-                                                            handleFieldChange('kiosk_welcome_images', newImages);
+                                                            handleFieldChange('kiosk_terminal_welcome_images', newImages);
                                                         }}
                                                         className="bg-red-500 text-white rounded-full p-2"
                                                     >
@@ -480,8 +483,8 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                                         image_url: r.file_url,
                                                         title: files[index]?.name?.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ') || '',
                                                     }));
-                                                    const currentImages = localProfile.kiosk_welcome_images || [];
-                                                    handleFieldChange('kiosk_welcome_images', [...currentImages, ...newImages]);
+                                                    const currentImages = localProfile.kiosk_terminal_welcome_images || [];
+                                                    handleFieldChange('kiosk_terminal_welcome_images', [...currentImages, ...newImages]);
                                                     toast({
                                                         title: "Images téléchargées",
                                                         description: `${files.length} image(s) ajoutée(s). Cliquez sur 'Enregistrer' pour sauvegarder.`,
