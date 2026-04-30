@@ -5,9 +5,9 @@ import { useSecurity } from '@/components/contexts/SecurityContext';
 import { generateTicketHtml, triggerPrint } from './ticketUtils';
 
 /**
- * Composant invisible monté dans le layout global.
- * S'abonne aux nouvelles commandes web (from_web) et borne (from_kiosk) avec print_at_counter=true
- * et déclenche l'impression automatiquement, quelle que soit la page ouverte.
+ * Composant invisible monte dans le layout global.
+ * Ecoute les commandes web et borne a imprimer cote caisse.
+ * Realtime reste prioritaire, avec un poll de secours si Realtime loupe un evenement.
  */
 export default function GlobalPrintListener() {
   const { currentTenant } = useTenant();
@@ -17,35 +17,29 @@ export default function GlobalPrintListener() {
   useEffect(() => {
     if (!currentTenant?.id || !profile?.impression_auto) return;
 
-    const unsubscribe = appClient.entities.Order.subscribe(async (event) => {
-      if (event.type !== 'create' && event.type !== 'update') return;
-
-      const order = event.data;
+    const processOrderForPrinting = async (order, source = 'listener') => {
       if (!order) return;
       if (order.tenant_id !== currentTenant.id) return;
 
       const isWebOrder = order.from_web === true;
       const isKioskOrder = order.from_kiosk === true;
-
-      // Éviter les impressions en double
-      const printKey = `${order.id}-${event.type}`;
-      if (printedOrderIds.current.has(printKey)) return;
+      if (!isWebOrder && !isKioskOrder) return;
+      if (order.print_at_counter !== true) return;
+      if (printedOrderIds.current.has(order.id)) return;
 
       let shouldPrint = false;
 
-      // Commandes web : imprimer à la création avec statut en_attente/en_preparation
-      if (isWebOrder && event.type === 'create') {
+      if (isWebOrder) {
         shouldPrint = ['en_attente', 'en_preparation', 'en_attente_paiement'].includes(order.statut);
       }
 
-      // Commandes borne : imprimer quand print_at_counter=true
-      if (isKioskOrder && order.print_at_counter === true) {
+      if (isKioskOrder) {
         shouldPrint = true;
       }
 
       if (!shouldPrint) return;
 
-      printedOrderIds.current.add(printKey);
+      printedOrderIds.current.add(order.id);
 
       try {
         let customer = null;
@@ -58,23 +52,45 @@ export default function GlobalPrintListener() {
 
         const html = await generateTicketHtml(order, customer, profile);
         if (html) {
-          console.log(`🖨️ [GlobalPrint] Impression automatique commande #${order.numero_caisse || order.id?.slice(-4)} (${isWebOrder ? 'web' : 'borne'})`);
+          console.log(
+            `🖨️ [GlobalPrint] Impression automatique commande #${order.numero_caisse || order.id?.slice(-4)} (${isWebOrder ? 'web' : 'borne'} / ${source})`
+          );
           triggerPrint(html);
         }
 
-        // Pour les commandes borne : reset print_at_counter après impression
-        if (isKioskOrder && order.print_at_counter === true) {
-          try {
-            await appClient.entities.Order.update(order.id, { print_at_counter: false });
-          } catch (_) {}
-        }
+        try {
+          await appClient.entities.Order.update(order.id, { print_at_counter: false });
+        } catch (_) {}
       } catch (err) {
         console.error('❌ [GlobalPrint] Erreur impression:', err);
-        printedOrderIds.current.delete(printKey);
+        printedOrderIds.current.delete(order.id);
       }
+    };
+
+    const unsubscribe = appClient.entities.Order.subscribe(async (event) => {
+      if (event.type !== 'create' && event.type !== 'update') return;
+      await processOrderForPrinting(event.data, `realtime-${event.type}`);
     });
 
-    return () => unsubscribe();
+    const pollInterval = setInterval(async () => {
+      try {
+        const pendingOrders = await appClient.entities.Order.filter({
+          tenant_id: currentTenant.id,
+          print_at_counter: true,
+        });
+
+        for (const order of pendingOrders || []) {
+          await processOrderForPrinting(order, 'poll');
+        }
+      } catch (error) {
+        console.error('❌ [GlobalPrint] Erreur verification file impression:', error);
+      }
+    }, 4000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
   }, [currentTenant?.id, profile?.impression_auto, profile]);
 
   return null;
