@@ -462,36 +462,36 @@ export default function Kiosk() {
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
       >
-        <div className={`text-center w-full ${isTerminalMode ? 'max-w-[1600px]' : 'max-w-5xl'}`}>
-          <h1 className="text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4">
+        <div className={`text-center w-full ${isTerminalMode ? 'max-w-[min(96vw,112rem)]' : 'max-w-5xl'}`}>
+          <h1 className={isTerminalMode ? 'mb-3 text-[clamp(2rem,3vw,4rem)] font-bold text-gray-800' : 'text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4'}>
             Comment souhaitez-vous consommer ?
           </h1>
-          <p className="text-base md:text-2xl text-gray-600 mb-6 md:mb-12">Choisissez votre mode de commande</p>
+          <p className={isTerminalMode ? 'mb-8 text-[clamp(1rem,1.5vw,1.75rem)] text-gray-600' : 'text-base md:text-2xl text-gray-600 mb-6 md:mb-12'}>Choisissez votre mode de commande</p>
           
-          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 mx-auto ${isTerminalMode ? 'max-w-[1400px]' : 'max-w-4xl'}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 mx-auto ${isTerminalMode ? 'max-w-[min(92vw,96rem)]' : 'max-w-4xl'}`}>
             {/* Sur place */}
             <button
               onClick={() => {
                 setOrderType('sur_place');
                 setShowOrderTypeSelection(false);
               }}
-              className="group relative bg-white rounded-3xl shadow-2xl p-6 md:p-12 transition-all duration-300 hover:shadow-3xl hover:scale-105"
+              className={`group relative bg-white rounded-3xl shadow-2xl transition-all duration-300 hover:shadow-3xl hover:scale-[1.02] ${isTerminalMode ? 'min-h-[clamp(22rem,42vh,32rem)] p-[clamp(1.75rem,3vw,3.5rem)]' : 'p-6 md:p-12'}`}
             >
               <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-10 transition-opacity duration-300"
                 style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
               ></div>
               
               <div className="relative">
-                <div className="w-20 h-20 md:w-32 md:h-32 mx-auto mb-4 md:mb-6 rounded-full flex items-center justify-center text-white"
+                <div className={`mx-auto rounded-full flex items-center justify-center text-white ${isTerminalMode ? 'mb-[clamp(1.25rem,2vw,2rem)] h-[clamp(5.5rem,9vw,9rem)] w-[clamp(5.5rem,9vw,9rem)]' : 'w-20 h-20 md:w-32 md:h-32 mb-4 md:mb-6'}`}
                   style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
                 >
-                  <svg className="w-12 h-12 md:w-20 md:h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={isTerminalMode ? 'h-[clamp(2.75rem,4.5vw,4.75rem)] w-[clamp(2.75rem,4.5vw,4.75rem)]' : 'w-12 h-12 md:w-20 md:h-20'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
                 </div>
                 
-                <h2 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2">Sur place</h2>
-                <p className="text-base md:text-xl text-gray-600">Je consomme ici</p>
+                <h2 className={isTerminalMode ? 'mb-2 text-[clamp(1.75rem,2.5vw,3rem)] font-bold text-gray-800' : 'text-2xl md:text-4xl font-bold text-gray-800 mb-2'}>Sur place</h2>
+                <p className={isTerminalMode ? 'text-[clamp(1rem,1.4vw,1.5rem)] text-gray-600' : 'text-base md:text-xl text-gray-600'}>Je consomme ici</p>
               </div>
             </button>
 
@@ -501,17 +501,17 @@ export default function Kiosk() {
                 setOrderType('emporter');
                 setShowOrderTypeSelection(false);
               }}
-              className="group relative bg-white rounded-3xl shadow-2xl p-6 md:p-12 transition-all duration-300 hover:shadow-3xl hover:scale-105"
+              className={`group relative bg-white rounded-3xl shadow-2xl transition-all duration-300 hover:shadow-3xl hover:scale-[1.02] ${isTerminalMode ? 'min-h-[clamp(22rem,42vh,32rem)] p-[clamp(1.75rem,3vw,3.5rem)]' : 'p-6 md:p-12'}`}
             >
               <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-10 transition-opacity duration-300"
                 style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
               ></div>
               
               <div className="relative">
-                <div className="w-20 h-20 md:w-32 md:h-32 mx-auto mb-4 md:mb-6 rounded-full flex items-center justify-center text-white"
+                <div className={`mx-auto rounded-full flex items-center justify-center text-white ${isTerminalMode ? 'mb-[clamp(1.25rem,2vw,2rem)] h-[clamp(5.5rem,9vw,9rem)] w-[clamp(5.5rem,9vw,9rem)]' : 'w-20 h-20 md:w-32 md:h-32 mb-4 md:mb-6'}`}
                   style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
                 >
-                  <svg className="w-12 h-12 md:w-20 md:h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={isTerminalMode ? 'h-[clamp(2.75rem,4.5vw,4.75rem)] w-[clamp(2.75rem,4.5vw,4.75rem)]' : 'w-12 h-12 md:w-20 md:h-20'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
@@ -534,26 +534,26 @@ export default function Kiosk() {
     if (isTerminalMode) {
       return (
         <div
-          className="min-h-screen px-8 py-8"
+          className="min-h-screen px-[clamp(1rem,2vw,2rem)] py-[clamp(1rem,2vh,2rem)]"
           style={{
             background: `linear-gradient(135deg, ${primaryColor}18 0%, ${secondaryColor}18 100%)`
           }}
         >
-          <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-[1700px] flex-col rounded-[2rem] bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-center gap-6 border-b px-10 py-8">
-              <div className="flex items-center gap-6 min-w-0">
+          <div className="mx-auto flex min-h-[calc(100vh-clamp(2rem,4vh,4rem))] w-full max-w-[min(96vw,112rem)] flex-col overflow-hidden rounded-[clamp(1.5rem,2vw,2rem)] bg-white shadow-2xl">
+            <div className="flex items-center justify-center gap-[clamp(1rem,2vw,1.5rem)] border-b px-[clamp(1rem,3vw,2.5rem)] py-[clamp(1rem,2.5vh,2rem)]">
+              <div className="flex items-center gap-[clamp(1rem,2vw,1.5rem)] min-w-0">
                 {profile?.logo_url && (
                   <img
                     src={profile.logo_url}
                     alt="Logo"
-                    className="h-28 w-28 shrink-0 rounded-2xl object-contain bg-white"
+                    className="h-[clamp(5rem,8vw,8rem)] w-[clamp(5rem,8vw,8rem)] shrink-0 rounded-[clamp(1rem,1.6vw,1.5rem)] object-contain bg-white"
                   />
                 )}
                 <div className="min-w-0 text-center">
-                  <h1 className="truncate text-6xl font-black tracking-tight text-gray-900">
+                  <h1 className="truncate text-[clamp(2rem,4.2vw,4.75rem)] font-black tracking-tight text-gray-900">
                     {tenantData?.nom_commercial || profile?.nom_etablissement || "Bienvenue"}
                   </h1>
-                  <p className="mt-3 text-2xl text-gray-500">
+                  <p className="mt-3 text-[clamp(1rem,1.5vw,1.8rem)] text-gray-500">
                     {profile?.telephone || ""}
                   </p>
                 </div>
@@ -561,15 +561,15 @@ export default function Kiosk() {
             </div>
 
             <div className="flex flex-1 flex-col bg-slate-50">
-              <div className="flex flex-1 items-center justify-center p-8">
+              <div className="flex flex-1 items-center justify-center p-[clamp(1rem,2vw,2rem)]">
                 {welcomeImages.length > 0 ? (
-                  <div className="w-full max-w-[1320px]">
-                    <div className="mb-5 text-center">
-                      <p className="text-4xl font-black tracking-tight text-gray-900">
+                  <div className="w-full max-w-[min(88vw,84rem)]">
+                    <div className="mb-[clamp(0.75rem,1.5vh,1.25rem)] text-center">
+                      <p className="text-[clamp(1.6rem,2.4vw,3.1rem)] font-black tracking-tight text-gray-900">
                         {currentWelcomeImageLabel}
                       </p>
                     </div>
-                    <div className="relative h-[58vh] min-h-[520px] max-h-[720px] w-full overflow-hidden rounded-[2rem] shadow-xl">
+                    <div className="relative h-[clamp(20rem,48vh,44rem)] min-h-[20rem] w-full overflow-hidden rounded-[clamp(1.25rem,2vw,2rem)] shadow-xl">
                     {welcomeImages.map((imageItem, idx) => (
                       <img
                         key={idx}
@@ -580,8 +580,8 @@ export default function Kiosk() {
                           }`}
                         />
                       ))}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-8 pb-8 pt-24">
-                        <p className="text-3xl font-bold text-white">
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-[clamp(1rem,2vw,2rem)] pb-[clamp(1rem,2vh,2rem)] pt-[clamp(3rem,9vh,6rem)]">
+                        <p className="text-[clamp(1.15rem,1.9vw,2.2rem)] font-bold text-white">
                           {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
                         </p>
                       </div>
@@ -589,14 +589,14 @@ export default function Kiosk() {
                   </div>
                 ) : (
                   <div
-                    className="flex h-full min-h-[520px] w-full max-w-[1320px] items-center justify-center rounded-[2rem] p-10 text-center text-white shadow-xl"
+                    className="flex h-full min-h-[20rem] w-full max-w-[min(88vw,84rem)] items-center justify-center rounded-[clamp(1.25rem,2vw,2rem)] p-[clamp(1.5rem,3vw,2.5rem)] text-center text-white shadow-xl"
                     style={{
                       background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
                     }}
                   >
                     <div>
-                      <p className="text-5xl font-black">{tenantData?.nom_commercial || "Bienvenue"}</p>
-                      <p className="mt-5 text-2xl opacity-95">
+                      <p className="text-[clamp(2rem,4vw,4rem)] font-black">{tenantData?.nom_commercial || "Bienvenue"}</p>
+                      <p className="mt-5 text-[clamp(1rem,1.6vw,1.8rem)] opacity-95">
                         {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
                       </p>
                     </div>
@@ -604,8 +604,8 @@ export default function Kiosk() {
                 )}
               </div>
 
-              <div className="border-t bg-white px-10 py-8 text-center">
-                <p className="mx-auto max-w-5xl text-2xl leading-relaxed text-gray-600">
+              <div className="border-t bg-white px-[clamp(1rem,3vw,2.5rem)] py-[clamp(1rem,2.5vh,2rem)] text-center">
+                <p className="mx-auto max-w-[min(88vw,72rem)] text-[clamp(1rem,1.4vw,1.65rem)] leading-relaxed text-gray-600">
                   {profile?.kiosk_welcome_message || "Commandez en toute simplicite"}
                 </p>
                 <button
@@ -613,7 +613,7 @@ export default function Kiosk() {
                     setShowWelcome(false);
                     setShowOrderTypeSelection(true);
                   }}
-                  className="mt-8 rounded-[1.5rem] px-12 py-6 text-3xl font-black text-white shadow-xl transition-all hover:scale-105"
+                  className="mt-[clamp(1rem,2vh,2rem)] rounded-[clamp(1rem,1.6vw,1.5rem)] px-[clamp(2rem,4vw,4rem)] py-[clamp(1rem,2vh,1.75rem)] text-[clamp(1.2rem,2vw,2.25rem)] font-black text-white shadow-xl transition-all hover:scale-[1.03]"
                   style={{
                     background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
                   }}
@@ -623,7 +623,7 @@ export default function Kiosk() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t bg-slate-50 px-10 py-5 text-lg text-gray-600">
+            <div className="flex items-center justify-between border-t bg-slate-50 px-[clamp(1rem,3vw,2.5rem)] py-[clamp(0.9rem,1.8vh,1.4rem)] text-[clamp(0.9rem,1.15vw,1.15rem)] text-gray-600">
               <div>{profile?.adresse || "Merci de votre visite"}</div>
               <div>{profile?.telephone || ""}</div>
             </div>
@@ -817,13 +817,13 @@ export default function Kiosk() {
           background: `linear-gradient(135deg, ${primaryColor}22 0%, ${secondaryColor}22 100%)`
         }}
       >
-        <div className={`text-center w-full bg-white rounded-3xl shadow-2xl ${isTerminalMode ? 'max-w-[1500px] p-8 md:p-14' : 'max-w-3xl p-6 md:p-12'}`}>
-          <div className="w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6"
+        <div className={`text-center w-full bg-white rounded-3xl shadow-2xl ${isTerminalMode ? 'max-w-[min(94vw,96rem)] p-[clamp(1.5rem,3vw,3.5rem)]' : 'max-w-3xl p-6 md:p-12'}`}>
+          <div className={`${isTerminalMode ? 'mb-[clamp(1rem,2vh,1.75rem)] h-[clamp(4.5rem,7vw,7rem)] w-[clamp(4.5rem,7vw,7rem)]' : 'w-16 h-16 md:w-24 md:h-24 mb-4 md:mb-6'} rounded-full flex items-center justify-center mx-auto`}
             style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
           >
-            <ShoppingBag className="w-8 h-8 md:w-12 md:h-12 text-white" />
+            <ShoppingBag className={isTerminalMode ? 'h-[clamp(2rem,3vw,3.5rem)] w-[clamp(2rem,3vw,3.5rem)] text-white' : 'w-8 h-8 md:w-12 md:h-12 text-white'} />
           </div>
-          <h1 className="text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4">Récapitulatif</h1>
+          <h1 className={isTerminalMode ? 'mb-3 text-[clamp(2rem,3vw,3.75rem)] font-bold text-gray-800' : 'text-2xl md:text-5xl font-bold text-gray-800 mb-3 md:mb-4'}>Récapitulatif</h1>
           {offerDiscounts.length > 0 && (
             <div className="mb-3 space-y-1">
               {offerDiscounts.map(d => (
@@ -838,8 +838,8 @@ export default function Kiosk() {
               <span>🏷️ Code promo ({promoApplied.code})</span><span>-{promoDiscount.toFixed(2)}€</span>
             </div>
           )}
-          <p className="text-lg md:text-2xl text-gray-600 mb-2">Total à payer :</p>
-          <p className="text-4xl md:text-6xl font-bold mb-5 md:mb-8" style={{ color: primaryColor }}>{totalTTC.toFixed(2)} €</p>
+          <p className={isTerminalMode ? 'mb-2 text-[clamp(1.1rem,1.6vw,1.8rem)] text-gray-600' : 'text-lg md:text-2xl text-gray-600 mb-2'}>Total à payer :</p>
+          <p className={isTerminalMode ? 'mb-6 text-[clamp(2.5rem,5vw,5rem)] font-bold' : 'text-4xl md:text-6xl font-bold mb-5 md:mb-8'} style={{ color: primaryColor }}>{totalTTC.toFixed(2)} €</p>
 
           {/* Code promo */}
           <div className="mb-5">
@@ -885,15 +885,15 @@ export default function Kiosk() {
           </div>
 
           <div className="mb-6">
-            <p className="text-xl font-semibold text-gray-700 mb-4">Comment souhaitez-vous payer ?</p>
+            <p className={isTerminalMode ? 'mb-4 text-[clamp(1.1rem,1.6vw,1.6rem)] font-semibold text-gray-700' : 'text-xl font-semibold text-gray-700 mb-4'}>Comment souhaitez-vous payer ?</p>
             <div className={`grid ${cardPaymentEnabled ? 'grid-cols-2' : 'grid-cols-1'} ${isTerminalMode ? 'gap-6 max-w-[1200px] mx-auto' : 'gap-4'}`}>
               {cardPaymentEnabled && (
                 <button
                   onClick={handleCardPayment}
                   disabled={isCreatingOrder}
-                  className="flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-base md:text-xl font-bold py-5 md:py-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-2xl transition-all transform hover:scale-[1.03] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${isTerminalMode ? 'min-h-[clamp(10rem,24vh,15rem)] py-[clamp(1.25rem,2.5vh,2rem)] text-[clamp(1rem,1.5vw,1.5rem)]' : 'text-base md:text-xl py-5 md:py-8'}`}
                 >
-                  <CreditCard className="w-8 h-8 md:w-12 md:h-12" />
+                  <CreditCard className={isTerminalMode ? 'h-[clamp(2rem,3vw,3.5rem)] w-[clamp(2rem,3vw,3.5rem)]' : 'w-8 h-8 md:w-12 md:h-12'} />
                   Payer par carte
                 </button>
               )}
@@ -901,12 +901,12 @@ export default function Kiosk() {
               <button
                 onClick={handlePayAtCounter}
                 disabled={isCreatingOrder}
-                className="flex flex-col items-center justify-center gap-3 text-white text-base md:text-xl font-bold py-5 md:py-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex flex-col items-center justify-center gap-3 text-white font-bold rounded-2xl transition-all transform hover:scale-[1.03] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${isTerminalMode ? 'min-h-[clamp(10rem,24vh,15rem)] py-[clamp(1.25rem,2.5vh,2rem)] text-[clamp(1rem,1.5vw,1.5rem)]' : 'text-base md:text-xl py-5 md:py-8'}`}
                 style={{
                   background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
                 }}
               >
-                <Wallet className="w-8 h-8 md:w-12 md:h-12" />
+                <Wallet className={isTerminalMode ? 'h-[clamp(2rem,3vw,3.5rem)] w-[clamp(2rem,3vw,3.5rem)]' : 'w-8 h-8 md:w-12 md:h-12'} />
                 Payer à la caisse
               </button>
             </div>
@@ -1053,7 +1053,7 @@ export default function Kiosk() {
           </div>
 
           {/* Panier - desktop uniquement */}
-        <div className={`hidden md:flex flex-col border-l bg-white ${isTerminalMode ? 'w-[30rem]' : 'w-96'}`}>
+        <div className={`hidden md:flex flex-col border-l bg-white ${isTerminalMode ? 'w-[clamp(22rem,28vw,30rem)]' : 'w-96'}`}>
           <KioskCart
             cart={cart}
             onUpdateQuantity={handleUpdateQuantity}
