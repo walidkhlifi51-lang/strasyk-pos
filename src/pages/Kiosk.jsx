@@ -8,7 +8,9 @@ import KioskCart from "../components/borne/KioskCart";
 import ProductCustomizationModal from "../components/caisse/ProductCustomizationModal";
 import MenuCustomizationModal from "../components/caisse/MenuCustomizationModal";
 import { useToast } from "@/components/ui/use-toast";
-import { generateTicketHtml, triggerPrint } from "../components/caisse/ticketUtils";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { generateKioskClientReceiptHtml, generateTicketHtml, triggerPrint } from "../components/caisse/ticketUtils";
 import { calculateOfferDiscounts } from "@/utils/offerUtils";
 import { computeTaxSummaryFromArticles } from "../components/utils/taxUtils";
 
@@ -80,6 +82,65 @@ const getWelcomeTitleStyleClass = (style) => {
   }
 };
 
+const DEFAULT_KIOSK_EXIT_CODE = '2580';
+
+const getFullscreenElement = () => (
+  document.fullscreenElement
+  || document.webkitFullscreenElement
+  || document.mozFullScreenElement
+  || document.msFullscreenElement
+);
+
+const requestAppFullscreen = async () => {
+  const element = document.documentElement;
+  if (!element) return false;
+
+  try {
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
+      return true;
+    }
+    if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+      return true;
+    }
+    if (element.mozRequestFullScreen) {
+      element.mozRequestFullScreen();
+      return true;
+    }
+    if (element.msRequestFullscreen) {
+      element.msRequestFullscreen();
+      return true;
+    }
+  } catch (error) {
+    console.warn('[Kiosk] Impossible d activer le plein ecran:', error);
+  }
+
+  return false;
+};
+
+const exitAppFullscreen = async () => {
+  try {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+      return;
+    }
+    if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+      return;
+    }
+    if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  } catch (error) {
+    console.warn('[Kiosk] Impossible de quitter le plein ecran:', error);
+  }
+};
+
 export default function Kiosk() {
   const [cart, setCart] = useState([]);
   const [customizingProduct, setCustomizingProduct] = useState(null);
@@ -100,6 +161,10 @@ export default function Kiosk() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [orderType, setOrderType] = useState(null); // 'sur_place' ou 'emporter'
   const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(false);
+  const [isExitDialogOpen, setIsExitDialogOpen] = useState(false);
+  const [exitCodeInput, setExitCodeInput] = useState("");
+  const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+  const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -109,6 +174,179 @@ export default function Kiosk() {
   const forceMobileMode = urlParams.get('display') === 'mobile';
   const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
   const isTerminalMode = !forceMobileMode && terminalRouteRequested;
+  const kioskExitCode = useMemo(() => {
+    const codeFromUrl = urlParams.get('exitCode');
+    const codeFromProfile = profile?.page_pins?.KioskTerminalExit;
+    const codeFromStorage = window.localStorage.getItem('kiosk_exit_code');
+    return codeFromUrl || codeFromProfile || codeFromStorage || DEFAULT_KIOSK_EXIT_CODE;
+  }, [profile?.page_pins, urlParams]);
+
+  useEffect(() => {
+    if (!isTerminalMode) {
+      return undefined;
+    }
+
+    const codeFromUrl = urlParams.get('exitCode');
+    if (codeFromUrl) {
+      window.localStorage.setItem('kiosk_exit_code', codeFromUrl);
+    }
+
+    const syncFullscreenState = () => {
+      setIsFullscreenActive(Boolean(getFullscreenElement()));
+    };
+
+    const attemptFullscreen = async () => {
+      const activated = await requestAppFullscreen();
+      syncFullscreenState();
+      if (!activated && !getFullscreenElement()) {
+        setFullscreenBlocked(true);
+      } else {
+        setFullscreenBlocked(false);
+      }
+    };
+
+    const handleFirstInteraction = () => {
+      if (!getFullscreenElement()) {
+        attemptFullscreen();
+      }
+    };
+
+    syncFullscreenState();
+    attemptFullscreen();
+
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+    document.addEventListener('mozfullscreenchange', syncFullscreenState);
+    document.addEventListener('MSFullscreenChange', syncFullscreenState);
+    window.addEventListener('pointerdown', handleFirstInteraction, true);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
+      document.removeEventListener('mozfullscreenchange', syncFullscreenState);
+      document.removeEventListener('MSFullscreenChange', syncFullscreenState);
+      window.removeEventListener('pointerdown', handleFirstInteraction, true);
+    };
+  }, [isTerminalMode, urlParams]);
+
+  const handleFullscreenRetry = async () => {
+    const activated = await requestAppFullscreen();
+    setIsFullscreenActive(Boolean(getFullscreenElement()));
+    setFullscreenBlocked(!activated && !getFullscreenElement());
+  };
+
+  const handleExitCodeDigit = (digit) => {
+    setExitCodeInput((current) => (current.length >= 8 ? current : `${current}${digit}`));
+  };
+
+  const handleExitCodeBackspace = () => {
+    setExitCodeInput((current) => current.slice(0, -1));
+  };
+
+  const handleExitDialogChange = (open) => {
+    setIsExitDialogOpen(open);
+    if (!open) {
+      setExitCodeInput("");
+    }
+  };
+
+  const handleProtectedExit = async () => {
+    if (exitCodeInput !== kioskExitCode) {
+      toast({
+        title: "Code incorrect",
+        description: "Le code de sortie est invalide.",
+        variant: "destructive"
+      });
+      setExitCodeInput("");
+      return;
+    }
+
+    await exitAppFullscreen();
+    handleExitDialogChange(false);
+    window.location.href = '/';
+  };
+
+  const renderKioskShell = (content) => (
+    <>
+      {isTerminalMode && (
+        <>
+          <div className="fixed right-5 top-5 z-[120] flex items-center gap-3">
+            {!isFullscreenActive && (
+              <button
+                type="button"
+                onClick={handleFullscreenRetry}
+                className="rounded-full bg-black/75 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur"
+              >
+                Plein ecran
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleExitDialogChange(true)}
+              className="rounded-full border border-white/20 bg-white/85 px-5 py-3 text-sm font-bold text-slate-900 shadow-xl backdrop-blur"
+            >
+              Sortie
+            </button>
+          </div>
+
+          {fullscreenBlocked && !isFullscreenActive && (
+            <div className="fixed left-1/2 top-5 z-[110] -translate-x-1/2 rounded-full bg-amber-100 px-5 py-3 text-sm font-semibold text-amber-900 shadow-lg">
+              Appuyez sur "Plein ecran" si le navigateur a bloque l activation automatique.
+            </div>
+          )}
+
+          <Dialog open={isExitDialogOpen} onOpenChange={handleExitDialogChange}>
+            <DialogContent className="max-w-md rounded-[2rem] border-0 bg-white p-6">
+              <DialogHeader>
+                <DialogTitle>Sortir du mode borne</DialogTitle>
+                <DialogDescription>Entrez le code de sortie pour quitter la borne.</DialogDescription>
+              </DialogHeader>
+
+              <Input
+                type="password"
+                inputMode="numeric"
+                value={exitCodeInput}
+                onChange={(e) => setExitCodeInput(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="Code de sortie"
+                className="h-14 text-center text-2xl tracking-[0.4em]"
+              />
+
+              <div className="grid grid-cols-3 gap-3">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    onClick={() => handleExitCodeDigit(digit)}
+                    className={`rounded-2xl bg-slate-100 py-5 text-2xl font-black text-slate-900 transition hover:bg-slate-200 ${digit === '0' ? 'col-span-3' : ''}`}
+                  >
+                    {digit}
+                  </button>
+                ))}
+              </div>
+
+              <DialogFooter className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleExitCodeBackspace}
+                  className="rounded-2xl bg-slate-200 px-4 py-4 font-bold text-slate-900 transition hover:bg-slate-300"
+                >
+                  Effacer
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProtectedExit}
+                  className="rounded-2xl bg-red-600 px-4 py-4 font-bold text-white transition hover:bg-red-700"
+                >
+                  Quitter
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+      {content}
+    </>
+  );
 
   // Charger les données du tenant
   useEffect(() => {
@@ -491,7 +729,7 @@ export default function Kiosk() {
     const primaryColor = profile?.kiosk_primary_color || '#f97316';
     const secondaryColor = profile?.kiosk_secondary_color || '#ef4444';
     
-    return (
+    return renderKioskShell(
       <div 
         className={`flex min-h-screen p-4 md:p-8 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
@@ -568,7 +806,7 @@ export default function Kiosk() {
     const secondaryColor = profile?.kiosk_secondary_color || '#ef4444';
 
     if (isTerminalMode) {
-      return (
+      return renderKioskShell(
         <div
           className="min-h-screen px-[clamp(1rem,2vw,2rem)] py-[clamp(1rem,2vh,2rem)]"
           style={{
@@ -668,7 +906,7 @@ export default function Kiosk() {
       );
     }
     
-    return (
+    return renderKioskShell(
       <div 
         className={`flex min-h-screen p-4 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
@@ -821,7 +1059,7 @@ export default function Kiosk() {
       }, 1500);
     };
     
-    return (
+    return renderKioskShell(
       <div 
         className={`flex min-h-screen p-4 md:p-8 ${isTerminalMode ? 'items-start justify-center pt-10 pb-10' : 'items-center justify-center'}`}
         style={{
@@ -975,51 +1213,39 @@ export default function Kiosk() {
     const primaryColor = profile?.kiosk_primary_color || '#f97316';
     const isPaidOrder = completedOrder?.payee === true;
 
-    const printTicketFromWindow = (ticketHtml) => {
-      const printWindow = window.open('', '_blank', 'width=420,height=720');
-      if (!printWindow) {
-        triggerPrint(ticketHtml);
+    const handlePrintTicket = async () => {
+      if (!completedOrder) {
         return;
       }
 
-      printWindow.document.open();
-      printWindow.document.write(ticketHtml);
-      printWindow.document.close();
-
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        setTimeout(() => {
-          printWindow.close();
-        }, 800);
-      }, 500);
-    };
-
-    const handlePrintTicket = async () => {
-      if (completedOrder) {
-        const ticketHtml = await generateTicketHtml(completedOrder, null, profile);
-        if (ticketHtml) {
-          if (isTerminalMode) {
-            printTicketFromWindow(ticketHtml);
-          } else {
-            triggerPrint(ticketHtml, () => {
-              toast({
-                title: "Ticket imprimé",
-                description: "Récupérez votre ticket à l'imprimante"
-              });
-            });
-          }
-
-          toast({
-            title: "Ticket imprimé",
-            description: "Récupérez votre ticket à l'imprimante"
-          });
+      if (isTerminalMode) {
+        const ticketHtml = generateKioskClientReceiptHtml(completedOrder, profile);
+        if (!ticketHtml) {
+          return;
         }
+
+        triggerPrint(ticketHtml, () => {
+          toast({
+            title: "Ticket imprime",
+            description: "Recuperez votre ticket a l'imprimante"
+          });
+        }, { strategy: 'current-window', immediate: true });
+        return;
+      }
+
+      const ticketHtml = await generateTicketHtml(completedOrder, null, profile);
+      if (ticketHtml) {
+        triggerPrint(ticketHtml, () => {
+          toast({
+            title: "Ticket imprime",
+            description: "Recuperez votre ticket a l'imprimante"
+          });
+        });
       }
     };
 
     if (isTerminalMode) {
-      return (
+      return renderKioskShell(
         <div
           className="flex min-h-screen items-center justify-center p-4 md:p-8"
           style={{
@@ -1066,7 +1292,7 @@ export default function Kiosk() {
       );
     }
     
-    return (
+    return renderKioskShell(
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-green-50 to-blue-50">
         <div className="text-center p-6 md:p-12 bg-white rounded-2xl shadow-2xl max-w-md w-11/12 mx-auto md:mx-0 md:w-auto">
           <CheckCircle className="w-16 h-16 md:w-24 md:h-24 text-green-500 mx-auto mb-4 md:mb-6 animate-bounce" />
@@ -1097,7 +1323,7 @@ export default function Kiosk() {
   const cartTotal = cart.reduce((sum, item) => sum + item.prix_unitaire * item.quantite, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantite, 0);
 
-  return (
+  return renderKioskShell(
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <div 

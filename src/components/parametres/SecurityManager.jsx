@@ -22,6 +22,8 @@ const SECURED_PAGES_CONFIG = [
   { name: "Paramètres", key: "Parametres", description: "Protège l'accès à tous les paramètres" },
 ];
 
+const KIOSK_EXIT_PIN_KEY = 'KioskTerminalExit';
+
 export default function SecurityManager() {
   const queryClient = useQueryClient();
   const { currentTenant, filterByTenant } = useTenant();
@@ -149,6 +151,28 @@ export default function SecurityManager() {
                     Laissez un champ vide pour qu'aucun code ne soit demandé pour cette section. Un code doit contenir entre 4 et 8 chiffres.
                 </p>
             </div>
+
+            <Card className="border-amber-200 bg-amber-50">
+                <CardHeader className="pb-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <KeyRound className="w-4 h-4 text-amber-700" />
+                        Code de sortie grande borne
+                    </CardTitle>
+                    <CardDescription className="text-xs text-amber-800">
+                        Permet de quitter le mode borne sur l ecran tactile. Laissez vide pour utiliser le code par defaut 2580.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Input
+                        type="password"
+                        placeholder="Code de sortie (4-8 chiffres)"
+                        value={pins[KIOSK_EXIT_PIN_KEY] || ''}
+                        onChange={(e) => handlePinChange(KIOSK_EXIT_PIN_KEY, e.target.value)}
+                        pattern="\d{4,8}"
+                        title="Doit contenir entre 4 et 8 chiffres."
+                    />
+                </CardContent>
+            </Card>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {SECURED_PAGES_CONFIG.map(page => (

@@ -685,6 +685,77 @@ export async function generateTicketHtml(order, customer, profile) {
     return html;
 }
 
+export function generateKioskClientReceiptHtml(order, profile) {
+    if (!order || !profile) {
+        console.error('[generateKioskClientReceiptHtml] Donnees manquantes:', { order, profile });
+        return null;
+    }
+
+    const orderDate = toParisDateValue(order.created_date);
+    const dateStr = orderDate && !Number.isNaN(orderDate.getTime())
+        ? orderDate.toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        : 'Date invalide';
+
+    const paymentStatus = order.payee ? 'COMMANDE REGLEE' : 'COMMANDE A REGLER A LA CAISSE';
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page { size: 80mm auto; margin: 0; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: Arial, 'Helvetica Neue', sans-serif;
+                font-size: 14px;
+                line-height: 1.5;
+                width: 80mm;
+                padding: 6mm;
+                background: white;
+                color: #000;
+            }
+            .center { text-align: center; }
+            .separator { border-top: 1px dashed #000; margin: 10px 0; }
+            .double-separator { border-top: 2px solid #000; margin: 10px 0; }
+            .xlarge { font-size: 28px; font-weight: 900; }
+            .large { font-size: 18px; font-weight: bold; }
+            .muted { font-size: 12px; color: #444; }
+        </style>
+    </head>
+    <body>
+        ${profile.logo_url ? `
+        <div class="center" style="margin-bottom: 10px;">
+            <img src="${profile.logo_url}" alt="Logo" style="max-width: 60mm; max-height: 28mm; width: auto; height: auto;" />
+        </div>` : ''}
+
+        <div class="center large">${profile.nom_etablissement || 'Restaurant'}</div>
+        <div class="center muted">${dateStr}</div>
+
+        <div class="double-separator"></div>
+
+        <div class="center muted" style="margin-bottom: 8px;">Votre numero de commande</div>
+        <div class="center xlarge">B${order.numero_caisse || order.numero_commande || ''}</div>
+
+        <div class="separator"></div>
+
+        <div class="center large">${paymentStatus}</div>
+
+        <div class="separator"></div>
+
+        <div class="center muted">Conservez ce ticket pour le suivi de votre commande.</div>
+        <div class="center muted" style="margin-top: 6px;">Pour un ticket detaille, adressez-vous a la caisse.</div>
+    </body>
+    </html>
+    `;
+}
+
 /**
  * Génère un ticket avec le QR code de la borne à imprimer
  */
@@ -844,33 +915,214 @@ export async function generateDeliveryQRTicketHtml(profile, deliveryUrl) {
 /**
  * Déclenche l'impression d'un ticket
  */
-export async function triggerPrint(html, onComplete) {
+function waitForPrintableImages(container, onReady) {
+    const images = container.getElementsByTagName('img');
+    let imagesLoaded = 0;
+    const totalImages = images.length;
+
+    if (totalImages === 0) {
+        setTimeout(onReady, 300);
+        return;
+    }
+
+    let safetyTimeoutId;
+
+    const checkImagesLoaded = () => {
+        imagesLoaded++;
+        if (imagesLoaded === totalImages) {
+            clearTimeout(safetyTimeoutId);
+            setTimeout(onReady, 300);
+        }
+    };
+
+    safetyTimeoutId = setTimeout(() => {
+        console.warn('[triggerPrint] Timeout: impression sans attendre toutes les images');
+        onReady();
+    }, 3000);
+
+    Array.from(images).forEach((img) => {
+        img.onload = null;
+        img.onerror = null;
+
+        if (img.complete) {
+            checkImagesLoaded();
+        } else {
+            img.onload = checkImagesLoaded;
+            img.onerror = () => {
+                console.warn('[triggerPrint] Erreur chargement image:', img.src);
+                checkImagesLoaded();
+            };
+        }
+    });
+}
+
+function extractPrintBody(html) {
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    return bodyMatch ? bodyMatch[1] : html;
+}
+
+function extractPrintStyles(html) {
+    const styleMatches = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)];
+    return styleMatches.map((match) => match[1]).join('\n');
+}
+
+function triggerWindowPrint(html, printWindow, onComplete) {
+    if (!printWindow || printWindow.closed) {
+        triggerCurrentWindowPrint(html, onComplete);
+        return;
+    }
+
+    let isCleanedUp = false;
+    let fallbackTimeoutId;
+
+    const cleanupAndComplete = () => {
+        if (isCleanedUp) return;
+        isCleanedUp = true;
+        clearTimeout(fallbackTimeoutId);
+        try {
+            printWindow.close();
+        } catch (closeError) {
+            console.warn('[triggerPrint] Impossible de fermer la fenetre d\'impression:', closeError);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+    };
+
+    try {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+
+        waitForPrintableImages(printWindow.document, () => {
+            fallbackTimeoutId = setTimeout(cleanupAndComplete, 2500);
+            printWindow.focus();
+            printWindow.print();
+        });
+    } catch (error) {
+        console.error('[triggerPrint] Erreur lors de l\'impression via fenetre dediee:', error);
+        cleanupAndComplete();
+    }
+}
+
+function triggerCurrentWindowPrint(html, onComplete, options = {}) {
+    const printHost = document.createElement('div');
+    printHost.setAttribute('data-print-host-root', 'true');
+
+    const isolationStyle = document.createElement('style');
+    isolationStyle.setAttribute('data-print-host-style', 'true');
+    isolationStyle.textContent = `
+        @media screen {
+            [data-print-host-root="true"] {
+                position: fixed !important;
+                inset: 0 !important;
+                z-index: 2147483647 !important;
+                overflow: auto !important;
+                background: #ffffff !important;
+            }
+        }
+
+        @media print {
+            body > *:not([data-print-host-root="true"]):not([data-print-host-style="true"]) {
+                display: none !important;
+            }
+
+            [data-print-host-root="true"] {
+                position: static !important;
+                inset: auto !important;
+                overflow: visible !important;
+                background: #ffffff !important;
+            }
+        }
+    `;
+
+    const embeddedStyles = extractPrintStyles(html);
+    printHost.innerHTML = `
+        ${embeddedStyles ? `<style>${embeddedStyles}</style>` : ''}
+        ${extractPrintBody(html)}
+    `;
+
+    document.body.appendChild(isolationStyle);
+    document.body.appendChild(printHost);
+
+    let isCleanedUp = false;
+    let fallbackTimeoutId;
+    let focusCleanupTimeoutId;
+
+    const handleAfterPrint = () => {
+        setTimeout(cleanupAndComplete, 300);
+    };
+
+    const handleWindowFocus = () => {
+        focusCleanupTimeoutId = setTimeout(cleanupAndComplete, 500);
+    };
+
+    const cleanupAndComplete = () => {
+        if (isCleanedUp) return;
+        isCleanedUp = true;
+        window.removeEventListener('afterprint', handleAfterPrint);
+        window.removeEventListener('focus', handleWindowFocus);
+        clearTimeout(fallbackTimeoutId);
+        clearTimeout(focusCleanupTimeoutId);
+        if (document.body.contains(printHost)) {
+            document.body.removeChild(printHost);
+        }
+        if (document.body.contains(isolationStyle)) {
+            document.body.removeChild(isolationStyle);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+    };
+
+    window.addEventListener('afterprint', handleAfterPrint);
+    window.addEventListener('focus', handleWindowFocus);
+
+    const runPrint = () => {
+        fallbackTimeoutId = setTimeout(cleanupAndComplete, 60000);
+        window.focus();
+        window.print();
+    };
+
+    if (options.immediate) {
+        runPrint();
+        return;
+    }
+
+    waitForPrintableImages(printHost, runPrint);
+}
+
+export async function triggerPrint(html, onComplete, options = {}) {
     if (!html) {
         console.error('[triggerPrint] Contenu HTML manquant');
         if (onComplete) onComplete();
         return;
     }
 
+    if (options.strategy === 'new-window') {
+        triggerWindowPrint(html, options.printWindow, onComplete);
+        return;
+    }
+
+    if (options.strategy === 'current-window') {
+        triggerCurrentWindowPrint(html, onComplete, options);
+        return;
+    }
+
     try {
-        // Créer un iframe caché pour l'impression
         const iframe = document.createElement('iframe');
         iframe.style.position = 'absolute';
         iframe.style.width = '0';
         iframe.style.height = '0';
         iframe.style.border = '0';
         iframe.style.visibility = 'hidden';
-        
+
         document.body.appendChild(iframe);
 
         const doc = iframe.contentWindow.document;
         doc.open();
         doc.write(html);
         doc.close();
-
-        // Attendre que les images (logo) soient chargées avant d'imprimer
-        const images = doc.getElementsByTagName('img');
-        let imagesLoaded = 0;
-        const totalImages = images.length;
 
         const cleanupAndComplete = () => {
             if (document.body.contains(iframe)) {
@@ -883,68 +1135,29 @@ export async function triggerPrint(html, onComplete) {
 
         const tryPrint = () => {
             try {
-                // Focus sur l'iframe
-                if (iframe && iframe.contentWindow) { // Check if iframe and its contentWindow are still valid
+                if (iframe && iframe.contentWindow) {
                     iframe.contentWindow.focus();
-                    
-                    // Déclencher l'impression
                     iframe.contentWindow.print();
-                    
-                    console.log('[triggerPrint] Impression déclenchée avec succès');
+                    console.log('[triggerPrint] Impression declenchee avec succes');
                 } else {
                     console.warn('[triggerPrint] Iframe ou contentWindow non disponible pour l\'impression.');
                 }
             } catch (printError) {
                 console.error('[triggerPrint] Erreur lors de l\'impression:', printError);
             } finally {
-                // Nettoyer après l'impression avec un délai
                 setTimeout(cleanupAndComplete, 1000);
             }
         };
 
-        if (totalImages === 0) {
-            // Pas d'images, attendre quand même un peu pour le rendu CSS
-            setTimeout(tryPrint, 500);
-        } else {
-            let safetyTimeoutId;
-
-            const checkImagesLoaded = () => {
-                imagesLoaded++;
-                if (imagesLoaded === totalImages) {
-                    clearTimeout(safetyTimeoutId); // Clear safety timeout once all images are loaded
-                    setTimeout(tryPrint, 300);
-                }
-            };
-
-            // Timeout de sécurité si les images ne se chargent pas
-            safetyTimeoutId = setTimeout(() => {
-                console.warn('[triggerPrint] Timeout: impression sans attendre toutes les images');
-                tryPrint();
-            }, 3000);
-
-            Array.from(images).forEach(img => {
-                // Remove existing handlers to avoid multiple calls if image is already loading/loaded
-                img.onload = null;
-                img.onerror = null;
-
-                if (img.complete) {
-                    checkImagesLoaded();
-                } else {
-                    img.onload = checkImagesLoaded;
-                    img.onerror = () => {
-                        console.warn('[triggerPrint] Erreur chargement image:', img.src);
-                        checkImagesLoaded();
-                    };
-                }
-            });
-        }
+        waitForPrintableImages(doc, tryPrint);
 
     } catch (error) {
-        console.error('[triggerPrint] Erreur lors de la création de l\'iframe:', error);
+        console.error('[triggerPrint] Erreur lors de la creation de l\'iframe:', error);
         if (onComplete) {
             onComplete();
         }
     }
 }
+
 
 

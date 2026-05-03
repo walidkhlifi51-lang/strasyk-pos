@@ -85,6 +85,26 @@ export default function RestaurantSettings({ data, onDataChange }) {
     const [isUploading, setIsUploading] = useState(false);
     const [saveSucceeded, setSaveSucceeded] = useState(false);
     const scratchTicketsAvailable = (localProfile?.manages_kiosk === true) || (localProfile?.manages_web_ordering === true);
+    const kioskExitCode = localProfile?.page_pins?.KioskTerminalExit || '2580';
+    const mobileKioskUrl = `${window.location.origin}/Kiosk?tenant=${currentTenant?.id}&display=mobile`;
+    const terminalKioskUrl = `${window.location.origin}/KioskTerminal?tenant=${currentTenant?.id}`;
+    const terminalKioskProtectedUrl = `${window.location.origin}/KioskTerminal?tenant=${currentTenant?.id}&exitCode=${kioskExitCode}`;
+
+    const copyToClipboard = async (value, label) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            toast({
+                title: 'Lien copie',
+                description: `${label} a ete copie dans le presse-papiers.`,
+            });
+        } catch (error) {
+            toast({
+                title: 'Copie impossible',
+                description: `Impossible de copier ${label.toLowerCase()}.`,
+                variant: 'destructive',
+            });
+        }
+    };
 
     useEffect(() => {
         if (profile) {
@@ -389,27 +409,54 @@ export default function RestaurantSettings({ data, onDataChange }) {
                     
                     {localProfile.manages_kiosk && (
                         <>
-                            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <p className="text-sm font-medium text-blue-900 mb-2">Lien borne telephone :</p>
-                                <code className="text-xs bg-white px-3 py-2 rounded border block overflow-x-auto">
-                                    {window.location.origin}/Kiosk?tenant={currentTenant?.id}&display=mobile
-                                </code>
-                                <p className="text-xs text-blue-700 mt-2">
-                                    Conservez ce lien pour le QR code et l usage smartphone.
-                                </p>
+                            <div className="mt-4 space-y-4">
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className="text-sm font-medium text-blue-900">URL borne telephone</p>
+                                        <Button variant="outline" size="sm" onClick={() => copyToClipboard(mobileKioskUrl, 'URL borne telephone')}>
+                                            Copier
+                                        </Button>
+                                    </div>
+                                    <code className="block overflow-x-auto rounded border bg-white px-3 py-2 text-xs">
+                                        {mobileKioskUrl}
+                                    </code>
+                                    <p className="mt-2 text-xs text-blue-700">
+                                        Conservez ce lien pour le QR code et l usage smartphone.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className="text-sm font-medium text-slate-900">URL grande borne</p>
+                                        <Button variant="outline" size="sm" onClick={() => copyToClipboard(terminalKioskUrl, 'URL grande borne')}>
+                                            Copier
+                                        </Button>
+                                    </div>
+                                    <code className="block overflow-x-auto rounded border bg-white px-3 py-2 text-xs">
+                                        {terminalKioskUrl}
+                                    </code>
+                                    <p className="mt-2 text-xs text-slate-700">
+                                        Ouvrez ce lien sur votre vraie borne 22 pouces ou votre ecran tactile.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className="text-sm font-medium text-amber-900">URL grande borne avec code sortie</p>
+                                        <Button variant="outline" size="sm" onClick={() => copyToClipboard(terminalKioskProtectedUrl, 'URL grande borne avec code sortie')}>
+                                            Copier
+                                        </Button>
+                                    </div>
+                                    <code className="block overflow-x-auto rounded border bg-white px-3 py-2 text-xs">
+                                        {terminalKioskProtectedUrl}
+                                    </code>
+                                    <p className="mt-2 text-xs text-amber-800">
+                                        Cette version utilise le code de sortie configure dans `Securite` : `{kioskExitCode}`.
+                                    </p>
+                                </div>
                             </div>
 
-                            <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <p className="text-sm font-medium text-slate-900 mb-2">Lien borne grand ecran :</p>
-                                <code className="text-xs bg-white px-3 py-2 rounded border block overflow-x-auto">
-                                    {window.location.origin}/KioskTerminal?tenant={currentTenant?.id}
-                                </code>
-                                <p className="text-xs text-slate-700 mt-2">
-                                    Ouvrez ce lien sur votre vraie borne 22 pouces ou votre ecran tactile en mode kiosque.
-                                </p>
-                            </div>
-
-                            <KioskQRCode url={`${window.location.origin}/Kiosk?tenant=${currentTenant?.id}&display=mobile`} profile={localProfile} />
+                            <KioskQRCode url={mobileKioskUrl} profile={localProfile} />
                             
                             <div className="space-y-4 pt-4 border-t">
                                 <h4 className="font-semibold text-sm">Personnalisation de la borne</h4>
