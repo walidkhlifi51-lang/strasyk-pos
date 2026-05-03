@@ -174,12 +174,6 @@ export default function Kiosk() {
   const forceMobileMode = urlParams.get('display') === 'mobile';
   const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
   const isTerminalMode = !forceMobileMode && terminalRouteRequested;
-  const kioskExitCode = useMemo(() => {
-    const codeFromUrl = urlParams.get('exitCode');
-    const codeFromProfile = profile?.page_pins?.KioskTerminalExit;
-    const codeFromStorage = window.localStorage.getItem('kiosk_exit_code');
-    return codeFromUrl || codeFromProfile || codeFromStorage || DEFAULT_KIOSK_EXIT_CODE;
-  }, [profile?.page_pins, urlParams]);
 
   useEffect(() => {
     if (!isTerminalMode) {
@@ -383,6 +377,13 @@ export default function Kiosk() {
     enabled: !!tenantIdFromUrl,
     refetchInterval: 5000  // Recharger toutes les 5 secondes pour détecter les changements
   });
+
+  const kioskExitCode = useMemo(() => {
+    const codeFromUrl = urlParams.get('exitCode');
+    const codeFromProfile = profile?.page_pins?.KioskTerminalExit;
+    const codeFromStorage = window.localStorage.getItem('kiosk_exit_code');
+    return codeFromUrl || codeFromProfile || codeFromStorage || DEFAULT_KIOSK_EXIT_CODE;
+  }, [profile?.page_pins, urlParams]);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', tenantIdFromUrl],
