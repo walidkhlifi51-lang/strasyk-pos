@@ -112,7 +112,7 @@ export default function AdminTenants() {
   const { data: requests = [], refetch: refetchRequests } = useQuery({
     queryKey: ['inscriptionRequests'],
     queryFn: () => appClient.entities.InscriptionRequest.list('-created_date'),
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 
   const { data: invoices = [], refetch: refetchInvoices } = useQuery({

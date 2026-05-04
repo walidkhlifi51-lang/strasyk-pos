@@ -229,6 +229,21 @@ export default function Kiosk() {
     setFullscreenBlocked(!activated && !getFullscreenElement());
   };
 
+  const restoreTerminalFullscreen = () => {
+    if (!isTerminalMode || isExitDialogOpen) {
+      return;
+    }
+
+    const retryFullscreen = () => {
+      if (!getFullscreenElement()) {
+        handleFullscreenRetry();
+      }
+    };
+
+    setTimeout(retryFullscreen, 250);
+    setTimeout(retryFullscreen, 900);
+  };
+
   const handleExitCodeDigit = (digit) => {
     setExitCodeInput((current) => (current.length >= 8 ? current : `${current}${digit}`));
   };
@@ -375,7 +390,7 @@ export default function Kiosk() {
       return profiles[0] || null;
     },
     enabled: !!tenantIdFromUrl,
-    refetchInterval: 5000  // Recharger toutes les 5 secondes pour détecter les changements
+    refetchInterval: 60000  // Recharger toutes les 60 secondes pour limiter l'egress
   });
 
   const kioskExitCode = useMemo(() => {
@@ -1230,6 +1245,7 @@ export default function Kiosk() {
             title: "Ticket imprime",
             description: "Recuperez votre ticket a l'imprimante"
           });
+          restoreTerminalFullscreen();
         }, { strategy: 'current-window', immediate: true });
         return;
       }

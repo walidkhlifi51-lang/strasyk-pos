@@ -88,7 +88,7 @@ export default function CustomerDisplay() {
     loadData();
     
     // Recharger les settings périodiquement
-    const dataInterval = setInterval(loadData, 10000);
+    const dataInterval = setInterval(loadData, 30000);
     
     // S'abonner aux changements du panier en temps réel
     const unsubscribe = appClient.entities.CustomerDisplayCart.subscribe((event) => {

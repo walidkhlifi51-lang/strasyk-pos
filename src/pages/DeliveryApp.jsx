@@ -25,7 +25,7 @@ export default function DeliveryApp() {
       return orders.length > 0 ? orders[0] : null;
     },
     enabled: !!deliveryPerson,
-    refetchInterval: 5000, // Rafraîchir toutes les 5 secondes
+    refetchInterval: 15000, // Rafraichir toutes les 15 secondes
   });
 
   // Charger les infos client si commande active
@@ -49,7 +49,7 @@ export default function DeliveryApp() {
       });
 
       if (orders.length === 0) {
-        throw new Error('Commande introuvable ou pas prête');
+        throw new Error('Commande introuvable ou pas prete');
       }
 
       const order = orders[0];
@@ -105,11 +105,11 @@ export default function DeliveryApp() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-blue-50 p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle className="text-center text-red-600">Accès refusé</CardTitle>
+            <CardTitle className="text-center text-red-600">Acces refuse</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-center text-gray-700">
-              Vous n'êtes pas enregistré comme livreur. Contactez votre manager.
+              Vous n'etes pas enregistre comme livreur. Contactez votre manager.
             </p>
           </CardContent>
         </Card>
@@ -128,7 +128,7 @@ export default function DeliveryApp() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 p-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* En-tête livreur */}
+        {/* En-tete livreur */}
         <Card>
           <CardHeader className="bg-gradient-to-r from-orange-500 to-blue-500 text-white">
             <CardTitle className="flex items-center gap-2">
@@ -145,9 +145,9 @@ export default function DeliveryApp() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total encaissé</p>
+                <p className="text-sm text-gray-600">Total encaisse</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {(deliveryPerson.total_encaisse || 0).toFixed(2)} €
+                  {(deliveryPerson.total_encaisse || 0).toFixed(2)} EUR
                 </p>
               </div>
             </div>
@@ -179,7 +179,7 @@ export default function DeliveryApp() {
                     <div>
                       <p className="font-semibold">Adresse</p>
                       <p className="text-gray-600">{customer.adresse}</p>
-                      {customer.etage && <p className="text-sm text-gray-500">Étage: {customer.etage}</p>}
+                      {customer.etage && <p className="text-sm text-gray-500">Etage: {customer.etage}</p>}
                       {customer.interphone && <p className="text-sm text-gray-500">Interphone: {customer.interphone}</p>}
                     </div>
                   </div>
@@ -189,12 +189,12 @@ export default function DeliveryApp() {
               <div className="flex items-start gap-3">
                 <Clock className="w-5 h-5 text-gray-500 mt-1" />
                 <div>
-                  <p className="font-semibold">Montant à encaisser</p>
+                  <p className="font-semibold">Montant a encaisser</p>
                   <p className="text-2xl font-bold text-orange-600">
-                    {currentOrder.total_ttc.toFixed(2)} €
+                    {currentOrder.total_ttc.toFixed(2)} EUR
                   </p>
                   <p className="text-sm text-gray-500">
-                    Mode: {currentOrder.mode_paiement_prevu || 'Non spécifié'}
+                    Mode: {currentOrder.mode_paiement_prevu || 'Non specifie'}
                   </p>
                 </div>
               </div>
@@ -225,7 +225,7 @@ export default function DeliveryApp() {
                   ) : (
                     <CheckCircle className="w-4 h-4 mr-2" />
                   )}
-                  Livraison effectuée
+                  Livraison effectuee
                 </Button>
               </div>
             </CardContent>
@@ -237,7 +237,7 @@ export default function DeliveryApp() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="orderNumber">Numéro de commande</Label>
+                <Label htmlFor="orderNumber">Numero de commande</Label>
                 <Input
                   id="orderNumber"
                   type="number"

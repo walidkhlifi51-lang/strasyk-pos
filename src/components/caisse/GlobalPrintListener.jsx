@@ -85,7 +85,7 @@ export default function GlobalPrintListener() {
       } catch (error) {
         console.error('❌ [GlobalPrint] Erreur verification file impression:', error);
       }
-    }, 4000);
+    }, 15000);
 
     return () => {
       unsubscribe();
