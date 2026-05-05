@@ -386,7 +386,32 @@ export default function Kiosk() {
     queryKey: ['restaurantProfile', tenantIdFromUrl],
     queryFn: async () => {
       if (!tenantIdFromUrl) return null;
-      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenantIdFromUrl });
+      const profiles = await appClient.entities.RestaurantProfile.filter(
+        { tenant_id: tenantIdFromUrl },
+        undefined,
+        undefined,
+        {
+          fields: [
+            'id',
+            'tenant_id',
+            'manages_kiosk',
+            'nom_etablissement',
+            'adresse',
+            'telephone',
+            'logo_url',
+            'page_pins',
+            'prix_differencies_par_mode',
+            'kiosk_primary_color',
+            'kiosk_secondary_color',
+            'kiosk_welcome_images',
+            'kiosk_terminal_welcome_images',
+            'kiosk_welcome_message',
+            'kiosk_welcome_title_size',
+            'kiosk_welcome_title_style',
+            'kiosk_card_payment_enabled'
+          ]
+        }
+      );
       return profiles[0] || null;
     },
     enabled: !!tenantIdFromUrl,

@@ -55,6 +55,12 @@ const normalizeFilterArgs = (sort, limit) => {
   return { sort, limit };
 };
 
+const normalizeSelectFields = (fields) => {
+  if (!fields) return '*';
+  if (Array.isArray(fields)) return fields.join(',');
+  return typeof fields === 'string' ? fields : '*';
+};
+
 const applyQueryFilters = (queryBuilder, query = {}) => {
   let builder = queryBuilder;
 
@@ -127,10 +133,10 @@ const createEntityApi = (entityName) => {
   const tableName = resolveTableName(entityName);
 
   return {
-    async list(sort, limit) {
+    async list(sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let query = supabase.from(tableName).select('*');
+      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields));
       query = applySortAndLimit(query, args.sort, args.limit);
       const { data, error } = await query;
       const fallback = maybeReturnEmptyArray(error);
@@ -138,10 +144,10 @@ const createEntityApi = (entityName) => {
       return data || [];
     },
 
-    async filter(query = {}, sort, limit) {
+    async filter(query = {}, sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let request = supabase.from(tableName).select('*');
+      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields));
       request = applyQueryFilters(request, query);
       request = applySortAndLimit(request, args.sort, args.limit);
       const { data, error } = await request;
