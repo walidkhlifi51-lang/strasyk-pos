@@ -176,8 +176,18 @@ export default function RestaurantSettings({ data, onDataChange }) {
             });
         }
     });
+    const isSaving = mutation.isPending === true;
 
     const handleSave = () => {
+        if (!currentTenant?.id) {
+            toast({
+                title: "Commerce introuvable",
+                description: "Impossible de sauvegarder sans commerce selectionne.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         if (!localProfile.nom_etablissement || !localProfile.adresse || !localProfile.telephone) {
             toast({
                 title: "Champs requis manquants",
@@ -187,32 +197,37 @@ export default function RestaurantSettings({ data, onDataChange }) {
             return;
         }
         
-        const { id, created_date, updated_date, created_by, ...rawPayload } = localProfile;
-        const payload = Object.fromEntries(
-            Object.entries(rawPayload).filter(([key]) => RESTAURANT_PROFILE_SCHEMA_FIELDS.has(key))
-        );
-        
-        // Ajouter le tenant_id
-        payload.tenant_id = currentTenant.id;
-        
-        // Nettoyer et valider les valeurs numériques
-        payload.frais_livraison = parseFloat(payload.frais_livraison) || 0;
-        payload.montant_minimum_livraison = parseFloat(payload.montant_minimum_livraison) || 0;
-        payload.zone_livraison_km = parseFloat(payload.zone_livraison_km) || 0;
-        
-        // Nettoyer les taux de TVA
-        if (payload.tva_rates && Array.isArray(payload.tva_rates)) {
-            payload.tva_rates = payload.tva_rates.map(rate => ({
-                rate: parseFloat(rate.rate) || 0,
-                label: rate.label || `Taux ${rate.rate}%`
-            }));
-        }
+        try {
+            const { id, created_date, updated_date, created_by, ...rawPayload } = localProfile;
+            const payload = Object.fromEntries(
+                Object.entries(rawPayload).filter(([key]) => RESTAURANT_PROFILE_SCHEMA_FIELDS.has(key))
+            );
+            
+            payload.tenant_id = currentTenant.id;
+            payload.frais_livraison = parseFloat(payload.frais_livraison) || 0;
+            payload.montant_minimum_livraison = parseFloat(payload.montant_minimum_livraison) || 0;
+            payload.zone_livraison_km = parseFloat(payload.zone_livraison_km) || 0;
+            
+            if (payload.tva_rates && Array.isArray(payload.tva_rates)) {
+                payload.tva_rates = payload.tva_rates.map(rate => ({
+                    rate: parseFloat(rate.rate) || 0,
+                    label: rate.label || `Taux ${rate.rate}%`
+                }));
+            }
 
-        if (!scratchTicketsAvailable) {
-            payload.scratch_tickets_enabled = false;
+            if (!scratchTicketsAvailable) {
+                payload.scratch_tickets_enabled = false;
+            }
+            
+            mutation.mutate(payload);
+        } catch (error) {
+            console.error("Erreur preparation sauvegarde parametres:", error);
+            toast({
+                title: "Erreur",
+                description: "La sauvegarde n'a pas pu etre preparee.",
+                variant: "destructive",
+            });
         }
-        
-        mutation.mutate(payload);
     };
     
     const handleLogoUpload = async (event) => {
@@ -788,10 +803,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
             
             <Button
                 onClick={handleSave}
-                disabled={mutation.isLoading}
+                disabled={isSaving}
                 className={`min-w-[240px] transition-all ${saveSucceeded ? 'bg-green-600 hover:bg-green-700' : ''}`}
             >
-                {mutation.isLoading ? (
+                {isSaving ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Enregistrement...
