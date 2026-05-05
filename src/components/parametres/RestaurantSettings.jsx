@@ -222,13 +222,37 @@ export default function RestaurantSettings({ data, onDataChange }) {
             
             setIsManualSaving(true);
 
-            const updatedProfile = localProfile && localProfile.id
-                ? await appClient.entities.RestaurantProfile.update(localProfile.id, payload)
-                : await appClient.entities.RestaurantProfile.create(payload);
+            const existingProfiles = await appClient.entities.RestaurantProfile.filter(
+                { tenant_id: currentTenant.id },
+                undefined,
+                1
+            );
+            const existingProfile = existingProfiles?.[0] || null;
 
-            if (updatedProfile) {
-                setLocalProfile((prev) => ({ ...(prev || {}), ...updatedProfile }));
+            if (existingProfile?.id) {
+                await appClient.entities.RestaurantProfile.update(existingProfile.id, payload);
+            } else {
+                await appClient.entities.RestaurantProfile.create(payload);
             }
+
+            const refreshedProfiles = await appClient.entities.RestaurantProfile.filter(
+                { tenant_id: currentTenant.id },
+                undefined,
+                1
+            );
+            const refreshedProfile = refreshedProfiles?.[0] || null;
+
+            if (!refreshedProfile) {
+                throw new Error("Le profil n'a pas pu etre relu apres sauvegarde.");
+            }
+
+            setLocalProfile({
+                ...refreshedProfile,
+                kiosk_welcome_images: normalizeKioskWelcomeImages(refreshedProfile.kiosk_welcome_images),
+                kiosk_terminal_welcome_images: normalizeKioskWelcomeImages(
+                    refreshedProfile.kiosk_terminal_welcome_images || refreshedProfile.kiosk_welcome_images
+                ),
+            });
             setSaveSucceeded(true);
             window.setTimeout(() => setSaveSucceeded(false), 2500);
             queryClient.invalidateQueries({ queryKey: ['restaurantProfile'] });
