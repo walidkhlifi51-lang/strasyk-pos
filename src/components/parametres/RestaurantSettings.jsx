@@ -178,7 +178,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
     });
     const isSaving = mutation.isPending === true;
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!currentTenant?.id) {
             toast({
                 title: "Commerce introuvable",
@@ -219,12 +219,12 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 payload.scratch_tickets_enabled = false;
             }
             
-            mutation.mutate(payload);
+            await mutation.mutateAsync(payload);
         } catch (error) {
             console.error("Erreur preparation sauvegarde parametres:", error);
             toast({
                 title: "Erreur",
-                description: "La sauvegarde n'a pas pu etre preparee.",
+                description: error?.message || "La sauvegarde n'a pas pu etre effectuee.",
                 variant: "destructive",
             });
         }
@@ -792,16 +792,17 @@ export default function RestaurantSettings({ data, onDataChange }) {
                                     onChange={(e) => handleTvaRateChange(index, e.target.value)}
                                 />
                             </div>
-                            <Button variant="ghost" size="icon" onClick={() => removeTvaRate(index)} className="mb-0.5">
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeTvaRate(index)} className="mb-0.5">
                                 <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                         </div>
                     ))}
-                    <Button onClick={addTvaRate} variant="outline" size="sm">Ajouter un taux de TVA</Button>
+                    <Button type="button" onClick={addTvaRate} variant="outline" size="sm">Ajouter un taux de TVA</Button>
                 </CardContent>
             </Card>
             
             <Button
+                type="button"
                 onClick={handleSave}
                 disabled={isSaving}
                 className={`min-w-[240px] transition-all ${saveSucceeded ? 'bg-green-600 hover:bg-green-700' : ''}`}
