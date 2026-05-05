@@ -83,6 +83,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
 
     const [localProfile, setLocalProfile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [isManualSaving, setIsManualSaving] = useState(false);
     const [saveSucceeded, setSaveSucceeded] = useState(false);
     const scratchTicketsAvailable = (localProfile?.manages_kiosk === true) || (localProfile?.manages_web_ordering === true);
     const kioskExitCode = localProfile?.page_pins?.KioskTerminalExit || '2580';
@@ -219,7 +220,26 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 payload.scratch_tickets_enabled = false;
             }
             
-            await mutation.mutateAsync(payload);
+            setIsManualSaving(true);
+
+            const updatedProfile = localProfile && localProfile.id
+                ? await appClient.entities.RestaurantProfile.update(localProfile.id, payload)
+                : await appClient.entities.RestaurantProfile.create(payload);
+
+            if (updatedProfile) {
+                setLocalProfile((prev) => ({ ...(prev || {}), ...updatedProfile }));
+            }
+            setSaveSucceeded(true);
+            window.setTimeout(() => setSaveSucceeded(false), 2500);
+            queryClient.invalidateQueries({ queryKey: ['restaurantProfile'] });
+            queryClient.invalidateQueries({ queryKey: ['managementData'] });
+            queryClient.invalidateQueries({ queryKey: ['tenantAccess'] });
+            queryClient.invalidateQueries({ queryKey: ['posData'] });
+            onDataChange?.();
+            toast({
+                title: "Succes",
+                description: "Les parametres du restaurant ont ete mis a jour.",
+            });
         } catch (error) {
             console.error("Erreur preparation sauvegarde parametres:", error);
             toast({
@@ -227,6 +247,8 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 description: error?.message || "La sauvegarde n'a pas pu etre effectuee.",
                 variant: "destructive",
             });
+        } finally {
+            setIsManualSaving(false);
         }
     };
     
@@ -804,10 +826,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
             <Button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={isManualSaving}
                 className={`min-w-[240px] transition-all ${saveSucceeded ? 'bg-green-600 hover:bg-green-700' : ''}`}
             >
-                {isSaving ? (
+                {isManualSaving ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Enregistrement...
