@@ -97,6 +97,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
     const [isUploading, setIsUploading] = useState(false);
     const [isManualSaving, setIsManualSaving] = useState(false);
     const [saveSucceeded, setSaveSucceeded] = useState(false);
+    const [saveFeedback, setSaveFeedback] = useState({ type: '', message: '' });
     const scratchTicketsAvailable = (localProfile?.manages_kiosk === true) || (localProfile?.manages_web_ordering === true);
     const kioskExitCode = localProfile?.page_pins?.KioskTerminalExit || '2580';
     const mobileKioskUrl = `${window.location.origin}/Kiosk?tenant=${currentTenant?.id}&display=mobile`;
@@ -193,6 +194,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
 
     const handleSave = async () => {
         if (!currentTenant?.id) {
+            setSaveFeedback({
+                type: 'error',
+                message: "Impossible de sauvegarder: commerce introuvable.",
+            });
             toast({
                 title: "Commerce introuvable",
                 description: "Impossible de sauvegarder sans commerce selectionne.",
@@ -202,6 +207,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
         }
 
         if (!localProfile.nom_etablissement || !localProfile.adresse || !localProfile.telephone) {
+            setSaveFeedback({
+                type: 'error',
+                message: "Nom, adresse et telephone sont obligatoires.",
+            });
             toast({
                 title: "Champs requis manquants",
                 description: "Veuillez renseigner au moins le nom, l'adresse et le téléphone de l'établissement.",
@@ -233,6 +242,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
             }
 
             setIsManualSaving(true);
+            setSaveFeedback({
+                type: 'info',
+                message: "Enregistrement en cours...",
+            });
 
             const runWithTimeout = (promise, label) => Promise.race([
                 promise,
@@ -249,6 +262,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 : payload;
 
             if (targetProfileId && Object.keys(updatePayload).length === 1 && updatePayload.tenant_id) {
+                setSaveFeedback({
+                    type: 'warning',
+                    message: "Aucun changement detecte a enregistrer.",
+                });
                 toast({
                     title: "Aucune modification",
                     description: "Aucun changement detecte a enregistrer.",
@@ -306,6 +323,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 ),
             });
             setSaveSucceeded(true);
+            setSaveFeedback({
+                type: 'success',
+                message: "Sauvegarde confirmee par la base.",
+            });
             window.setTimeout(() => setSaveSucceeded(false), 2500);
             queryClient.invalidateQueries({ queryKey: ['restaurantProfile'] });
             queryClient.invalidateQueries({ queryKey: ['managementData'] });
@@ -318,6 +339,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
             });
         } catch (error) {
             console.error("Erreur sauvegarde parametres restaurant:", error);
+            setSaveFeedback({
+                type: 'error',
+                message: error?.message || "La sauvegarde n'a pas pu etre effectuee.",
+            });
             toast({
                 title: "Erreur",
                 description: error?.message || "La sauvegarde n'a pas pu etre effectuee.",
@@ -919,6 +944,21 @@ export default function RestaurantSettings({ data, onDataChange }) {
                     'Enregistrer les modifications'
                 )}
             </Button>
+            {saveFeedback.message ? (
+                <p
+                    className={`text-sm ${
+                        saveFeedback.type === 'success'
+                            ? 'text-green-700'
+                            : saveFeedback.type === 'warning'
+                                ? 'text-amber-700'
+                                : saveFeedback.type === 'error'
+                                    ? 'text-red-700'
+                                    : 'text-slate-600'
+                    }`}
+                >
+                    {saveFeedback.message}
+                </p>
+            ) : null}
         </div>
     );
 }
