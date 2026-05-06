@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { appClient } from "@/api/appClient";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, AlertCircle, Printer, CreditCard, Wallet, ShoppingBag } from "lucide-react";
 import { format } from "date-fns";
 import KioskProductGrid from "../components/borne/KioskProductGrid";
@@ -13,6 +12,14 @@ import { Input } from "@/components/ui/input";
 import { generateKioskClientReceiptHtml, generateTicketHtml, triggerPrint } from "../components/caisse/ticketUtils";
 import { calculateOfferDiscounts } from "@/utils/offerUtils";
 import { computeTaxSummaryFromArticles } from "../components/utils/taxUtils";
+import {
+  createKioskCachePayload,
+  fetchKioskCatalog,
+  fetchTenantSyncSnapshot,
+  readKioskCatalogCache,
+  shouldRefreshKioskCatalog,
+  writeKioskCatalogCache,
+} from "@/lib/kioskCatalogCache";
 
 const normalizeKioskWelcomeImages = (images = []) => (
   Array.isArray(images)
@@ -165,8 +172,22 @@ export default function Kiosk() {
   const [exitCodeInput, setExitCodeInput] = useState("");
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
+  const [catalogData, setCatalogData] = useState({
+    profile: null,
+    products: [],
+    categories: [],
+    menus: [],
+    optionGroups: [],
+    optionItems: [],
+    ingredients: [],
+    productIngredients: [],
+    menuItems: [],
+    offersRaw: [],
+  });
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(null);
+  const [catalogSyncMeta, setCatalogSyncMeta] = useState(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Récupérer le tenant_id depuis l'URL (format: /kiosk?tenant=xxx)
   const urlParams = new URLSearchParams(window.location.search);
@@ -370,7 +391,12 @@ export default function Kiosk() {
       }
 
       try {
-        const tenants = await appClient.entities.Tenant.filter({ id: tenantIdFromUrl });
+        const tenants = await appClient.entities.Tenant.filter(
+          { id: tenantIdFromUrl },
+          undefined,
+          1,
+          { fields: ['id', 'nom_commercial', 'active', 'owner_email'] }
+        );
         if (tenants.length > 0) {
           setTenantData(tenants[0]);
         }
@@ -382,41 +408,99 @@ export default function Kiosk() {
     loadTenantData();
   }, [tenantIdFromUrl]);
 
-  const { data: profile, isLoading: profileLoading, error: profileError } = useQuery({
-    queryKey: ['restaurantProfile', tenantIdFromUrl],
-    queryFn: async () => {
-      if (!tenantIdFromUrl) return null;
-      const profiles = await appClient.entities.RestaurantProfile.filter(
-        { tenant_id: tenantIdFromUrl },
-        undefined,
-        undefined,
-        {
-          fields: [
-            'id',
-            'tenant_id',
-            'manages_kiosk',
-            'nom_etablissement',
-            'adresse',
-            'telephone',
-            'logo_url',
-            'page_pins',
-            'prix_differencies_par_mode',
-            'kiosk_primary_color',
-            'kiosk_secondary_color',
-            'kiosk_welcome_images',
-            'kiosk_terminal_welcome_images',
-            'kiosk_welcome_message',
-            'kiosk_welcome_title_size',
-            'kiosk_welcome_title_style',
-            'kiosk_card_payment_enabled'
-          ]
+  useEffect(() => {
+    if (!tenantIdFromUrl) {
+      return undefined;
+    }
+
+    let isActive = true;
+    let cachedPayload = readKioskCatalogCache(tenantIdFromUrl);
+
+    if (cachedPayload?.data) {
+      setCatalogData(cachedPayload.data);
+      setCatalogSyncMeta(cachedPayload.syncSnapshot || null);
+      setCatalogLoading(false);
+    }
+
+    const syncCatalog = async () => {
+      try {
+        const remoteSnapshot = await fetchTenantSyncSnapshot(tenantIdFromUrl);
+        const shouldRefresh = !cachedPayload?.data || shouldRefreshKioskCatalog(cachedPayload?.syncSnapshot, remoteSnapshot);
+
+        if (shouldRefresh) {
+          const freshCatalog = await fetchKioskCatalog(tenantIdFromUrl);
+          const nextSnapshot = remoteSnapshot || freshCatalog.syncSnapshot || null;
+          if (!isActive) return;
+
+          const nextData = {
+            profile: freshCatalog.profile,
+            products: freshCatalog.products,
+            categories: freshCatalog.categories,
+            menus: freshCatalog.menus,
+            optionGroups: freshCatalog.optionGroups,
+            optionItems: freshCatalog.optionItems,
+            ingredients: freshCatalog.ingredients,
+            productIngredients: freshCatalog.productIngredients,
+            menuItems: freshCatalog.menuItems,
+            offersRaw: freshCatalog.offersRaw,
+          };
+
+          setCatalogData(nextData);
+          setCatalogSyncMeta(nextSnapshot);
+          cachedPayload = createKioskCachePayload(tenantIdFromUrl, nextData, nextSnapshot);
+          writeKioskCatalogCache(
+            tenantIdFromUrl,
+            cachedPayload
+          );
+        } else if (remoteSnapshot && isActive) {
+          setCatalogSyncMeta(remoteSnapshot);
+          cachedPayload = cachedPayload
+            ? { ...cachedPayload, syncSnapshot: remoteSnapshot }
+            : cachedPayload;
         }
-      );
-      return profiles[0] || null;
-    },
-    enabled: !!tenantIdFromUrl,
-    refetchInterval: 60000  // Recharger toutes les 60 secondes pour limiter l'egress
-  });
+
+        if (isActive) {
+          setCatalogError(null);
+          setCatalogLoading(false);
+        }
+      } catch (error) {
+        console.error('[Kiosk] Erreur sync catalogue:', error);
+        if (!isActive) return;
+        if (!cachedPayload?.data) {
+          setCatalogError(error);
+        }
+        setCatalogLoading(false);
+      }
+    };
+
+    syncCatalog();
+
+    const fallbackInterval = setInterval(syncCatalog, 120000);
+    const unsubscribeOrders = appClient.entities.Order.subscribe((event) => {
+      const order = event?.data;
+      if (!order || order.tenant_id !== tenantIdFromUrl) return;
+      // Les commandes sont des donnees vivantes; on garde simplement le flux realtime actif.
+    });
+
+    return () => {
+      isActive = false;
+      clearInterval(fallbackInterval);
+      unsubscribeOrders();
+    };
+  }, [tenantIdFromUrl]);
+
+  const {
+    profile,
+    products,
+    categories,
+    menus,
+    optionGroups,
+    optionItems,
+    ingredients,
+    productIngredients,
+    menuItems,
+    offersRaw,
+  } = catalogData;
 
   const kioskExitCode = useMemo(() => {
     const codeFromUrl = urlParams.get('exitCode');
@@ -425,59 +509,6 @@ export default function Kiosk() {
     return codeFromUrl || codeFromProfile || codeFromStorage || DEFAULT_KIOSK_EXIT_CODE;
   }, [profile?.page_pins, urlParams]);
 
-  const { data: products = [] } = useQuery({
-    queryKey: ['products', tenantIdFromUrl],
-    queryFn: () => appClient.entities.Product.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories', tenantIdFromUrl],
-    queryFn: () => appClient.entities.Category.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: menus = [] } = useQuery({
-    queryKey: ['menus', tenantIdFromUrl],
-    queryFn: () => appClient.entities.MenuFormula.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: optionGroups = [] } = useQuery({
-    queryKey: ['optionGroups', tenantIdFromUrl],
-    queryFn: () => appClient.entities.OptionGroup.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: optionItems = [] } = useQuery({
-    queryKey: ['optionItems', tenantIdFromUrl],
-    queryFn: () => appClient.entities.OptionItem.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: ingredients = [] } = useQuery({
-    queryKey: ['ingredients', tenantIdFromUrl],
-    queryFn: () => appClient.entities.Ingredient.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: productIngredients = [] } = useQuery({
-    queryKey: ['productIngredients', tenantIdFromUrl],
-    queryFn: () => appClient.entities.ProductIngredient.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: menuItems = [] } = useQuery({
-    queryKey: ['menuItems', tenantIdFromUrl],
-    queryFn: () => appClient.entities.MenuFormulaItem.filter({ tenant_id: tenantIdFromUrl }),
-    enabled: !!tenantIdFromUrl
-  });
-
-  const { data: offersRaw = [] } = useQuery({
-    queryKey: ['kiosk-offers', tenantIdFromUrl],
-    queryFn: () => appClient.entities.Offer.filter({ tenant_id: tenantIdFromUrl, active: true }),
-    enabled: !!tenantIdFromUrl
-  });
   const borneOffers = useMemo(
     () => offersRaw.filter(o => (o.canaux || ['caisse']).includes('borne')),
     [offersRaw]
@@ -546,7 +577,12 @@ export default function Kiosk() {
         console.warn('⚠️ Fallback création commande borne via entities.Order:', functionError);
       }
 
-      const allOrders = await appClient.entities.Order.filter({ tenant_id: tenantIdFromUrl });
+      const allOrders = await appClient.entities.Order.filter(
+        { tenant_id: tenantIdFromUrl },
+        undefined,
+        undefined,
+        { fields: ['id', 'numero_caisse', 'created_date'] }
+      );
       const todayOrders = allOrders.filter(order => {
         if (!order?.created_date) return false;
         const normalized = String(order.created_date).replace(' ', 'T');
@@ -697,7 +733,7 @@ export default function Kiosk() {
     );
   }
 
-  if (profileLoading) {
+  if (catalogLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center p-8">
@@ -708,13 +744,13 @@ export default function Kiosk() {
     );
   }
 
-  if (profileError) {
+  if (catalogError) {
     return (
       <div className="flex items-center justify-center h-screen bg-red-50">
         <div className="text-center p-8 bg-white rounded-xl shadow-lg">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Erreur de chargement</h1>
-          <p className="text-gray-600">{profileError.message}</p>
+          <p className="text-gray-600">{catalogError.message}</p>
         </div>
       </div>
     );
