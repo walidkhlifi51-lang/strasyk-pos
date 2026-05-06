@@ -31,7 +31,7 @@ export default function SecurityManager() {
   const { data: profile, isLoading } = useQuery({
       queryKey: ['restaurantProfile', currentTenant?.id],
       queryFn: async () => {
-        const profiles = await appClient.entities.RestaurantProfile.filter(filterByTenant());
+        const profiles = await appClient.entities.RestaurantProfile.filter(filterByTenant(), '-updated_date', 5);
         return profiles[0] || null;
       },
       enabled: !!currentTenant?.id,

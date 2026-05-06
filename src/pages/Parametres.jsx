@@ -73,7 +73,7 @@ export default function Parametres() {
                 appClient.entities.Category.filter(filterByTenant()).catch(() => []),
                 appClient.entities.Ingredient.filter(filterByTenant()).catch(() => []),
                 appClient.entities.DeliveryPerson.filter(filterByTenant()).catch(() => []),
-                appClient.entities.RestaurantProfile.filter(filterByTenant()).catch(() => [])
+                appClient.entities.RestaurantProfile.filter(filterByTenant(), '-updated_date', 5).catch(() => [])
             ]);
             
             const profile = profileList?.[0] || null;
