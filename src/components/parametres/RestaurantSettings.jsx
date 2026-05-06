@@ -75,6 +75,18 @@ const normalizeKioskWelcomeImages = (images = []) => (
         : []
 );
 
+const areValuesEqual = (left, right) => {
+    if (left === right) return true;
+    if (Array.isArray(left) || Array.isArray(right) || (left && typeof left === 'object') || (right && typeof right === 'object')) {
+        try {
+            return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+        } catch {
+            return false;
+        }
+    }
+    return false;
+};
+
 export default function RestaurantSettings({ data, onDataChange }) {
     const { profile } = data || {};
     const { toast } = useToast();
@@ -230,9 +242,23 @@ export default function RestaurantSettings({ data, onDataChange }) {
             ]);
 
             const targetProfileId = localProfile?.id || profile?.id || null;
+            const updatePayload = targetProfileId
+                ? Object.fromEntries(
+                    Object.entries(payload).filter(([key, value]) => key === 'tenant_id' || !areValuesEqual(profile?.[key], value))
+                )
+                : payload;
+
+            if (targetProfileId && Object.keys(updatePayload).length === 1 && updatePayload.tenant_id) {
+                toast({
+                    title: "Aucune modification",
+                    description: "Aucun changement detecte a enregistrer.",
+                });
+                return;
+            }
+
             const savedProfile = targetProfileId
                 ? await runWithTimeout(
-                    appClient.entities.RestaurantProfile.update(targetProfileId, payload),
+                    appClient.entities.RestaurantProfile.update(targetProfileId, updatePayload),
                     "La sauvegarde"
                 )
                 : await runWithTimeout(
