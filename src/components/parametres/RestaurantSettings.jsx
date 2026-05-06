@@ -203,14 +203,14 @@ export default function RestaurantSettings({ data, onDataChange }) {
             const payload = Object.fromEntries(
                 Object.entries(rawPayload).filter(([key]) => RESTAURANT_PROFILE_SCHEMA_FIELDS.has(key))
             );
-            
+
             payload.tenant_id = currentTenant.id;
             payload.frais_livraison = parseFloat(payload.frais_livraison) || 0;
             payload.montant_minimum_livraison = parseFloat(payload.montant_minimum_livraison) || 0;
             payload.zone_livraison_km = parseFloat(payload.zone_livraison_km) || 0;
-            
+
             if (payload.tva_rates && Array.isArray(payload.tva_rates)) {
-                payload.tva_rates = payload.tva_rates.map(rate => ({
+                payload.tva_rates = payload.tva_rates.map((rate) => ({
                     rate: parseFloat(rate.rate) || 0,
                     label: rate.label || `Taux ${rate.rate}%`
                 }));
@@ -219,38 +219,39 @@ export default function RestaurantSettings({ data, onDataChange }) {
             if (!scratchTicketsAvailable) {
                 payload.scratch_tickets_enabled = false;
             }
-            
+
             setIsManualSaving(true);
 
-            const existingProfiles = await appClient.entities.RestaurantProfile.filter(
-                { tenant_id: currentTenant.id },
-                undefined,
-                1
-            );
-            const existingProfile = existingProfiles?.[0] || null;
+            const runWithTimeout = (promise, label) => Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    window.setTimeout(() => reject(new Error(`${label} a expire. Reessayez.`)), 15000);
+                }),
+            ]);
 
-            if (existingProfile?.id) {
-                await appClient.entities.RestaurantProfile.update(existingProfile.id, payload);
-            } else {
-                await appClient.entities.RestaurantProfile.create(payload);
-            }
+            const targetProfileId = localProfile?.id || profile?.id || null;
+            const savedProfile = targetProfileId
+                ? await runWithTimeout(
+                    appClient.entities.RestaurantProfile.update(targetProfileId, payload),
+                    "La sauvegarde"
+                )
+                : await runWithTimeout(
+                    appClient.entities.RestaurantProfile.create(payload),
+                    "La creation du profil"
+                );
 
-            const refreshedProfiles = await appClient.entities.RestaurantProfile.filter(
-                { tenant_id: currentTenant.id },
-                undefined,
-                1
-            );
-            const refreshedProfile = refreshedProfiles?.[0] || null;
-
-            if (!refreshedProfile) {
-                throw new Error("Le profil n'a pas pu etre relu apres sauvegarde.");
-            }
+            const mergedProfile = {
+                ...(localProfile || {}),
+                ...(savedProfile || {}),
+                ...payload,
+                tenant_id: currentTenant.id,
+            };
 
             setLocalProfile({
-                ...refreshedProfile,
-                kiosk_welcome_images: normalizeKioskWelcomeImages(refreshedProfile.kiosk_welcome_images),
+                ...mergedProfile,
+                kiosk_welcome_images: normalizeKioskWelcomeImages(mergedProfile.kiosk_welcome_images),
                 kiosk_terminal_welcome_images: normalizeKioskWelcomeImages(
-                    refreshedProfile.kiosk_terminal_welcome_images || refreshedProfile.kiosk_welcome_images
+                    mergedProfile.kiosk_terminal_welcome_images || mergedProfile.kiosk_welcome_images
                 ),
             });
             setSaveSucceeded(true);
@@ -259,13 +260,13 @@ export default function RestaurantSettings({ data, onDataChange }) {
             queryClient.invalidateQueries({ queryKey: ['managementData'] });
             queryClient.invalidateQueries({ queryKey: ['tenantAccess'] });
             queryClient.invalidateQueries({ queryKey: ['posData'] });
-            onDataChange?.();
+            await onDataChange?.();
             toast({
                 title: "Succes",
                 description: "Les parametres du restaurant ont ete mis a jour.",
             });
         } catch (error) {
-            console.error("Erreur preparation sauvegarde parametres:", error);
+            console.error("Erreur sauvegarde parametres restaurant:", error);
             toast({
                 title: "Erreur",
                 description: error?.message || "La sauvegarde n'a pas pu etre effectuee.",
