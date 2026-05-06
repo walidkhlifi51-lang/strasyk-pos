@@ -85,6 +85,7 @@ export default function ProductForm({ product, categories, ingredients, profile,
   const selectedCategory = categories?.find(c => c.id === productData.category_id);
   const managesSizes = selectedCategory?.manages_sizes && selectedCategory?.size_template?.length > 0;
   const sizesArray = selectedCategory?.size_template || [];
+  const normalizeJson = (value) => JSON.stringify(value ?? null);
 
   const buildProductPayload = (mode = 'full') => {
     const legacyPrice = managesSizes
@@ -177,6 +178,47 @@ export default function ProductForm({ product, categories, ingredients, profile,
     }
 
     return extendedPayload;
+  };
+
+  const confirmPersistedProduct = async (productId, expectedPayload) => {
+    const persistedList = await appClient.entities.Product.filter(
+      { id: productId },
+      null,
+      1,
+      {
+        fields: [
+          'id',
+          'prix',
+          'base_price',
+          'size_prices',
+          'prix_par_mode',
+          'size_prix_par_mode',
+          'web_price',
+          'web_size_prices',
+        ],
+      }
+    );
+
+    const persisted = persistedList?.[0];
+    if (!persisted) {
+      return { ok: false, issues: ['product_not_found'] };
+    }
+
+    const issues = [];
+    const compareNumber = (label, expected, actual) => {
+      if ((expected ?? null) !== (actual ?? null)) issues.push(label);
+    };
+
+    compareNumber('prix', expectedPayload.prix ?? null, persisted.prix ?? null);
+    compareNumber('base_price', expectedPayload.base_price ?? null, persisted.base_price ?? null);
+    compareNumber('web_price', expectedPayload.web_price ?? null, persisted.web_price ?? null);
+
+    if (normalizeJson(expectedPayload.size_prices) !== normalizeJson(persisted.size_prices)) issues.push('size_prices');
+    if ('prix_par_mode' in expectedPayload && normalizeJson(expectedPayload.prix_par_mode) !== normalizeJson(persisted.prix_par_mode)) issues.push('prix_par_mode');
+    if ('size_prix_par_mode' in expectedPayload && normalizeJson(expectedPayload.size_prix_par_mode) !== normalizeJson(persisted.size_prix_par_mode)) issues.push('size_prix_par_mode');
+    if ('web_size_prices' in expectedPayload && normalizeJson(expectedPayload.web_size_prices) !== normalizeJson(persisted.web_size_prices)) issues.push('web_size_prices');
+
+    return { ok: issues.length === 0, issues };
   };
 
   // Charger les ingrédients du produit
@@ -407,6 +449,8 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
       console.log('💾 Payload à enregistrer:', productPayload);
 
       let savedProduct;
+      let usedFallback = false;
+      let fullPayloadError = null;
 
       try {
         if (product?.id) {
@@ -416,6 +460,8 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
           savedProduct = await appClient.entities.Product.create(productPayload);
         }
       } catch (error) {
+        usedFallback = true;
+        fullPayloadError = error;
         const fallbackPayload = buildProductPayload('basic');
         console.warn('Fallback produit minimal suite à erreur schéma Supabase:', error);
 
@@ -430,6 +476,22 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
       console.log('✅ Produit enregistré:', savedProduct);
 
       // ÉTAPE 3: Gérer les ingrédients
+      if (savedProduct?.id) {
+        const persistenceCheck = await confirmPersistedProduct(savedProduct.id, productPayload);
+        if (!persistenceCheck.ok) {
+          const refusedFields = persistenceCheck.issues.join(', ');
+          const schemaHint = fullPayloadError?.message?.includes('Could not find')
+            ? ' Exécute docs/SUPABASE_PRODUCT_SCHEMA_COMPLETE.sql dans Supabase.'
+            : '';
+
+          throw new Error(
+            usedFallback
+              ? `La base n'a pas confirme la sauvegarde complete du produit. Champs refuses: ${refusedFields}.${schemaHint}`
+              : `La base n'a pas confirme la sauvegarde du produit. Champs refuses: ${refusedFields}.`
+          );
+        }
+      }
+
       if (savedProduct?.id) {
         try {
           const existingProductIngredients = await appClient.entities.ProductIngredient.filter({ 
