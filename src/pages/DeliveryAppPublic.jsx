@@ -50,13 +50,23 @@ export default function DeliveryAppPublic() {
   const [restaurantProfile, setRestaurantProfile] = useState(null);
   const deliveryPersonRef = useRef(null);
   const assignFnRef = useRef(null);
+  const deliveryProfileFields = [
+    'id',
+    'tenant_id',
+    'nom_etablissement',
+    'adresse',
+    'telephone',
+    'logo_url',
+    'delivery_app_allowed',
+    'manages_delivery_app',
+  ];
 
   // Load restaurant profile when logged in
   useEffect(() => {
     if (!deliveryPerson) return;
     const tId = tenantId || deliveryPerson.tenant_id;
     if (!tId) return;
-    appClient.entities.RestaurantProfile.filter({ tenant_id: tId })
+    appClient.entities.RestaurantProfile.filter({ tenant_id: tId }, undefined, 1, { fields: deliveryProfileFields })
       .then(res => { if (res[0]) setRestaurantProfile(res[0]); })
       .catch(() => {});
   }, [deliveryPerson?.id]);
@@ -76,7 +86,7 @@ export default function DeliveryAppPublic() {
   useEffect(() => {
     if (!deliveryPerson) return;
     loadOrders(deliveryPerson);
-    const interval = setInterval(() => loadOrders(deliveryPerson), 15000);
+    const interval = setInterval(() => loadOrders(deliveryPerson), 30000);
     return () => clearInterval(interval);
   }, [deliveryPerson?.id]);
 
@@ -100,7 +110,7 @@ export default function DeliveryAppPublic() {
       if (person.app_access_enabled === false) throw new Error('Acces application livreur desactive');
       const tId = tenantId || person.tenant_id;
       if (!tId) throw new Error('Aucun commerce rattache a ce livreur');
-      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tId });
+      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tId }, undefined, 1, { fields: deliveryProfileFields });
       const profile = profiles[0] || null;
       if (!profile?.delivery_app_allowed) throw new Error('Application livreur non autorisee par l administrateur');
       if (!profile?.manages_delivery_app) throw new Error('Application livreur non activee par le commercant');

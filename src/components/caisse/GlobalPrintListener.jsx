@@ -13,6 +13,28 @@ export default function GlobalPrintListener() {
   const { currentTenant } = useTenant();
   const { profile } = useSecurity();
   const printedOrderIds = useRef(new Set());
+  const pendingOrderFields = [
+    'id',
+    'tenant_id',
+    'customer_id',
+    'numero_caisse',
+    'statut',
+    'from_web',
+    'from_kiosk',
+    'print_at_counter',
+    'articles',
+    'total_ht',
+    'total_tva',
+    'total_ttc',
+    'type_commande',
+    'delivery_address',
+    'notes',
+    'created_date',
+    'numero_commande',
+    'payee',
+    'payment_method',
+    'table_id',
+  ];
 
   useEffect(() => {
     if (!currentTenant?.id || !profile?.impression_auto) return;
@@ -45,7 +67,12 @@ export default function GlobalPrintListener() {
         let customer = null;
         if (order.customer_id) {
           try {
-            const customers = await appClient.entities.Customer.filter({ id: order.customer_id });
+            const customers = await appClient.entities.Customer.filter(
+              { id: order.customer_id },
+              undefined,
+              1,
+              { fields: ['id', 'nom', 'prenom', 'telephone', 'adresse', 'ville', 'code_postal', 'etage', 'interphone', 'adresses'] }
+            );
             customer = customers[0] || null;
           } catch (_) {}
         }
@@ -74,10 +101,15 @@ export default function GlobalPrintListener() {
 
     const pollInterval = setInterval(async () => {
       try {
-        const pendingOrders = await appClient.entities.Order.filter({
-          tenant_id: currentTenant.id,
-          print_at_counter: true,
-        });
+        const pendingOrders = await appClient.entities.Order.filter(
+          {
+            tenant_id: currentTenant.id,
+            print_at_counter: true,
+          },
+          undefined,
+          undefined,
+          { fields: pendingOrderFields }
+        );
 
         for (const order of pendingOrders || []) {
           await processOrderForPrinting(order, 'poll');
