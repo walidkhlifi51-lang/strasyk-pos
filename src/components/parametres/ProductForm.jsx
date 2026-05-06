@@ -77,6 +77,7 @@ export default function ProductForm({ product, categories, ingredients, profile,
 
   const [selectedIngredients, setSelectedIngredients] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [aiImagePerspective, setAiImagePerspective] = useState('angled');
@@ -442,6 +443,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
     }
 
     setIsSubmitting(true);
+    setSaveFeedback('Enregistrement en cours...');
 
     try {
       const productPayload = buildProductPayload('full');
@@ -537,6 +539,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
         title: "Produit enregistré",
         description: `Le produit "${productPayload.nom}" a été enregistré avec succès.`,
       });
+      setSaveFeedback('Sauvegarde confirmée par la base.');
 
       // Forcer le rafraîchissement des données via le parent
       if (onSave) {
@@ -545,6 +548,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
 
     } catch (error) {
       console.error("Erreur lors de l'enregistrement:", error);
+      setSaveFeedback(error.message || "Une erreur est survenue lors de l'enregistrement.");
       toast({
         title: "Erreur",
         description: error.message || "Une erreur est survenue lors de l'enregistrement.",
@@ -1124,6 +1128,11 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
           )}
         </Button>
       </div>
+      {saveFeedback ? (
+        <p className={`text-sm ${saveFeedback.includes('confirmée') ? 'text-green-600' : saveFeedback.includes('cours') ? 'text-gray-500' : 'text-red-600'}`}>
+          {saveFeedback}
+        </p>
+      ) : null}
     </form>
   );
 }
