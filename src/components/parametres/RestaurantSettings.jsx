@@ -266,9 +266,34 @@ export default function RestaurantSettings({ data, onDataChange }) {
                     "La creation du profil"
                 );
 
+            const savedProfileId = savedProfile?.id || targetProfileId;
+            const verificationFields = Object.keys(targetProfileId ? updatePayload : payload)
+                .filter((key) => key !== 'tenant_id');
+            const verifiedProfiles = savedProfileId
+                ? await runWithTimeout(
+                    appClient.entities.RestaurantProfile.filter({ id: savedProfileId }, undefined, 1),
+                    "La verification"
+                )
+                : [];
+            const verifiedProfile = verifiedProfiles?.[0] || savedProfile || null;
+
+            if (!verifiedProfile) {
+                throw new Error("La sauvegarde a repondu, mais le profil n'a pas pu etre relu.");
+            }
+
+            const refusedFields = verificationFields.filter(
+                (key) => !areValuesEqual(verifiedProfile?.[key], payload[key])
+            );
+
+            if (refusedFields.length > 0) {
+                throw new Error(
+                    `La base n'a pas confirme la sauvegarde. Champs refuses: ${refusedFields.join(', ')}.`
+                );
+            }
+
             const mergedProfile = {
                 ...(localProfile || {}),
-                ...(savedProfile || {}),
+                ...(verifiedProfile || {}),
                 ...payload,
                 tenant_id: currentTenant.id,
             };
