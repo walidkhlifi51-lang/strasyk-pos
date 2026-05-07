@@ -1,5 +1,26 @@
 begin;
 
+create or replace function public.app_current_tenant_id()
+returns uuid
+language sql
+stable
+as $$
+  select nullif(auth.jwt() -> 'user_metadata' ->> 'tenant_id', '')::uuid
+$$;
+
+create or replace function public.app_current_user_email()
+returns text
+language sql
+stable
+as $$
+  select lower(
+    coalesce(
+      nullif(auth.jwt() ->> 'email', ''),
+      nullif(auth.email(), '')
+    )
+  )
+$$;
+
 create table if not exists public.tenant_sync_versions (
   tenant_id uuid primary key references public.tenants(id) on delete cascade,
   products_version timestamptz,
@@ -107,5 +128,44 @@ on public.tenant_sync_versions
 for select
 to anon, authenticated
 using (true);
+
+drop policy if exists tenant_sync_versions_insert_access on public.tenant_sync_versions;
+create policy tenant_sync_versions_insert_access
+on public.tenant_sync_versions
+for insert
+to authenticated
+with check (
+  tenant_id = public.app_current_tenant_id()
+  or exists (
+    select 1
+    from public.tenants t
+    where t.id = tenant_sync_versions.tenant_id
+      and lower(t.owner_email) = public.app_current_user_email()
+  )
+);
+
+drop policy if exists tenant_sync_versions_update_access on public.tenant_sync_versions;
+create policy tenant_sync_versions_update_access
+on public.tenant_sync_versions
+for update
+to authenticated
+using (
+  tenant_id = public.app_current_tenant_id()
+  or exists (
+    select 1
+    from public.tenants t
+    where t.id = tenant_sync_versions.tenant_id
+      and lower(t.owner_email) = public.app_current_user_email()
+  )
+)
+with check (
+  tenant_id = public.app_current_tenant_id()
+  or exists (
+    select 1
+    from public.tenants t
+    where t.id = tenant_sync_versions.tenant_id
+      and lower(t.owner_email) = public.app_current_user_email()
+  )
+);
 
 commit;
