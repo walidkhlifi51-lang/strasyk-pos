@@ -8,6 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+const DELIVERY_ORDER_FIELDS = [
+  'id', 'tenant_id', 'numero_caisse', 'customer_id', 'delivery_person_id', 'statut',
+  'total_ttc', 'mode_paiement_prevu', 'notes', 'payee', 'updated_date'
+];
+
+const DELIVERY_CUSTOMER_FIELDS = [
+  'id', 'nom', 'prenom', 'telephone', 'adresse', 'etage', 'interphone'
+];
+
 export default function DeliveryApp() {
   const { currentUser, deliveryPerson } = useTenant();
   const [searchOrderNumber, setSearchOrderNumber] = useState('');
@@ -21,11 +30,12 @@ export default function DeliveryApp() {
       const orders = await appClient.entities.Order.filter({
         delivery_person_id: deliveryPerson.id,
         statut: 'en_cours_de_livraison'
-      });
+      }, null, 1, { fields: DELIVERY_ORDER_FIELDS });
       return orders.length > 0 ? orders[0] : null;
     },
     enabled: !!deliveryPerson,
-    refetchInterval: 15000, // Rafraichir toutes les 15 secondes
+    refetchInterval: 120000,
+    refetchOnWindowFocus: false,
   });
 
   // Charger les infos client si commande active
@@ -33,11 +43,32 @@ export default function DeliveryApp() {
     queryKey: ['customer', currentOrder?.customer_id],
     queryFn: async () => {
       if (!currentOrder?.customer_id) return null;
-      const customers = await appClient.entities.Customer.filter({ id: currentOrder.customer_id });
+      const customers = await appClient.entities.Customer.filter({ id: currentOrder.customer_id }, null, 1, { fields: DELIVERY_CUSTOMER_FIELDS });
       return customers.length > 0 ? customers[0] : null;
     },
     enabled: !!currentOrder?.customer_id,
+    refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!deliveryPerson?.id) return undefined;
+
+    const unsubscribe = appClient.entities.Order.subscribe((event) => {
+      const order = event?.data;
+      if (!order) return;
+
+      const matchesDriver = order.delivery_person_id === deliveryPerson.id;
+      const concernsCurrentOrder = currentOrder?.id && order.id === currentOrder.id;
+      if (!matchesDriver && !concernsCurrentOrder) return;
+
+      queryClient.invalidateQueries({ queryKey: ['currentDeliveryOrder', deliveryPerson.id] });
+      if (order.customer_id) {
+        queryClient.invalidateQueries({ queryKey: ['customer', order.customer_id] });
+      }
+    });
+
+    return unsubscribe;
+  }, [deliveryPerson?.id, currentOrder?.id, queryClient]);
 
   // Mutation pour prendre une nouvelle commande
   const assignOrderMutation = useMutation({
@@ -46,7 +77,7 @@ export default function DeliveryApp() {
         numero_caisse: parseInt(orderNumber),
         type_commande: 'livraison',
         statut: 'prete'
-      });
+      }, null, 1, { fields: ['id', 'delivery_person_id'] });
 
       if (orders.length === 0) {
         throw new Error('Commande introuvable ou pas prete');

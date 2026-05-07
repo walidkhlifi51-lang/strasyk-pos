@@ -168,11 +168,20 @@ export default function StrasykPos() {
     queryFn: async () => {
       try {
         const cachedOfflineOrders = getCachedData('offlineOrders') || [];
+        const workingDayStart = startOfDay(workingDate);
+        const workingDayEnd = endOfDay(workingDate);
+        const orderScope = {
+          ...filterByTenant(),
+          created_date: {
+            $gte: workingDayStart.toISOString(),
+            $lte: workingDayEnd.toISOString(),
+          },
+        };
         const [productsData, categoriesData, allOrdersData, customersData] = await Promise.all([
           appClient.entities.Product.filter(filterByTenant(), null, null, { fields: POS_PRODUCTS_FIELDS }).catch(() => []),
           appClient.entities.Category.filter(filterByTenant(), null, null, { fields: POS_CATEGORIES_FIELDS }).catch(() => []),
-          appClient.entities.Order.filter(filterByTenant(), '-created_date', 500, { fields: POS_ORDER_FIELDS }).catch(() => []),
-          appClient.entities.Customer.filter(filterByTenant(), '-created_date', 1000, { fields: POS_CUSTOMER_FIELDS }).catch(() => []),
+          appClient.entities.Order.filter(orderScope, '-created_date', 200, { fields: POS_ORDER_FIELDS }).catch(() => []),
+          appClient.entities.Customer.filter(filterByTenant(), '-updated_date', 250, { fields: POS_CUSTOMER_FIELDS }).catch(() => []),
         ]);
         const combinedOrders = [...allOrdersData, ...cachedOfflineOrders];
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -893,7 +902,12 @@ export default function StrasykPos() {
     if (!codeString) { toast({ title: "Veuillez saisir un code", variant: "destructive" }); return; }
     const currentOrderType = currentOrder?.orderType || 'sur_place';
     try {
-      const results = await appClient.entities.PromoCode.filter({ ...filterByTenant(), code: codeString.trim(), active: true });
+      const results = await appClient.entities.PromoCode.filter(
+        { ...filterByTenant(), code: codeString.trim(), active: true },
+        undefined,
+        5,
+        { fields: ['id', 'tenant_id', 'code', 'active', 'type', 'value', 'expires_at', 'usage_limit', 'usage_count', 'canaux'] }
+      );
       const code = results?.[0];
       if (!code) { toast({ title: "Code promo invalide ou inactif", variant: "destructive" }); return; }
       if (code.expires_at && new Date(code.expires_at) < new Date()) { toast({ title: "Ce code promo a expiré", variant: "destructive" }); return; }

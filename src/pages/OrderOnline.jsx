@@ -45,6 +45,42 @@ import WebPromoBanner from '../components/online/WebPromoBanner';
 import ScratchTicketDisplay from '../components/scratch/ScratchTicketDisplay';
 import { buildPublicPageUrl, getPublicHostname, resolvePublicTenantContext } from '@/lib/publicSiteTenant';
 
+const ONLINE_PRODUCT_FIELDS = [
+  'id', 'tenant_id', 'nom', 'description', 'category_id', 'disponible', 'tva', 'image_url', 'image_display',
+  'prix', 'base_price', 'size_prices', 'prix_par_mode', 'size_prix_par_mode', 'web_price', 'web_size_prices',
+  'updated_date', 'created_date'
+];
+
+const ONLINE_CATEGORY_FIELDS = [
+  'id', 'tenant_id', 'nom', 'parent_id', 'disponible', 'image_url', 'image_display', 'sort_order',
+  'manages_sizes', 'size_template', 'updated_date', 'created_date'
+];
+
+const ONLINE_PRODUCT_INGREDIENT_FIELDS = [
+  'id', 'tenant_id', 'product_id', 'ingredient_id', 'retirable', 'updated_date', 'created_date'
+];
+
+const ONLINE_INGREDIENT_FIELDS = ['id', 'tenant_id', 'nom', 'updated_date', 'created_date'];
+
+const ONLINE_OPTION_GROUP_FIELDS = [
+  'id', 'tenant_id', 'product_id', 'nom', 'selection_type', 'required', 'min_selections', 'max_selections',
+  'manages_sizes', 'size_template', 'updated_date', 'created_date'
+];
+
+const ONLINE_OPTION_ITEM_FIELDS = [
+  'id', 'tenant_id', 'option_group_id', 'nom', 'price_surcharge', 'size_surcharges', 'updated_date', 'created_date'
+];
+
+const ONLINE_OFFER_FIELDS = [
+  'id', 'tenant_id', 'nom', 'active', 'canaux', 'type', 'condition_type', 'condition_product_ids',
+  'condition_category_ids', 'condition_quantity', 'condition_sizes', 'reward_type', 'reward_product_ids',
+  'reward_category_ids', 'reward_quantity', 'reward_sizes', 'reduction_value', 'updated_date', 'created_date'
+];
+
+const ONLINE_MENU_FIELDS = [
+  'id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'tva', 'disponible', 'updated_date', 'created_date'
+];
+
 export default function OrderOnline() {
   const urlParams = new URLSearchParams(window.location.search);
   const slug = urlParams.get('slug');
@@ -132,7 +168,7 @@ export default function OrderOnline() {
   const { data: products = [] } = useQuery({
     queryKey: ['online-products', tenant?.id],
     queryFn: async () => {
-      const result = await appClient.entities.Product.filter({ tenant_id: tenant?.id });
+      const result = await appClient.entities.Product.filter({ tenant_id: tenant?.id }, null, null, { fields: ONLINE_PRODUCT_FIELDS });
       console.log('📦 Premier produit complet:', JSON.stringify(result[0], null, 2));
       return result.filter(p => p.disponible !== false);
     },
@@ -142,42 +178,42 @@ export default function OrderOnline() {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['online-categories', tenant?.id],
-    queryFn: () => appClient.entities.Category.filter({ tenant_id: tenant?.id, disponible: true }),
+    queryFn: () => appClient.entities.Category.filter({ tenant_id: tenant?.id, disponible: true }, null, null, { fields: ONLINE_CATEGORY_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: productIngredients = [] } = useQuery({
     queryKey: ['online-product-ingredients', tenant?.id],
-    queryFn: () => appClient.entities.ProductIngredient.filter({ tenant_id: tenant?.id }),
+    queryFn: () => appClient.entities.ProductIngredient.filter({ tenant_id: tenant?.id }, null, null, { fields: ONLINE_PRODUCT_INGREDIENT_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: ingredientsList = [] } = useQuery({
     queryKey: ['online-ingredients', tenant?.id],
-    queryFn: () => appClient.entities.Ingredient.filter({ tenant_id: tenant?.id }),
+    queryFn: () => appClient.entities.Ingredient.filter({ tenant_id: tenant?.id }, null, null, { fields: ONLINE_INGREDIENT_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: optionGroups = [] } = useQuery({
     queryKey: ['online-option-groups', tenant?.id],
-    queryFn: () => appClient.entities.OptionGroup.filter({ tenant_id: tenant?.id }),
+    queryFn: () => appClient.entities.OptionGroup.filter({ tenant_id: tenant?.id }, null, null, { fields: ONLINE_OPTION_GROUP_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: optionItems = [] } = useQuery({
     queryKey: ['online-option-items', tenant?.id],
-    queryFn: () => appClient.entities.OptionItem.filter({ tenant_id: tenant?.id }),
+    queryFn: () => appClient.entities.OptionItem.filter({ tenant_id: tenant?.id }, null, null, { fields: ONLINE_OPTION_ITEM_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: offersRaw = [] } = useQuery({
     queryKey: ['online-offers', tenant?.id],
-    queryFn: () => appClient.entities.Offer.filter({ tenant_id: tenant?.id, active: true }),
+    queryFn: () => appClient.entities.Offer.filter({ tenant_id: tenant?.id, active: true }, null, null, { fields: ONLINE_OFFER_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 5 * 60 * 1000,
   });
@@ -185,7 +221,7 @@ export default function OrderOnline() {
 
   const { data: menus = [] } = useQuery({
     queryKey: ['online-menus', tenant?.id],
-    queryFn: () => appClient.entities.MenuFormula.filter({ tenant_id: tenant?.id, disponible: true }),
+    queryFn: () => appClient.entities.MenuFormula.filter({ tenant_id: tenant?.id, disponible: true }, null, null, { fields: ONLINE_MENU_FIELDS }),
     enabled: !!tenant?.id,
     staleTime: 5 * 60 * 1000,
   });

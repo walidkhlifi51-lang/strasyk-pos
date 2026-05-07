@@ -34,6 +34,7 @@ export default function GlobalPrintListener() {
     'payee',
     'payment_method',
     'table_id',
+    'updated_date',
   ];
 
   useEffect(() => {
@@ -117,7 +118,7 @@ export default function GlobalPrintListener() {
       } catch (error) {
         console.error('❌ [GlobalPrint] Erreur verification file impression:', error);
       }
-    }, 4000);
+    }, 60000);
 
     return () => {
       unsubscribe();

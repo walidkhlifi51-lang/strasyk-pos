@@ -1051,7 +1051,12 @@ export default function Kiosk() {
       if (!promoInput.trim()) return;
       setPromoLoading(true);
       setPromoError("");
-      const codes = await appClient.entities.PromoCode.filter({ tenant_id: tenantIdFromUrl, code: promoInput.trim().toUpperCase(), active: true });
+      const codes = await appClient.entities.PromoCode.filter(
+        { tenant_id: tenantIdFromUrl, code: promoInput.trim().toUpperCase(), active: true },
+        undefined,
+        1,
+        { fields: ['id', 'tenant_id', 'code', 'active', 'type', 'value', 'expires_at', 'usage_limit', 'usage_count', 'canaux'] }
+      );
       setPromoLoading(false);
       if (codes.length === 0) { setPromoError("Code invalide ou expiré"); return; }
       const code = codes[0];
