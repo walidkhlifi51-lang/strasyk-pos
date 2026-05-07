@@ -31,6 +31,80 @@ import { useOrderPayment } from '../components/caisse/useOrderPayment';
 import { computeTaxSummaryFromArticles } from '../components/utils/taxUtils';
 import { getDateKey, parseSupabaseDate, toParisDate as toParisDateValue } from '@/lib/dateParsing';
 
+const POS_PRODUCTS_FIELDS = [
+  'id', 'tenant_id', 'category_id', 'nom', 'description', 'disponible', 'temps_preparation', 'tva',
+  'image_url', 'image_display', 'color', 'featured', 'sort_order', 'prix', 'base_price',
+  'size_prices', 'prix_par_mode', 'size_prix_par_mode', 'web_price', 'web_size_prices',
+  'created_date', 'updated_date'
+];
+
+const POS_CATEGORIES_FIELDS = [
+  'id', 'tenant_id', 'nom', 'parent_id', 'disponible', 'color', 'image_url', 'image_display',
+  'manages_sizes', 'size_template', 'sort_order', 'created_date', 'updated_date'
+];
+
+const POS_ORDER_FIELDS = [
+  'id', 'tenant_id', 'numero_commande', 'numero_caisse', 'type_commande', 'customer_id', 'table_id',
+  'delivery_person_id', 'delivery_address', 'articles', 'total_ht', 'total_tva', 'total_ttc', 'statut',
+  'mode_paiement', 'mode_paiement_prevu', 'numero_bipeur', 'numero_table', 'payee', 'notes',
+  'cagnotte_spent', 'scratch_reduction', 'print_at_counter', 'from_kiosk', 'from_web',
+  'created_date', 'updated_date'
+];
+
+const POS_CUSTOMER_FIELDS = [
+  'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville',
+  'etage', 'interphone', 'adresses', 'created_date', 'updated_date'
+];
+
+const POS_OPTION_GROUP_FIELDS = [
+  'id', 'tenant_id', 'product_id', 'nom', 'selection_type', 'min_selections', 'max_selections',
+  'required', 'manages_sizes', 'size_template', 'created_date', 'updated_date'
+];
+
+const POS_OPTION_ITEM_FIELDS = [
+  'id', 'tenant_id', 'option_group_id', 'nom', 'price_surcharge', 'size_surcharges', 'created_date', 'updated_date'
+];
+
+const POS_INGREDIENT_FIELDS = [
+  'id', 'tenant_id', 'nom', 'unite', 'cout_unitaire', 'quantite_stock', 'created_date', 'updated_date'
+];
+
+const POS_PRODUCT_INGREDIENT_FIELDS = [
+  'id', 'tenant_id', 'product_id', 'ingredient_id', 'quantite', 'retirable', 'created_date', 'updated_date'
+];
+
+const POS_MENU_FIELDS = [
+  'id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'tva', 'disponible', 'created_date', 'updated_date'
+];
+
+const POS_MENU_ITEM_FIELDS = [
+  'id', 'tenant_id', 'menu_formula_id', 'nom_affichage', 'quantite', 'taille_fixe', 'produits_inclus', 'created_date', 'updated_date'
+];
+
+const POS_OFFER_FIELDS = [
+  'id', 'tenant_id', 'nom', 'type', 'active', 'condition_type', 'condition_product_ids', 'condition_category_ids',
+  'condition_quantity', 'condition_sizes', 'reward_type', 'reward_product_ids', 'reward_category_ids',
+  'reward_quantity', 'reward_sizes', 'reduction_value', 'canaux', 'created_date', 'updated_date'
+];
+
+const POS_LOYALTY_FIELDS = [
+  'id', 'tenant_id', 'nom', 'active', 'type', 'points_required', 'discount_amount', 'discount_percent',
+  'product_ids', 'category_ids', 'canaux', 'created_date', 'updated_date'
+];
+
+const POS_CAGNOTTE_FIELDS = [
+  'id', 'tenant_id', 'nom', 'active', 'type', 'value', 'min_order_total', 'canaux', 'created_date', 'updated_date'
+];
+
+const POS_TABLE_FIELDS = [
+  'id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y',
+  'zone', 'created_date', 'updated_date'
+];
+
+const POS_CLOTURE_FIELDS = [
+  'id', 'tenant_id', 'date_cloture', 'statut', 'montant_theorique', 'montant_reel', 'ecarts',
+  'created_by', 'notes', 'created_date', 'updated_date'
+];
 
 export default function StrasykPos() {
   const { withTenant, filterByTenant, currentTenant, currentUser } = useTenant();
@@ -66,7 +140,12 @@ export default function StrasykPos() {
     if (!profile?.customer_display_enabled || !currentTenant?.id) return;
     const syncToDb = async () => {
       try {
-        const existing = await appClient.entities.CustomerDisplayCart.filter({ tenant_id: currentTenant.id });
+        const existing = await appClient.entities.CustomerDisplayCart.filter(
+          { tenant_id: currentTenant.id },
+          null,
+          1,
+          { fields: ['id', 'tenant_id'] }
+        );
         const cartData = currentOrder?.articles?.length > 0 ? currentOrder : null;
         if (existing?.length > 0) {
           await appClient.entities.CustomerDisplayCart.update(existing[0].id, { cart_data: cartData, updated_at: new Date().toISOString() });
@@ -90,28 +169,28 @@ export default function StrasykPos() {
       try {
         const cachedOfflineOrders = getCachedData('offlineOrders') || [];
         const [productsData, categoriesData, allOrdersData, customersData] = await Promise.all([
-          appClient.entities.Product.filter(filterByTenant()).catch(() => []),
-          appClient.entities.Category.filter(filterByTenant()).catch(() => []),
-          appClient.entities.Order.filter(filterByTenant(), '-created_date', 500).catch(() => []),
-          appClient.entities.Customer.filter(filterByTenant(), '-created_date', 1000).catch(() => []),
+          appClient.entities.Product.filter(filterByTenant(), null, null, { fields: POS_PRODUCTS_FIELDS }).catch(() => []),
+          appClient.entities.Category.filter(filterByTenant(), null, null, { fields: POS_CATEGORIES_FIELDS }).catch(() => []),
+          appClient.entities.Order.filter(filterByTenant(), '-created_date', 500, { fields: POS_ORDER_FIELDS }).catch(() => []),
+          appClient.entities.Customer.filter(filterByTenant(), '-created_date', 1000, { fields: POS_CUSTOMER_FIELDS }).catch(() => []),
         ]);
         const combinedOrders = [...allOrdersData, ...cachedOfflineOrders];
         await new Promise(resolve => setTimeout(resolve, 100));
         const [clotureData, optionGroupsData, optionItemsData, ingredientsData, productIngredientsData] = await Promise.all([
-          appClient.entities.ClotureCaisse.filter(filterByTenant()).catch(() => []),
-          appClient.entities.OptionGroup.filter(filterByTenant()).catch(() => []),
-          appClient.entities.OptionItem.filter(filterByTenant()).catch(() => []),
-          appClient.entities.Ingredient.filter(filterByTenant()).catch(() => []),
-          appClient.entities.ProductIngredient.filter(filterByTenant()).catch(() => []),
+          appClient.entities.ClotureCaisse.filter(filterByTenant(), null, null, { fields: POS_CLOTURE_FIELDS }).catch(() => []),
+          appClient.entities.OptionGroup.filter(filterByTenant(), null, null, { fields: POS_OPTION_GROUP_FIELDS }).catch(() => []),
+          appClient.entities.OptionItem.filter(filterByTenant(), null, null, { fields: POS_OPTION_ITEM_FIELDS }).catch(() => []),
+          appClient.entities.Ingredient.filter(filterByTenant(), null, null, { fields: POS_INGREDIENT_FIELDS }).catch(() => []),
+          appClient.entities.ProductIngredient.filter(filterByTenant(), null, null, { fields: POS_PRODUCT_INGREDIENT_FIELDS }).catch(() => []),
         ]);
         await new Promise(resolve => setTimeout(resolve, 100));
         const [menuFormulasData, menuItemsData, offersData, loyaltyRulesData, cagnotteRuleData, tablesData] = await Promise.all([
-          appClient.entities.MenuFormula.filter(filterByTenant()).catch(() => []),
-          appClient.entities.MenuFormulaItem.filter(filterByTenant()).catch(() => []),
-          appClient.entities.Offer.filter({ ...filterByTenant(), active: true }).catch(() => []),
-          appClient.entities.LoyaltyRule.filter({ ...filterByTenant(), active: true }).catch(() => []),
-          appClient.entities.CagnotteRule.filter({ ...filterByTenant(), active: true }).catch(() => []),
-          appClient.entities.Table.filter(filterByTenant()).catch(() => [])
+          appClient.entities.MenuFormula.filter(filterByTenant(), null, null, { fields: POS_MENU_FIELDS }).catch(() => []),
+          appClient.entities.MenuFormulaItem.filter(filterByTenant(), null, null, { fields: POS_MENU_ITEM_FIELDS }).catch(() => []),
+          appClient.entities.Offer.filter({ ...filterByTenant(), active: true }, null, null, { fields: POS_OFFER_FIELDS }).catch(() => []),
+          appClient.entities.LoyaltyRule.filter({ ...filterByTenant(), active: true }, null, null, { fields: POS_LOYALTY_FIELDS }).catch(() => []),
+          appClient.entities.CagnotteRule.filter({ ...filterByTenant(), active: true }, null, null, { fields: POS_CAGNOTTE_FIELDS }).catch(() => []),
+          appClient.entities.Table.filter(filterByTenant(), null, null, { fields: POS_TABLE_FIELDS }).catch(() => [])
         ]);
         if (isOnline) {
           cacheData('products', productsData);
@@ -335,7 +414,10 @@ export default function StrasykPos() {
     if (orderToSettle.from_web) {
       setWebOrderToSettle(orderToSettle);
       if (orderToSettle.customer_id) {
-        try { const res = await appClient.entities.Customer.filter({ id: orderToSettle.customer_id }); setWebOrderCustomer(res?.[0] || null); }
+        try {
+          const res = await appClient.entities.Customer.filter({ id: orderToSettle.customer_id }, null, 1, { fields: POS_CUSTOMER_FIELDS });
+          setWebOrderCustomer(res?.[0] || null);
+        }
         catch { setWebOrderCustomer(null); }
       } else setWebOrderCustomer(null);
       setViewingCustomerId(null);
@@ -418,7 +500,7 @@ export default function StrasykPos() {
       window.history.replaceState({}, document.title, window.location.pathname);
       if (orderId && orderId !== 'null') {
         try {
-          const results = await appClient.entities.Order.filter({ id: orderId });
+          const results = await appClient.entities.Order.filter({ id: orderId }, null, 1, { fields: POS_ORDER_FIELDS });
           const orderToLoad = results?.[0];
           if (orderToLoad) { clearOrder(); if (orderToSettleId) handleSettleOrder(orderToLoad); else handleEditOrder(orderToLoad); }
           else toast({ title: "Commande non trouvée", description: "Impossible de trouver la commande demandée.", variant: "destructive" });
@@ -539,7 +621,12 @@ export default function StrasykPos() {
     const checkLoyaltyAsync = async () => {
       setIsCheckingLoyalty(true);
       try {
-        const previousOrders = await appClient.entities.Order.filter({ ...filterByTenant(), customer_id: currentOrder.customer.id, payee: true });
+        const previousOrders = await appClient.entities.Order.filter(
+          { ...filterByTenant(), customer_id: currentOrder.customer.id, payee: true },
+          null,
+          null,
+          { fields: ['id', 'tenant_id', 'customer_id', 'payee', 'articles', 'created_date', 'updated_date'] }
+        );
         const paidOrdersCount = (previousOrders || []).filter(order => order.statut !== 'annulee').length;
         const currentOrderNumber = paidOrdersCount + 1;
         const applicableRule = loyaltyRules.find(rule => {
@@ -795,7 +882,7 @@ export default function StrasykPos() {
     if (!currentOrder || !Array.isArray(currentOrder.articles) || currentOrder.articles.length === 0) { toast({ title: "Panier vide", description: "Ajoutez des produits avant d'encaisser.", variant: "destructive" }); return; }
     if (currentOrder.customer?.id) {
       try {
-        const freshCustomer = await appClient.entities.Customer.filter({ id: currentOrder.customer.id });
+        const freshCustomer = await appClient.entities.Customer.filter({ id: currentOrder.customer.id }, null, 1, { fields: POS_CUSTOMER_FIELDS });
         if (freshCustomer?.[0]) setCurrentOrder(prev => prev ? { ...prev, customer: { ...freshCustomer[0], selectedAdresse: prev.customer?.selectedAdresse } } : null);
       } catch (error) { console.warn('⚠️ Impossible de rafraîchir le client:', error); }
     }

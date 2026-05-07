@@ -87,6 +87,18 @@ export default function ProductForm({ product, categories, ingredients, profile,
   const managesSizes = selectedCategory?.manages_sizes && selectedCategory?.size_template?.length > 0;
   const sizesArray = selectedCategory?.size_template || [];
   const normalizeJson = (value) => JSON.stringify(value ?? null);
+  const normalizeModePrice = (value) => parseNumber(value, 0);
+  const normalizeSizeModeEntries = (entries = []) => (
+    (entries || [])
+      .filter((sp) => sp?.size)
+      .map((sp) => ({
+        size: sp.size,
+        sur_place: normalizeModePrice(sp.sur_place),
+        emporter: normalizeModePrice(sp.emporter),
+        livraison: normalizeModePrice(sp.livraison),
+      }))
+      .filter((sp) => sp.sur_place > 0 || sp.emporter > 0 || sp.livraison > 0)
+  );
 
   const buildProductPayload = (mode = 'full') => {
     const legacyPrice = managesSizes
@@ -143,14 +155,7 @@ export default function ProductForm({ product, categories, ingredients, profile,
 
     if (managesSizes) {
       if (prixDifferencies) {
-        extendedPayload.size_prix_par_mode = (productData.size_prix_par_mode || [])
-          .filter(sp => sp.size)
-          .map(sp => ({
-            size: sp.size,
-            sur_place: parseNumber(sp.sur_place, 0),
-            emporter: parseNumber(sp.emporter, 0),
-            livraison: parseNumber(sp.livraison, 0)
-          }));
+        extendedPayload.size_prix_par_mode = normalizeSizeModeEntries(productData.size_prix_par_mode);
       }
 
       if (productData.use_custom_web_price) {
@@ -216,7 +221,12 @@ export default function ProductForm({ product, categories, ingredients, profile,
 
     if (normalizeJson(expectedPayload.size_prices) !== normalizeJson(persisted.size_prices)) issues.push('size_prices');
     if ('prix_par_mode' in expectedPayload && normalizeJson(expectedPayload.prix_par_mode) !== normalizeJson(persisted.prix_par_mode)) issues.push('prix_par_mode');
-    if ('size_prix_par_mode' in expectedPayload && normalizeJson(expectedPayload.size_prix_par_mode) !== normalizeJson(persisted.size_prix_par_mode)) issues.push('size_prix_par_mode');
+    if (
+      'size_prix_par_mode' in expectedPayload &&
+      normalizeJson(normalizeSizeModeEntries(expectedPayload.size_prix_par_mode)) !== normalizeJson(normalizeSizeModeEntries(persisted.size_prix_par_mode))
+    ) {
+      issues.push('size_prix_par_mode');
+    }
     if ('web_size_prices' in expectedPayload && normalizeJson(expectedPayload.web_size_prices) !== normalizeJson(persisted.web_size_prices)) issues.push('web_size_prices');
 
     return { ok: issues.length === 0, issues };

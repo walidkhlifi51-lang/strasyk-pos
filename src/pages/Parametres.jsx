@@ -24,6 +24,33 @@ import ScratchTicketManager from '../components/scratch/ScratchTicketManager';
 
 import { Store, Package, List, Layers, Salad, UtensilsCrossed, Gift, Truck, Settings, CheckCircle, RefreshCw, Loader2, Ticket, PiggyBank, ShieldCheck, Users, Monitor, Globe, Sparkles } from "lucide-react";
 
+const PARAM_PRODUCTS_FIELDS = [
+    'id', 'tenant_id', 'nom', 'description', 'category_id', 'disponible', 'temps_preparation', 'tva',
+    'image_url', 'image_display', 'color', 'featured', 'sort_order', 'prix', 'base_price',
+    'size_prices', 'prix_par_mode', 'size_prix_par_mode', 'web_price', 'web_size_prices',
+    'created_date', 'updated_date'
+];
+
+const PARAM_CATEGORIES_FIELDS = [
+    'id', 'tenant_id', 'nom', 'parent_id', 'disponible', 'color', 'image_url', 'image_display',
+    'manages_sizes', 'size_template', 'sort_order', 'created_date', 'updated_date'
+];
+
+const PARAM_INGREDIENTS_FIELDS = [
+    'id', 'tenant_id', 'nom', 'unite', 'cout_unitaire', 'quantite_stock', 'created_date', 'updated_date'
+];
+
+const PARAM_DELIVERY_PEOPLE_FIELDS = [
+    'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'vehicule', 'disponible', 'created_date', 'updated_date'
+];
+
+const PARAM_PROFILE_FIELDS = [
+    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url', 'page_pins',
+    'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',
+    'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit', 'ai_image_generation_enabled',
+    'updated_date', 'created_date'
+];
+
 const tabs = [
     { name: 'restaurant', label: 'Établissement', icon: Store, component: RestaurantSettings, requiredData: ['profile'] },
     { name: 'products', label: 'Produits', icon: Package, component: ProductManager, requiredData: ['products', 'categories', 'ingredients', 'profile'] },
@@ -69,11 +96,11 @@ export default function Parametres() {
             console.log('🔧 [Parametres] Chargement avec filtrage tenant...');
             
             const [products, categories, ingredients, deliveryPeople, profileList] = await Promise.all([
-                appClient.entities.Product.filter(filterByTenant()).catch(() => []),
-                appClient.entities.Category.filter(filterByTenant()).catch(() => []),
-                appClient.entities.Ingredient.filter(filterByTenant()).catch(() => []),
-                appClient.entities.DeliveryPerson.filter(filterByTenant()).catch(() => []),
-                appClient.entities.RestaurantProfile.filter(filterByTenant(), '-updated_date', 5).catch(() => [])
+                appClient.entities.Product.filter(filterByTenant(), null, null, { fields: PARAM_PRODUCTS_FIELDS }).catch(() => []),
+                appClient.entities.Category.filter(filterByTenant(), null, null, { fields: PARAM_CATEGORIES_FIELDS }).catch(() => []),
+                appClient.entities.Ingredient.filter(filterByTenant(), null, null, { fields: PARAM_INGREDIENTS_FIELDS }).catch(() => []),
+                appClient.entities.DeliveryPerson.filter(filterByTenant(), null, null, { fields: PARAM_DELIVERY_PEOPLE_FIELDS }).catch(() => []),
+                appClient.entities.RestaurantProfile.filter(filterByTenant(), '-updated_date', 5, { fields: PARAM_PROFILE_FIELDS }).catch(() => [])
             ]);
             
             const profile = profileList?.[0] || null;
