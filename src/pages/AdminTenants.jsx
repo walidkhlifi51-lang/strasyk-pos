@@ -32,6 +32,30 @@ import {
   resolveTenantByOwnerEmail,
 } from '@/lib/tenantProvisioning';
 
+const ADMIN_TENANT_FIELDS = [
+  'id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'pos_suspended',
+  'stripe_subscription_id', 'slug', 'created_date', 'updated_date'
+];
+
+const ADMIN_PROFILE_FIELDS = [
+  'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url',
+  'custom_domain', 'domain_verified', 'manages_kiosk', 'customer_display_enabled',
+  'manages_table_plan', 'delivery_app_allowed', 'manages_delivery_app', 'manages_web_ordering',
+  'updated_date', 'created_date'
+];
+
+const ADMIN_REQUEST_FIELDS = [
+  'id', 'nom_commercial', 'email', 'adresse', 'telephone', 'formule_choisie', 'statut', 'created_date', 'updated_date'
+];
+
+const ADMIN_PLATFORM_ADMIN_FIELDS = ['id', 'user_email', 'is_active', 'created_date', 'updated_date'];
+
+const ADMIN_INVOICE_FIELDS = [
+  'id', 'tenant_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation',
+  'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'lignes_materiel', 'periode_debut',
+  'periode_fin', 'monthly_payments', 'created_date', 'updated_date'
+];
+
 const buildCreationSummary = ({ tenant, profile, ownerEmail }) => [
   `Commerce : ${tenant.nom_commercial}`,
   `Proprietaire : ${ownerEmail}`,
@@ -98,8 +122,8 @@ export default function AdminTenants() {
   const { data: tenants = [], refetch, isLoading } = useQuery({
     queryKey: ['allTenants'],
     queryFn: async () => {
-      const tenantsList = await appClient.entities.Tenant.list();
-      const profiles = await appClient.entities.RestaurantProfile.list();
+      const tenantsList = await appClient.entities.Tenant.list('-created_date', null, { fields: ADMIN_TENANT_FIELDS });
+      const profiles = await appClient.entities.RestaurantProfile.list('-updated_date', null, { fields: ADMIN_PROFILE_FIELDS });
       const enriched = tenantsList.map(tenant => ({
         ...tenant,
         profile: profiles.find(p => p.tenant_id === tenant.id)
@@ -111,20 +135,20 @@ export default function AdminTenants() {
 
   const { data: requests = [], refetch: refetchRequests } = useQuery({
     queryKey: ['inscriptionRequests'],
-    queryFn: () => appClient.entities.InscriptionRequest.list('-created_date'),
+    queryFn: () => appClient.entities.InscriptionRequest.list('-created_date', null, { fields: ADMIN_REQUEST_FIELDS }),
     refetchInterval: 120000,
     refetchOnWindowFocus: false,
   });
 
   const { data: invoices = [], refetch: refetchInvoices } = useQuery({
     queryKey: ['invoices', selectedTenant?.id],
-    queryFn: () => appClient.entities.TenantInvoice.filter({ tenant_id: selectedTenant.id }, '-date_facturation'),
+    queryFn: () => appClient.entities.TenantInvoice.filter({ tenant_id: selectedTenant.id }, '-date_facturation', null, { fields: ADMIN_INVOICE_FIELDS }),
     enabled: !!selectedTenant?.id,
   });
 
   const { data: previewInvoices = [], refetch: refetchPreviewInvoices } = useQuery({
     queryKey: ['previewInvoices', previewTenant?.id],
-    queryFn: () => appClient.entities.TenantInvoice.filter({ tenant_id: previewTenant.id }, '-date_facturation'),
+    queryFn: () => appClient.entities.TenantInvoice.filter({ tenant_id: previewTenant.id }, '-date_facturation', null, { fields: ADMIN_INVOICE_FIELDS }),
     enabled: !!previewTenant?.id,
   });
 
@@ -133,7 +157,7 @@ export default function AdminTenants() {
 
   const { data: platformAdmins = [], refetch: refetchPlatformAdmins } = useQuery({
     queryKey: ['platformAdmins'],
-    queryFn: () => appClient.entities.PlatformAdminAccess.list(),
+    queryFn: () => appClient.entities.PlatformAdminAccess.list('-created_date', null, { fields: ADMIN_PLATFORM_ADMIN_FIELDS }),
   });
 
   const mergeInvoiceInCache = React.useCallback((queryKey, invoice) => {
@@ -333,7 +357,7 @@ export default function AdminTenants() {
         paye: !currentStatus,
         date_paiement: !currentStatus ? new Date().toISOString().split('T')[0] : null
       };
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', null, { fields: ADMIN_INVOICE_FIELDS });
       const existingFinalInvoice = allInvoices.find((item) => (
         item.metadata?.linked_payment_request_id === invoice.id
         && item.metadata?.paid_month === monthKey
@@ -369,7 +393,7 @@ export default function AdminTenants() {
 
   const handleToggleModule = async (tenant, moduleField) => {
     try {
-      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenant.id });
+      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenant.id }, '-updated_date', 5, { fields: ADMIN_PROFILE_FIELDS });
       const profile = profiles[0];
       if (!profile) {
         toast({ title: "❌ Erreur", description: "Profil introuvable", variant: "destructive" });
@@ -443,8 +467,8 @@ export default function AdminTenants() {
 
   const refreshTenantSnapshot = async (tenantId) => {
     const [tenantsList, profiles] = await Promise.all([
-      appClient.entities.Tenant.list(),
-      appClient.entities.RestaurantProfile.filter({ tenant_id: tenantId }, '-created_date', 5),
+      appClient.entities.Tenant.list('-created_date', null, { fields: ADMIN_TENANT_FIELDS }),
+      appClient.entities.RestaurantProfile.filter({ tenant_id: tenantId }, '-updated_date', 5, { fields: ADMIN_PROFILE_FIELDS }),
     ]);
 
     const refreshedTenant = tenantsList.find((tenant) => tenant.id === tenantId) || null;
@@ -465,7 +489,7 @@ export default function AdminTenants() {
     setIsCreating(true);
     try {
       const ownerEmail = normalizeEmail(formData.owner_email);
-      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5);
+      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5, { fields: ADMIN_TENANT_FIELDS });
       const existingTenant = existingTenants.find((tenant) => normalizeEmail(tenant.owner_email) === ownerEmail);
 
       if (existingTenant) {
@@ -603,7 +627,7 @@ export default function AdminTenants() {
     setIsCreating(true);
     try {
       const ownerEmail = normalizeEmail(request.email);
-      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5);
+      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5, { fields: ADMIN_TENANT_FIELDS });
       const existingTenant = existingTenants.find((tenant) => normalizeEmail(tenant.owner_email) === ownerEmail);
 
       if (existingTenant) {

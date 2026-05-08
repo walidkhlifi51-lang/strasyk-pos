@@ -20,6 +20,17 @@ import {
   Settings
 } from "lucide-react";
 
+const DASHBOARD_ORDER_FIELDS = [
+  'id', 'tenant_id', 'created_date', 'statut', 'from_web', 'total_ttc'
+];
+
+const DASHBOARD_CUSTOMER_COUNT_FIELDS = ['id'];
+const DASHBOARD_PRODUCT_COUNT_FIELDS = ['id'];
+
+const DASHBOARD_RESELLER_TENANT_FIELDS = ['id', 'reseller_id', 'tenant_id', 'status', 'created_date'];
+const DASHBOARD_RESELLER_COMMISSION_FIELDS = ['id', 'reseller_id', 'status', 'commission_amount', 'created_date'];
+const DASHBOARD_RESELLER_USER_FIELDS = ['id', 'reseller_id', 'status', 'user_email', 'created_date'];
+
 export default function Dashboard() {
   const { currentTenant, currentReseller, filterByTenant, userRole, isPlatformAdmin, isReseller } = useTenant();
   const { isPageProtected, isPageUnlocked } = useSecurity();
@@ -28,10 +39,14 @@ export default function Dashboard() {
   const toParisDate = (date) => toParisDateValue(date);
   const parisNow = toParisDate(new Date());
   const parisTodayStr = `${parisNow.getFullYear()}-${String(parisNow.getMonth()+1).padStart(2,'0')}-${String(parisNow.getDate()).padStart(2,'0')}`;
+  const parisDayStartIso = new Date(parisNow.getFullYear(), parisNow.getMonth(), parisNow.getDate(), 0, 0, 0, 0).toISOString();
 
   const { data: orders = [] } = useQuery({
     queryKey: ['ordersHome', currentTenant?.id, parisTodayStr],
-    queryFn: () => appClient.entities.Order.filter(filterByTenant(), '-created_date', 500),
+    queryFn: () => appClient.entities.Order.filter({
+      ...filterByTenant(),
+      created_date: { $gte: parisDayStartIso },
+    }, '-created_date', 250, { fields: DASHBOARD_ORDER_FIELDS }),
     enabled: !!currentTenant,
     staleTime: 30000,
   });
@@ -51,7 +66,7 @@ export default function Dashboard() {
   const { data: customerCount = 0 } = useQuery({
     queryKey: ['customerCountHome', currentTenant?.id],
     queryFn: async () => {
-      const res = await appClient.entities.Customer.filter(filterByTenant(), '-created_date', 5000);
+      const res = await appClient.entities.Customer.filter(filterByTenant(), null, null, { fields: DASHBOARD_CUSTOMER_COUNT_FIELDS });
       return res.length;
     },
     enabled: !!currentTenant,
@@ -60,7 +75,7 @@ export default function Dashboard() {
 
   const { data: products = [] } = useQuery({
     queryKey: ['productsHome', currentTenant?.id],
-    queryFn: () => appClient.entities.Product.filter({ ...filterByTenant(), disponible: true }, 'nom', 500),
+    queryFn: () => appClient.entities.Product.filter({ ...filterByTenant(), disponible: true }, null, null, { fields: DASHBOARD_PRODUCT_COUNT_FIELDS }),
     enabled: !!currentTenant,
     staleTime: 300000,
   });
@@ -69,9 +84,9 @@ export default function Dashboard() {
     queryKey: ['resellerDashboardSummary', currentReseller?.id],
     queryFn: async () => {
       const [resellerTenants, commissions, resellerUsers] = await Promise.all([
-        appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date'),
+        appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date', null, { fields: DASHBOARD_RESELLER_TENANT_FIELDS }),
+        appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date', null, { fields: DASHBOARD_RESELLER_COMMISSION_FIELDS }),
+        appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date', null, { fields: DASHBOARD_RESELLER_USER_FIELDS }),
       ]);
 
       return {

@@ -17,6 +17,15 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/use-toast";
 import { subDays } from 'date-fns';
 
+const CLIENT_LIST_FIELDS = [
+  'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville',
+  'etage', 'interphone', 'notes', 'adresses', 'cagnotte_balance', 'created_date', 'updated_date'
+];
+
+const CLIENT_ORDER_ANALYSIS_FIELDS = [
+  'id', 'tenant_id', 'customer_id', 'created_date', 'statut', 'payee', 'total_ttc'
+];
+
 const StatCard = ({ title, value, icon: Icon, description, color }) => (
   <Card className="shadow-md border-0">
     <CardContent className="p-4 flex items-center">
@@ -54,7 +63,7 @@ export default function Clients() {
   const { data: customersRaw, isLoading: isLoadingCustomers, error: customersError, refetch: refetchCustomers } = useQuery({
     queryKey: ['customers', currentTenant?.id, loadLimit],
     queryFn: async () => {
-      const customers = await appClient.entities.Customer.filter(filterByTenant(), '-created_date', loadLimit);
+      const customers = await appClient.entities.Customer.filter(filterByTenant(), '-updated_date', loadLimit, { fields: CLIENT_LIST_FIELDS });
       return customers;
     },
     staleTime: 5 * 60 * 1000,
@@ -66,7 +75,10 @@ export default function Clients() {
     queryKey: ['allOrdersForClientAnalysis', currentTenant?.id],
     queryFn: async () => {
       console.log('🔄 Chargement de toutes les commandes pour l\'analyse...');
-      const orders = await appClient.entities.Order.filter(filterByTenant(), '-created_date', 2000);
+      const orders = await appClient.entities.Order.filter({
+        ...filterByTenant(),
+        created_date: { $gte: subDays(new Date(), 120).toISOString() },
+      }, '-created_date', 1200, { fields: CLIENT_ORDER_ANALYSIS_FIELDS });
       console.log(`✅ ${orders.length} commandes chargées`);
       return orders;
     },

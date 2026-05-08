@@ -21,6 +21,15 @@ import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
+const TABLE_PLAN_TABLE_FIELDS = [
+    'id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y',
+    'zone', 'created_date', 'updated_date'
+];
+
+const TABLE_PLAN_ORDER_FIELDS = [
+    'id', 'tenant_id', 'type_commande', 'statut', 'table_id', 'payee', 'total_ttc', 'created_date', 'updated_date'
+];
+
 const shapeStyles = {
     carree: {
         borderRadius: '16px',
@@ -283,15 +292,23 @@ export default function PlanDeTables() {
 
     const fetchTablesAndOrders = async () => {
         try {
-            const tablesData = await appClient.entities.Table.filter(filterByTenant());
-            const allOrdersData = await appClient.entities.Order.filter(filterByTenant(), '-created_date', 500);
+            const tablesData = await appClient.entities.Table.filter(filterByTenant(), null, null, { fields: TABLE_PLAN_TABLE_FIELDS });
             const tableOrderIds = new Set((tablesData || []).map((table) => table.order_id).filter(Boolean));
-            const ordersData = (allOrdersData || []).filter((order) => {
-                if (!order) return false;
-                if (order.type_commande !== 'sur_place') return false;
-                if (order.statut === 'livree' || order.statut === 'annulee') return false;
-                return tableOrderIds.has(order.id) || !!order.table_id;
-            });
+            const occupiedTableIds = (tablesData || [])
+                .filter((table) => table.statut !== 'disponible')
+                .map((table) => table.id);
+            const ordersData = tableOrderIds.size > 0 || occupiedTableIds.length > 0
+                ? await appClient.entities.Order.filter({
+                    ...filterByTenant(),
+                    type_commande: 'sur_place',
+                    statut: { $in: ['en_attente', 'en_attente_paiement', 'en_preparation', 'prete', 'occupee', 'payé'] },
+                }, '-updated_date', 250, { fields: TABLE_PLAN_ORDER_FIELDS }).then((orders) => (
+                    (orders || []).filter((order) => {
+                        if (!order) return false;
+                        return tableOrderIds.has(order.id) || (order.table_id && occupiedTableIds.includes(order.table_id));
+                    })
+                ))
+                : [];
             return { tables: tablesData || [], orders: ordersData };
         } catch (error) {
             console.error("Erreur chargement tables:", error);
@@ -304,8 +321,8 @@ export default function PlanDeTables() {
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['tablesAndActiveOrders'],
         queryFn: fetchTablesAndOrders,
-        refetchInterval: 90000, // Augmenté à 90 secondes (from 60000)
-        staleTime: 80000, // 80 secondes (from 50000)
+        refetchInterval: 120000,
+        staleTime: 110000,
         refetchOnWindowFocus: false, // Évite les requêtes supplémentaires lors du changement d'onglet
         retry: 2, // Ajouté: Réessaie la requête 2 fois en cas d'échec
     });
