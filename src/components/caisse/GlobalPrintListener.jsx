@@ -7,7 +7,8 @@ import { generateTicketHtml, triggerPrint } from './ticketUtils';
 /**
  * Composant invisible monte dans le layout global.
  * Ecoute les commandes web et borne a imprimer cote caisse.
- * Realtime reste prioritaire, avec un poll de secours si Realtime loupe un evenement.
+ * Realtime reste prioritaire. Le rattrapage ne tourne plus en boucle:
+ * il se fait au montage et au retour de focus/visibilite.
  */
 export default function GlobalPrintListener() {
   const { currentTenant } = useTenant();
@@ -95,12 +96,7 @@ export default function GlobalPrintListener() {
       }
     };
 
-    const unsubscribe = appClient.entities.Order.subscribe(async (event) => {
-      if (event.type !== 'create' && event.type !== 'update') return;
-      await processOrderForPrinting(event.data, `realtime-${event.type}`);
-    });
-
-    const pollInterval = setInterval(async () => {
+    const checkPendingOrders = async () => {
       try {
         const pendingOrders = await appClient.entities.Order.filter(
           {
@@ -113,16 +109,36 @@ export default function GlobalPrintListener() {
         );
 
         for (const order of pendingOrders || []) {
-          await processOrderForPrinting(order, 'poll');
+          await processOrderForPrinting(order, 'sync-check');
         }
       } catch (error) {
         console.error('❌ [GlobalPrint] Erreur verification file impression:', error);
       }
-    }, 60000);
+    };
+
+    const unsubscribe = appClient.entities.Order.subscribe(async (event) => {
+      if (event.type !== 'create' && event.type !== 'update') return;
+      await processOrderForPrinting(event.data, `realtime-${event.type}`);
+    });
+
+    checkPendingOrders();
+
+    const handleFocus = () => {
+      checkPendingOrders();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkPendingOrders();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       unsubscribe();
-      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentTenant?.id, profile?.impression_auto, profile]);
 

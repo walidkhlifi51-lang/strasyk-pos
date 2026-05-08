@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import { getDefaultAccessPermissions, hasUserPermission, normalizeUserAccess } from '@/lib/userAccess';
@@ -318,7 +318,6 @@ export const TenantProvider = ({ children }) => {
     },
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchInterval: 120 * 1000,
     retry: false,
   });
 
@@ -335,8 +334,26 @@ export const TenantProvider = ({ children }) => {
     enabled: !!tenantData?.user?.email,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchInterval: 120 * 1000,
   });
+
+  useEffect(() => {
+    const handleFocus = () => {
+      refetch();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetch();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refetch]);
 
   const filterByTenant = (query = {}) => {
     if (!tenantData?.tenant?.id) return query;

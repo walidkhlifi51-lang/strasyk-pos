@@ -473,19 +473,41 @@ export default function Kiosk() {
       }
     };
 
-    syncCatalog();
+    let lastSyncAt = 0;
+    const syncCatalogIfStale = () => {
+      const now = Date.now();
+      if (now - lastSyncAt < 30000) return;
+      lastSyncAt = now;
+      syncCatalog();
+    };
 
-    const fallbackInterval = setInterval(syncCatalog, 120000);
-    const unsubscribeOrders = appClient.entities.Order.subscribe((event) => {
-      const order = event?.data;
-      if (!order || order.tenant_id !== tenantIdFromUrl) return;
-      // Les commandes sont des donnees vivantes; on garde simplement le flux realtime actif.
-    });
+    syncCatalogIfStale();
+
+    const handleFocus = () => {
+      syncCatalogIfStale();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncCatalogIfStale();
+      }
+    };
+    const handleActivity = () => {
+      syncCatalogIfStale();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pointerdown', handleActivity, { passive: true });
+    window.addEventListener('touchstart', handleActivity, { passive: true });
+    window.addEventListener('keydown', handleActivity);
 
     return () => {
       isActive = false;
-      clearInterval(fallbackInterval);
-      unsubscribeOrders();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pointerdown', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
     };
   }, [tenantIdFromUrl]);
 
