@@ -4,6 +4,9 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { computeTaxSummaryFromArticles } from '@/components/utils/taxUtils';
 
+const REMOTE_CASHIER_FIELDS = ['id', 'tenant_id', 'user_email', 'is_remote_cashier'];
+const ORDER_NUMBER_FIELDS = ['id', 'numero_caisse', 'created_date'];
+
 export function usePosLogic({ 
   currentOrder, 
   setCurrentOrder, 
@@ -26,6 +29,13 @@ export function usePosLogic({
   clearOrder
 }) {
 
+  const getParisDayStartIso = () => {
+    const toParisDate = (date) => new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+    const start = toParisDate(new Date());
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  };
+
   const handleCreateOrUpdateOrder = useCallback(async (paymentInfo) => {
     let savedOrder;
     let isRemoteCashier = false;
@@ -35,7 +45,7 @@ export function usePosLogic({
         const userAccesses = await appClient.entities.UserAccess.filter({
           ...filterByTenant(),
           user_email: currentUser.email
-        });
+        }, undefined, 1, { fields: REMOTE_CASHIER_FIELDS });
         isRemoteCashier = userAccesses?.[0]?.is_remote_cashier || false;
       } catch (error) {
         console.log('⚠️ Impossible de vérifier le mode caissier distant:', error);
@@ -48,7 +58,12 @@ export function usePosLogic({
       const today = toParisDate(new Date());
       const dateStr = format(today, 'yyyy-MM-dd');
       
-      const allOrdersToday = await appClient.entities.Order.filter({ ...filterByTenant() });
+      const allOrdersToday = await appClient.entities.Order.filter(
+        { ...filterByTenant(), created_date: { $gte: getParisDayStartIso() } },
+        '-created_date',
+        1000,
+        { fields: ORDER_NUMBER_FIELDS }
+      );
       const todayOrders = allOrdersToday.filter(order => {
         if (!order?.created_date) return false;
         const orderDateStr = order.created_date.replace(' ', 'T');

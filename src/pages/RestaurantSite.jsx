@@ -13,6 +13,7 @@ import TemplateStreetFood from '../components/restaurant-site/TemplateStreetFood
 import CagnotteModal from '../components/restaurant-site/CagnotteModal';
 import ScratchTicketDisplay from '../components/scratch/ScratchTicketDisplay';
 import { buildPublicPageUrl, getPublicHostname, resolvePublicTenantContext } from '@/lib/publicSiteTenant';
+import { fetchPublicSiteCatalogWithCache } from '@/lib/publicSiteCatalogCache';
 
 function FlashBanner({ flash, primaryColor }) {
   const [timeLeft, setTimeLeft] = React.useState(null);
@@ -71,33 +72,19 @@ export default function RestaurantSite() {
   const tenant = siteContext?.tenant;
   const profile = siteContext?.profile;
 
-  const { data: products = [] } = useQuery({
-    queryKey: ['site-products', tenant?.id],
-    queryFn: () => appClient.entities.Product.filter({ tenant_id: tenant?.id, disponible: true }),
+  const { data: siteCatalog } = useQuery({
+    queryKey: ['site-catalog', tenant?.id],
+    queryFn: () => fetchPublicSiteCatalogWithCache(tenant?.id),
     enabled: !!tenant?.id,
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: false,
+    staleTime: 110000,
   });
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['site-categories', tenant?.id],
-    queryFn: () => appClient.entities.Category.filter({ tenant_id: tenant?.id, disponible: true }),
-    enabled: !!tenant?.id,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: productIngredients = [] } = useQuery({
-    queryKey: ['site-product-ingredients', tenant?.id],
-    queryFn: () => appClient.entities.ProductIngredient.filter({ tenant_id: tenant?.id }),
-    enabled: !!tenant?.id,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const { data: ingredients = [] } = useQuery({
-    queryKey: ['site-ingredients', tenant?.id],
-    queryFn: () => appClient.entities.Ingredient.filter({ tenant_id: tenant?.id }),
-    enabled: !!tenant?.id,
-    staleTime: 10 * 60 * 1000,
-  });
+  const products = siteCatalog?.products || [];
+  const categories = siteCatalog?.categories || [];
+  const productIngredients = siteCatalog?.productIngredients || [];
+  const ingredients = siteCatalog?.ingredients || [];
 
   if (loadingTenant) {
     return (

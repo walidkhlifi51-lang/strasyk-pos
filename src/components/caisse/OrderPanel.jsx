@@ -16,6 +16,24 @@ import PriceEditModal from './PriceEditModal';
 import { appClient } from "@/api/appClient"; // New import
 import { useTenant } from "../contexts/TenantContext";
 
+const CUSTOMER_SEARCH_FIELDS = [
+  'id',
+  'tenant_id',
+  'nom',
+  'prenom',
+  'telephone',
+  'adresse',
+  'code_postal',
+  'ville',
+  'etage',
+  'interphone',
+  'email',
+  'notes',
+  'adresses',
+  'cagnotte_balance',
+  'created_date',
+];
+
 // Fonction utilitaire pour sécuriser toFixed
 const safeToFixed = (value, decimals = 2) => {
   const num = Number(value);
@@ -244,9 +262,15 @@ const CustomerSearch = ({
   const { toast } = useToast();
 
   const loadCustomers = useCallback(async () => {
-    if (searchTerm.length > 1) {
+    if (searchTerm.length > 1 && currentTenant?.id) {
       try {
-        const allCustomers = await appClient.entities.Customer.filter({ tenant_id: currentTenant.id }, '-created_date', 10000);
+        const searchLimit = searchTerm.trim().length >= 4 ? 250 : 120;
+        const allCustomers = await appClient.entities.Customer.filter(
+          { tenant_id: currentTenant.id },
+          '-created_date',
+          searchLimit,
+          { fields: CUSTOMER_SEARCH_FIELDS }
+        );
         const filteredCustomers = allCustomers.filter(c => {
           const searchLower = searchTerm.toLowerCase();
           return (
@@ -263,7 +287,7 @@ const CustomerSearch = ({
     } else {
       setCustomers([]);
     }
-  }, [searchTerm, currentTenant]);
+  }, [searchTerm, currentTenant?.id]);
 
   const searchAddress = useCallback(async (query) => {
     if (!query || query.length < 3) {

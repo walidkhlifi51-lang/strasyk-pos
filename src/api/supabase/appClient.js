@@ -55,8 +55,16 @@ const normalizeFilterArgs = (sort, limit) => {
   return { sort, limit };
 };
 
-const normalizeSelectFields = (fields) => {
-  if (!fields) return '*';
+const missingFieldsWarnings = new Set();
+
+const normalizeSelectFields = (fields, contextKey = 'unknown') => {
+  if (!fields) {
+    if (!missingFieldsWarnings.has(contextKey) && typeof console !== 'undefined') {
+      missingFieldsWarnings.add(contextKey);
+      console.warn(`[appClient] Missing fields for ${contextKey}; falling back to select('*').`);
+    }
+    return '*';
+  }
   if (Array.isArray(fields)) return fields.join(',');
   return typeof fields === 'string' ? fields : '*';
 };
@@ -136,7 +144,7 @@ const createEntityApi = (entityName) => {
     async list(sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields));
+      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.list`));
       query = applySortAndLimit(query, args.sort, args.limit);
       const { data, error } = await query;
       const fallback = maybeReturnEmptyArray(error);
@@ -147,7 +155,7 @@ const createEntityApi = (entityName) => {
     async filter(query = {}, sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields));
+      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.filter`));
       request = applyQueryFilters(request, query);
       request = applySortAndLimit(request, args.sort, args.limit);
       const { data, error } = await request;

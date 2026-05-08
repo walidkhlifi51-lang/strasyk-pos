@@ -1,4 +1,5 @@
 import { appClient } from '@/api/appClient';
+import { PUBLIC_SITE_PROFILE_FIELDS, PUBLIC_SITE_TENANT_FIELDS } from '@/lib/publicSiteCatalogCache';
 
 export const normalizeCustomDomain = (value = '') => String(value || '')
   .trim()
@@ -17,7 +18,7 @@ export async function resolvePublicTenantContext({ slug, hostname } = {}) {
   let resolvedBy = null;
 
   if (slug) {
-    const tenants = await appClient.entities.Tenant.filter({ slug });
+    const tenants = await appClient.entities.Tenant.filter({ slug }, undefined, 1, { fields: PUBLIC_SITE_TENANT_FIELDS });
     tenant = tenants[0] || null;
     resolvedBy = tenant ? 'slug' : null;
   }
@@ -30,20 +31,20 @@ export async function resolvePublicTenantContext({ slug, hostname } = {}) {
     ].filter(Boolean)));
 
     for (const candidate of hostnameCandidates) {
-      const profiles = await appClient.entities.RestaurantProfile.filter({ custom_domain: candidate });
+      const profiles = await appClient.entities.RestaurantProfile.filter({ custom_domain: candidate }, undefined, 1, { fields: PUBLIC_SITE_PROFILE_FIELDS });
       profile = profiles[0] || null;
       if (profile) break;
     }
 
     if (profile?.tenant_id) {
-      const tenants = await appClient.entities.Tenant.filter({ id: profile.tenant_id });
+      const tenants = await appClient.entities.Tenant.filter({ id: profile.tenant_id }, undefined, 1, { fields: PUBLIC_SITE_TENANT_FIELDS });
       tenant = tenants[0] || null;
       resolvedBy = tenant ? 'domain' : null;
     }
   }
 
   if (tenant && !profile) {
-    const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenant.id });
+    const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenant.id }, undefined, 1, { fields: PUBLIC_SITE_PROFILE_FIELDS });
     profile = profiles[0] || null;
   }
 

@@ -13,6 +13,11 @@ import { CheckCircle, Clock3, Store, XCircle } from 'lucide-react';
 
 const normalizeEmail = (value) => (value || '').trim().toLowerCase();
 const LAST_REQUEST_EMAIL_KEY = 'last_inscription_email_v1';
+const DELIVERY_PERSON_FIELDS = ['id', 'user_email'];
+const REQUEST_ACCESS_FIELDS = ['id', 'email', 'statut', 'nom_commercial', 'nom_contact', 'prenom_contact', 'telephone', 'adresse', 'type_commerce', 'message', 'created_date'];
+const TENANT_ACCESS_FIELDS = ['id', 'owner_email'];
+const USER_ACCESS_FIELDS = ['id', 'user_email', 'is_active'];
+const PLATFORM_ADMIN_FIELDS = ['id', 'user_email', 'is_active'];
 const isAlreadyRegisteredError = (error) => {
   const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
   return message.includes('already registered')
@@ -96,9 +101,12 @@ export default function RequestAccess() {
         const userEmail = normalizeEmail(currentUser.email);
         setUser(currentUser);
 
-        const deliveryPersons = await appClient.entities.DeliveryPerson.filter({
-          user_email: currentUser.email,
-        });
+        const deliveryPersons = await appClient.entities.DeliveryPerson.filter(
+          { user_email: currentUser.email },
+          undefined,
+          5,
+          { fields: DELIVERY_PERSON_FIELDS }
+        );
 
         if (deliveryPersons.length > 0) {
           setIsDeliveryPerson(true);
@@ -106,10 +114,10 @@ export default function RequestAccess() {
         }
 
         const [requestsResult, ownedTenantsResult, userAccessResult, platformAdminResult] = await Promise.allSettled([
-          appClient.entities.InscriptionRequest.filter({ email: currentUser.email }, '-created_date', 50),
-          appClient.entities.Tenant.filter({ owner_email: currentUser.email }, '-created_date', 20),
-          appClient.entities.UserAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 50),
-          appClient.entities.PlatformAdminAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 20),
+          appClient.entities.InscriptionRequest.filter({ email: currentUser.email }, '-created_date', 20, { fields: REQUEST_ACCESS_FIELDS }),
+          appClient.entities.Tenant.filter({ owner_email: currentUser.email }, '-created_date', 10, { fields: TENANT_ACCESS_FIELDS }),
+          appClient.entities.UserAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 20, { fields: USER_ACCESS_FIELDS }),
+          appClient.entities.PlatformAdminAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 10, { fields: PLATFORM_ADMIN_FIELDS }),
         ]);
 
         const requests = requestsResult.status === 'fulfilled'
@@ -184,8 +192,18 @@ export default function RequestAccess() {
     };
 
     loadState();
-    const intervalId = window.setInterval(loadState, 10000);
-    return () => window.clearInterval(intervalId);
+    const intervalId = window.setInterval(loadState, 120000);
+    const handleFocus = () => { loadState(); };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadState();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const handleSubmit = async (event) => {
