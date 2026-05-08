@@ -11,6 +11,18 @@ import { useToast } from '@/components/ui/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import QrScannerView from '../components/delivery/QrScannerView';
 
+const ACTIVE_DELIVERY_STATUSES = ['en_cours_de_livraison', 'en_preparation', 'prete', 'en_attente', 'en_attente_paiement'];
+const HISTORY_DELIVERY_STATUSES = ['livree', 'payÃ©'];
+const DELIVERY_PUBLIC_PERSON_FIELDS = [
+  'id', 'tenant_id', 'user_email', 'username', 'password', 'nom', 'prenom', 'telephone', 'vehicule',
+  'disponible', 'app_access_enabled', 'en_livraison', 'nb_livraisons_jour', 'total_encaisse',
+  'created_date', 'updated_date'
+];
+const DELIVERY_PUBLIC_CUSTOMER_FIELDS = [
+  'id', 'nom', 'prenom', 'telephone', 'adresse', 'etage', 'interphone', 'cagnotte_balance', 'updated_date'
+];
+const DELIVERY_PUBLIC_CAGNOTTE_RULE_FIELDS = ['id', 'tenant_id', 'active', 'accumulation_rate', 'updated_date'];
+
 const paymentMethods = [
   { value: 'especes', label: 'Espèces', emoji: '💵' },
   { value: 'carte_bancaire', label: 'Carte', emoji: '💳' },
@@ -50,6 +62,7 @@ export default function DeliveryAppPublic() {
   const [restaurantProfile, setRestaurantProfile] = useState(null);
   const deliveryPersonRef = useRef(null);
   const assignFnRef = useRef(null);
+  const loadOrdersRef = useRef(null);
   const deliveryProfileFields = [
     'id',
     'tenant_id',
@@ -60,6 +73,12 @@ export default function DeliveryAppPublic() {
     'delivery_app_allowed',
     'manages_delivery_app',
   ];
+  const getParisDateKey = useCallback((value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const parisDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+    return `${parisDate.getFullYear()}-${String(parisDate.getMonth() + 1).padStart(2, '0')}-${String(parisDate.getDate()).padStart(2, '0')}`;
+  }, []);
 
   // Load restaurant profile when logged in
   useEffect(() => {
@@ -86,9 +105,35 @@ export default function DeliveryAppPublic() {
   useEffect(() => {
     if (!deliveryPerson) return;
     loadOrders(deliveryPerson);
-    const interval = setInterval(() => loadOrders(deliveryPerson), 30000);
+    const interval = setInterval(() => loadOrders(deliveryPerson), 120000);
     return () => clearInterval(interval);
   }, [deliveryPerson?.id]);
+
+  useEffect(() => {
+    if (!deliveryPerson) return undefined;
+
+    const unsubscribeOrders = appClient.entities.Order.subscribe((event) => {
+      const order = event?.data;
+      if (!order) return;
+      const currentTenantId = tenantId || deliveryPerson.tenant_id;
+      const relevantStatus = ACTIVE_DELIVERY_STATUSES.includes(order.statut) || HISTORY_DELIVERY_STATUSES.includes(order.statut);
+      if (order.tenant_id !== currentTenantId || !relevantStatus) return;
+      if (order.delivery_person_id !== deliveryPerson.id && ACTIVE_DELIVERY_STATUSES.includes(order.statut)) return;
+      loadOrdersRef.current?.(deliveryPersonRef.current || deliveryPerson);
+    });
+
+    const unsubscribeDeliveryPerson = appClient.entities.DeliveryPerson.subscribe((event) => {
+      const person = event?.data;
+      if (!person || person.id !== deliveryPerson.id) return;
+      setDeliveryPerson((prev) => ({ ...(prev || {}), ...person }));
+      deliveryPersonRef.current = { ...(deliveryPersonRef.current || {}), ...person };
+    });
+
+    return () => {
+      unsubscribeOrders();
+      unsubscribeDeliveryPerson();
+    };
+  }, [deliveryPerson?.id, deliveryPerson?.tenant_id, tenantId]);
 
   // Handle QR code from URL params
   useEffect(() => {
@@ -104,7 +149,7 @@ export default function DeliveryAppPublic() {
     try {
       const filter = { username: user, password: pass };
       if (tenantId) filter.tenant_id = tenantId;
-      const results = await appClient.entities.DeliveryPerson.filter(filter);
+      const results = await appClient.entities.DeliveryPerson.filter(filter, '-created_date', 5, { fields: DELIVERY_PUBLIC_PERSON_FIELDS });
       const person = results[0];
       if (!person) throw new Error('Identifiants incorrects');
       if (person.app_access_enabled === false) throw new Error('Acces application livreur desactive');
@@ -151,28 +196,52 @@ export default function DeliveryAppPublic() {
         delivery_person_id: person.id,
         tenant_id: tId,
       });
+      const todayParis = getParisDateKey(new Date());
       const allOrders = res.data?.orders || [];
-      const sorted = allOrders.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      const filteredOrders = allOrders.filter((order) => {
+        if (!order) return false;
+        if (ACTIVE_DELIVERY_STATUSES.includes(order.statut)) return true;
+        if (HISTORY_DELIVERY_STATUSES.includes(order.statut)) {
+          return getParisDateKey(order.created_date) === todayParis;
+        }
+        return false;
+      });
+      const sorted = filteredOrders.sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date));
       setOrders(sorted);
 
       const customerIds = [...new Set(sorted.map(o => o.customer_id).filter(Boolean))];
       const customerMap = {};
-      await Promise.all(customerIds.map(async (cid) => {
+      if (customerIds.length > 0) {
         try {
-          const cRes = await appClient.functions.invoke('assignDeliveryOrder', {
-            action: 'getCustomer',
-            customer_id: cid,
-            tenant_id: tId,
+          const customersList = await appClient.entities.Customer.filter(
+            { id: { $in: customerIds } },
+            undefined,
+            customerIds.length,
+            { fields: DELIVERY_PUBLIC_CUSTOMER_FIELDS }
+          );
+          customersList.forEach((customer) => {
+            if (customer?.id) customerMap[customer.id] = customer;
           });
-          if (cRes.data?.customer) customerMap[cid] = cRes.data.customer;
-        } catch {}
-      }));
+        } catch (error) {
+          console.warn('[DeliveryAppPublic] fallback clients via function invoke', error);
+          await Promise.all(customerIds.map(async (cid) => {
+            try {
+              const cRes = await appClient.functions.invoke('assignDeliveryOrder', {
+                action: 'getCustomer',
+                customer_id: cid,
+                tenant_id: tId,
+              });
+              if (cRes.data?.customer) customerMap[cid] = cRes.data.customer;
+            } catch {}
+          }));
+        }
+      }
       setCustomers(customerMap);
     } catch (err) {
       console.error('Erreur chargement commandes:', err);
     }
     setIsLoadingOrders(false);
-  }, []);
+  }, [getParisDateKey, tenantId]);
 
   const assignOrderByNumber = async (orderNum) => {
     const person = deliveryPersonRef.current || deliveryPerson;
@@ -215,6 +284,10 @@ export default function DeliveryAppPublic() {
     assignFnRef.current = assignOrderByNumber;
   });
 
+  useEffect(() => {
+    loadOrdersRef.current = loadOrders;
+  }, [loadOrders]);
+
   const handleConfirmDelivery = async (order, paymentData) => {
     setIsLoading(true);
     try {
@@ -246,10 +319,15 @@ export default function DeliveryAppPublic() {
         });
 
         if (!wasAlreadyPaid && isNowPaid && order.customer_id) {
-          const customersList = await appClient.entities.Customer.filter({ id: order.customer_id });
+          const customersList = await appClient.entities.Customer.filter({ id: order.customer_id }, undefined, 1, { fields: DELIVERY_PUBLIC_CUSTOMER_FIELDS });
           const customer = customersList?.[0];
           if (customer) {
-            const activeRules = await appClient.entities.CagnotteRule.filter({ tenant_id: tenantId || deliveryPerson.tenant_id, active: true });
+            const activeRules = await appClient.entities.CagnotteRule.filter(
+              { tenant_id: tenantId || deliveryPerson.tenant_id, active: true },
+              undefined,
+              5,
+              { fields: DELIVERY_PUBLIC_CAGNOTTE_RULE_FIELDS }
+            );
             const rule = activeRules?.[0];
             if (rule?.accumulation_rate > 0) {
               const amountEarned = (order.total_ttc || 0) * (rule.accumulation_rate / 100);
@@ -288,7 +366,7 @@ export default function DeliveryAppPublic() {
           deliveryPersonRef.current = freshPersons.data.person;
         }
       } catch {
-        const refreshed = await appClient.entities.DeliveryPerson.filter({ id: deliveryPerson.id });
+        const refreshed = await appClient.entities.DeliveryPerson.filter({ id: deliveryPerson.id }, undefined, 1, { fields: DELIVERY_PUBLIC_PERSON_FIELDS });
         if (refreshed?.[0]) {
           setDeliveryPerson(refreshed[0]);
           deliveryPersonRef.current = refreshed[0];
@@ -300,8 +378,8 @@ export default function DeliveryAppPublic() {
     setIsLoading(false);
   };
 
-  const activeOrders = orders.filter(o => ['en_cours_de_livraison', 'en_preparation', 'prete', 'en_attente', 'en_attente_paiement'].includes(o.statut));
-  const historyOrders = orders.filter(o => ['livree', 'payé'].includes(o.statut));
+  const activeOrders = orders.filter(o => ACTIVE_DELIVERY_STATUSES.includes(o.statut));
+  const historyOrders = orders.filter(o => HISTORY_DELIVERY_STATUSES.includes(o.statut));
 
   // LOGIN SCREEN
   if (!deliveryPerson) {

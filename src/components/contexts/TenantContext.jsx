@@ -4,6 +4,21 @@ import { useQuery } from '@tanstack/react-query';
 import { getDefaultAccessPermissions, hasUserPermission, normalizeUserAccess } from '@/lib/userAccess';
 
 const TenantContext = createContext();
+const PLATFORM_ADMIN_ACCESS_FIELDS = ['id', 'user_email', 'is_active', 'created_date', 'updated_date'];
+const RESELLER_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
+const RESELLER_FIELDS = ['id', 'name', 'company_name', 'display_name', 'contact_email', 'contact_phone', 'type', 'status', 'created_date', 'updated_date'];
+const TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'slug', 'created_date', 'updated_date'];
+const DELIVERY_PERSON_FIELDS = [
+  'id', 'tenant_id', 'user_email', 'username', 'password', 'nom', 'prenom', 'telephone', 'vehicule',
+  'disponible', 'app_access_enabled', 'en_livraison', 'nb_livraisons_jour', 'total_encaisse',
+  'created_date', 'updated_date'
+];
+const USER_ACCESS_FIELDS = [
+  'id', 'tenant_id', 'user_email', 'is_active', 'role',
+  'can_access_pos', 'can_access_delivery_management', 'can_access_settings', 'can_access_kiosk',
+  'can_access_delivery_app', 'can_access_web_ordering', 'can_access_site_admin',
+  'created_date', 'updated_date'
+];
 const normalizeEmail = (value) => (value || '').trim().toLowerCase();
 const isSafeReadError = (error) => {
   if (!error) return false;
@@ -15,9 +30,9 @@ const isSafeReadError = (error) => {
     || message.includes('not exist');
 };
 
-const safeFilter = async (entityApi, query = {}, sort, limit) => {
+const safeFilter = async (entityApi, query = {}, sort, limit, options = {}) => {
   try {
-    return await entityApi.filter(query, sort, limit);
+    return await entityApi.filter(query, sort, limit, options);
   } catch (error) {
     if (isSafeReadError(error)) return [];
     throw error;
@@ -54,16 +69,16 @@ export const TenantProvider = ({ children }) => {
         const platformAdmins = await safeFilter(appClient.entities.PlatformAdminAccess, {
           user_email: user.email,
           is_active: true,
-        });
+        }, '-created_date', 5, { fields: PLATFORM_ADMIN_ACCESS_FIELDS });
         const platformAdminAccess = platformAdmins[0] || null;
         const isPlatformAdmin = user.role === 'admin' || !!platformAdminAccess;
         const resellerUsers = await safeFilter(appClient.entities.ResellerUser, {
           user_email: user.email,
           status: 'active',
-        });
+        }, '-created_date', 10, { fields: RESELLER_USER_FIELDS });
         const resellerUserAccess = resellerUsers.find((entry) => normalizeEmail(entry.user_email) === userEmail);
         const allResellers = resellerUserAccess
-          ? await safeFilter(appClient.entities.Reseller, { id: resellerUserAccess.reseller_id }, '-created_date', 5)
+          ? await safeFilter(appClient.entities.Reseller, { id: resellerUserAccess.reseller_id }, '-created_date', 5, { fields: RESELLER_FIELDS })
           : [];
         const currentReseller = resellerUserAccess
           ? allResellers.find((entry) => entry.id === resellerUserAccess.reseller_id) || null
@@ -83,7 +98,7 @@ export const TenantProvider = ({ children }) => {
               localStorage.removeItem('pending_tenant_invite');
 
               const updatedUser = await appClient.auth.me();
-              const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5);
+              const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
               const tenant = invitedTenants[0] || null;
 
               return {
@@ -109,7 +124,7 @@ export const TenantProvider = ({ children }) => {
             localStorage.removeItem('pending_tenant_invite');
 
             const updatedUser = await appClient.auth.me();
-            const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5);
+            const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
             const tenant = invitedTenants[0] || null;
 
             return {
@@ -143,7 +158,7 @@ export const TenantProvider = ({ children }) => {
         
         const ownedTenants = await safeFilter(appClient.entities.Tenant, {
           owner_email: user.email,
-        }, '-created_date', 5);
+        }, '-created_date', 5, { fields: TENANT_FIELDS });
         const ownedTenant = ownedTenants.find((t) => normalizeEmail(t.owner_email) === userEmail);
         
         if (ownedTenant) {
@@ -175,13 +190,13 @@ export const TenantProvider = ({ children }) => {
         // 🚚 Vérifier si l'utilisateur est un livreur AVANT de vérifier UserAccess
         const allDeliveryPersons = await safeFilter(appClient.entities.DeliveryPerson, {
           user_email: user.email,
-        }, '-created_date', 20);
+        }, '-created_date', 20, { fields: DELIVERY_PERSON_FIELDS });
         const deliveryPerson = allDeliveryPersons.find((dp) => normalizeEmail(dp.user_email) === userEmail);
         
         if (deliveryPerson) {
           const deliveryTenants = await safeFilter(appClient.entities.Tenant, {
             id: deliveryPerson.tenant_id,
-          }, '-created_date', 5);
+          }, '-created_date', 5, { fields: TENANT_FIELDS });
           const deliveryTenant = deliveryTenants[0] || null;
           
           if (deliveryTenant) {
@@ -225,7 +240,7 @@ export const TenantProvider = ({ children }) => {
         const allAccess = await safeFilter(appClient.entities.UserAccess, {
           user_email: user.email,
           is_active: true,
-        }, '-created_date', 20);
+        }, '-created_date', 20, { fields: USER_ACCESS_FIELDS });
         const userAccess = allAccess.find((a) => normalizeEmail(a.user_email) === userEmail && a.is_active === true);
         
         if (!userAccess) {
@@ -251,7 +266,7 @@ export const TenantProvider = ({ children }) => {
         
         const accessTenants = await safeFilter(appClient.entities.Tenant, {
           id: userAccess.tenant_id,
-        }, '-created_date', 5);
+        }, '-created_date', 5, { fields: TENANT_FIELDS });
         const accessTenant = accessTenants[0] || null;
         
         if (!accessTenant) {
@@ -303,7 +318,7 @@ export const TenantProvider = ({ children }) => {
     },
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchInterval: 30 * 1000,
+    refetchInterval: 120 * 1000,
     retry: false,
   });
 
@@ -314,10 +329,13 @@ export const TenantProvider = ({ children }) => {
       if (!tenantData?.user?.email) return null;
       const deliveryPersons = await appClient.entities.DeliveryPerson.filter({
         user_email: tenantData.user.email
-      });
+      }, '-created_date', 5, { fields: DELIVERY_PERSON_FIELDS });
       return deliveryPersons.length > 0 ? deliveryPersons[0] : null;
     },
     enabled: !!tenantData?.user?.email,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 120 * 1000,
   });
 
   const filterByTenant = (query = {}) => {
