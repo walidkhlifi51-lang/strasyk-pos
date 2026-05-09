@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { useToast } from "@/components/ui/use-toast";
 import { Trash2 } from 'lucide-react';
 import NumericKeyboard from '../encaissements/NumericKeyboard';
@@ -29,6 +27,7 @@ const methodColors = {
 
 export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, totalAmount, customerCagnotte = 0, cagnotteRule, orderType, profile, initialBipeurNumber = '' }) {
   const [isCredit, setIsCredit] = useState(false);
+  const [paymentChoice, setPaymentChoice] = useState(null);
   const [payments, setPayments] = useState([]);
   const [cagnotteSpent, setCagnotteSpent] = useState(0);
   const [plannedPaymentMethod, setPlannedPaymentMethod] = useState('especes');
@@ -48,6 +47,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   useEffect(() => {
     if (isOpen) {
       setIsCredit(false);
+      setPaymentChoice(isCreditSwitchDisabled ? 'pay_now' : null);
       setPayments([]);
       setCagnotteSpent(0);
       setPlannedPaymentMethod('especes');
@@ -57,7 +57,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
       setIsReadyForNewInput(false);
       setInputBuffer('');
     }
-  }, [isOpen, initialBipeurNumber]);
+  }, [isOpen, initialBipeurNumber, isCreditSwitchDisabled]);
 
   useEffect(() => {
     if (isCredit) {
@@ -191,6 +191,16 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   };
 
   const isFullyPaid = !isCredit && Math.abs(remainingAmount) < 0.01 && (payments.length > 0 || cagnotteSpent >= totalAmount - 0.01);
+  const showChoiceScreen = !paymentChoice;
+  const activatePayNow = () => {
+    setPaymentChoice('pay_now');
+    setIsCredit(false);
+  };
+  const activateCredit = () => {
+    if (isCreditSwitchDisabled) return;
+    setPaymentChoice('credit');
+    setIsCredit(true);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -205,23 +215,67 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
           </div>
         </div>
 
+        {showChoiceScreen ? (
+          <div className="p-6 md:p-8 bg-white">
+            <div className="max-w-2xl mx-auto space-y-5">
+              <div className="text-center space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Choix d'encaissement</p>
+                <h3 className="text-2xl font-bold text-gray-900">Que voulez-vous faire pour cette commande ?</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={activatePayNow}
+                  className="rounded-2xl border-2 border-green-300 bg-gradient-to-br from-green-50 to-emerald-100 p-6 text-left shadow-sm transition-all hover:border-green-500 hover:shadow-md"
+                >
+                  <div className="text-4xl mb-3">💳</div>
+                  <p className="text-xl font-bold text-green-800">Encaisser maintenant</p>
+                  <p className="mt-2 text-sm text-green-700">Afficher les moyens de paiement et valider l'encaissement tout de suite.</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={activateCredit}
+                  disabled={isCreditSwitchDisabled}
+                  className={`rounded-2xl border-2 p-6 text-left shadow-sm transition-all ${
+                    isCreditSwitchDisabled
+                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                      : 'border-amber-300 bg-gradient-to-br from-amber-50 to-orange-100 hover:border-amber-500 hover:shadow-md'
+                  }`}
+                >
+                  <div className="text-4xl mb-3">📋</div>
+                  <p className={`text-xl font-bold ${isCreditSwitchDisabled ? 'text-gray-400' : 'text-amber-800'}`}>Non payée / crédit</p>
+                  <p className={`mt-2 text-sm ${isCreditSwitchDisabled ? 'text-gray-400' : 'text-amber-700'}`}>
+                    {isCreditSwitchDisabled
+                      ? "Le paiement immédiat est obligatoire pour ce type de commande."
+                      : "Enregistrer la commande sans paiement immédiat et l'encaisser plus tard."}
+                  </p>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* COLONNE GAUCHE */}
           <div className="p-3 space-y-3 border-r border-gray-200 overflow-y-auto max-h-[55vh]">
 
-            {/* Toggle crédit */}
-            {!isCreditSwitchDisabled && (
-              <div
-                onClick={() => setIsCredit(v => !v)}
-                className={`flex items-center gap-2 p-2 rounded-xl border-2 cursor-pointer transition-all ${isCredit ? 'bg-amber-50 border-amber-400' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}
-              >
-                <Switch checked={isCredit} onCheckedChange={setIsCredit} onClick={e => e.stopPropagation()} />
-                <div>
-                  <p className="font-semibold text-xs">Commande non payée (crédit)</p>
-                  <p className="text-xs text-gray-500">Régler ultérieurement</p>
-                </div>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+              <div>
+                <p className="text-xs font-semibold text-gray-500">Mode sélectionné</p>
+                <p className={`text-sm font-bold ${isCredit ? 'text-amber-700' : 'text-green-700'}`}>
+                  {isCredit ? 'Commande non payée / crédit' : 'Encaissement immédiat'}
+                </p>
               </div>
-            )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPaymentChoice(isCreditSwitchDisabled ? 'pay_now' : null)}
+              >
+                Changer
+              </Button>
+            </div>
 
             {isCreditSwitchDisabled && (
               <p className="text-xs text-center text-red-600 font-medium p-2 bg-red-50 rounded-lg border border-red-200">
@@ -418,6 +472,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
             )}
           </div>
         </div>
+        )}
 
         {/* Footer */}
         <div className="flex gap-3 p-4 border-t bg-white">
@@ -425,14 +480,25 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
           <Button
             size="lg"
             onClick={handleValidate}
-            disabled={!isCredit && payments.length === 0 && cagnotteSpent < totalAmount - 0.01}
+            disabled={
+              showChoiceScreen
+                ? true
+                : (!isCredit && payments.length === 0 && cagnotteSpent < totalAmount - 0.01)
+            }
             className={`flex-1 text-lg font-bold transition-colors ${
+              showChoiceScreen ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
               isCredit ? 'bg-amber-500 hover:bg-amber-600 text-white' :
               isFullyPaid ? 'bg-green-600 hover:bg-green-700 text-white' :
               'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            {isCredit ? '📋 Enregistrer en crédit' : isFullyPaid ? '✅ Valider le paiement' : `Reste ${safeToFixed(remainingAmount)}€ à saisir`}
+            {showChoiceScreen
+              ? 'Choisissez un mode pour continuer'
+              : isCredit
+                ? '📋 Enregistrer en crédit'
+                : isFullyPaid
+                  ? '✅ Valider le paiement'
+                  : `Reste ${safeToFixed(remainingAmount)}€ à saisir`}
           </Button>
         </div>
       </DialogContent>
