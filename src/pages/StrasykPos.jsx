@@ -329,20 +329,25 @@ export default function StrasykPos() {
   }, [loadingError, toast]);
 
   useEffect(() => {
-    if (!currentTenant?.id) return;
-    const unsubscribe = appClient.entities.Order.subscribe(async (event) => {
-      if (event.data?.tenant_id !== currentTenant.id) return;
-      if (event.type === 'create' && event.data) {
-        const dk = format(new Date(), 'yyyy-MM-dd', { locale: fr });
-        queryClient.setQueryData(['posData', currentTenant.id, dk], (old) => {
-          if (!old) { queryClient.invalidateQueries({ queryKey: ['posData'] }); return old; }
-          if ((old.allOrders||[]).some(o => o.id === event.data.id)) return old;
-          return { ...old, allOrders: [...(old.allOrders||[]), event.data] };
-        });
+    if (!currentTenant?.id) return undefined;
+
+    const handleFocus = () => {
+      refreshData();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshData();
       }
-    });
-    return () => unsubscribe();
-  }, [currentTenant?.id, queryClient]);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentTenant?.id, refreshData]);
 
   const clearOrder = () => {
     setCurrentOrder(null);
