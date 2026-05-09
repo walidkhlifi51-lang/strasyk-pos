@@ -41,7 +41,9 @@ const PARAM_INGREDIENTS_FIELDS = [
 ];
 
 const PARAM_DELIVERY_PEOPLE_FIELDS = [
-    'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'vehicule', 'disponible', 'created_date', 'updated_date'
+    'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'user_email', 'username', 'password',
+    'vehicule', 'disponible', 'app_access_enabled', 'en_livraison', 'nb_livraisons_jour',
+    'total_encaisse', 'created_date', 'updated_date'
 ];
 
 const PARAM_PROFILE_FIELDS = [
