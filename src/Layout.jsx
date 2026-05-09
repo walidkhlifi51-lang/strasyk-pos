@@ -379,26 +379,26 @@ const AppLayout = ({ children, currentPageName }) => {
     return <WaitingForAccess />;
   }
 
-  const isSuperAdmin = isPlatformAdmin;
-  const hasCurrentPageAccess = isSuperAdmin
-    ? PLATFORM_ADMIN_ALLOWED_PAGES.has(currentPageName)
+  const isPureSuperAdmin = isPlatformAdmin && !currentTenant && !currentReseller && !userRole;
+  const hasCurrentPageAccess = isPlatformAdmin && PLATFORM_ADMIN_ALLOWED_PAGES.has(currentPageName)
+    ? true
     : !pagePermissionMap[currentPageName] || hasModuleAccess(pagePermissionMap[currentPageName]);
 
   const visibleNavItems = navItems.filter((item) => {
-    if (isSuperAdmin) {
+    if (isPureSuperAdmin) {
       return PLATFORM_ADMIN_ALLOWED_PAGES.has(item.page);
     }
-    if (item.superAdminOnly && !isSuperAdmin) return false;
+    if (item.superAdminOnly) return isPlatformAdmin;
     if (item.resellerRoles && !isReseller) return false;
 
-    if (!isSuperAdmin && isReseller) {
+    if (!isPureSuperAdmin && isReseller) {
       if (item.resellerRoles) {
         return item.resellerRoles.includes(userRole);
       }
       return false;
     }
 
-    if (item.roles && !isSuperAdmin && userRole) {
+    if (item.roles && !isPureSuperAdmin && userRole) {
       if (!item.roles.includes(userRole)) return false;
     }
 
@@ -411,7 +411,7 @@ const AppLayout = ({ children, currentPageName }) => {
     if (item.deliveryAppOnly) {
       return profile?.manages_delivery_app === true;
     }
-    if (item.page && pagePermissionMap[item.page] && !isSuperAdmin) {
+    if (item.page && pagePermissionMap[item.page] && !isPureSuperAdmin) {
       return hasModuleAccess(pagePermissionMap[item.page]);
     }
     return true;
