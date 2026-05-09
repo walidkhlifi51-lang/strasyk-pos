@@ -469,9 +469,16 @@ export default function AdminTenants() {
         return;
       }
       const newStatus = !profile[moduleField];
+      const modulePayload = { [moduleField]: newStatus };
+      if (moduleField === 'delivery_app_allowed') {
+        modulePayload.manages_delivery_app = newStatus;
+      }
+      if (moduleField === 'table_plan_allowed') {
+        modulePayload.manages_table_plan = newStatus;
+      }
       let updatedProfile = null;
       try {
-        updatedProfile = await appClient.entities.RestaurantProfile.update(profile.id, { [moduleField]: newStatus });
+        updatedProfile = await appClient.entities.RestaurantProfile.update(profile.id, modulePayload);
       } catch (error) {
         if (isSchemaFieldError(error)) {
           toast({
@@ -515,7 +522,7 @@ export default function AdminTenants() {
       // Mettre à jour le profil dans selectedTenant sans fermer la dialog
       const profilePatch = {
         ...(updatedProfile || profile),
-        [moduleField]: newStatus,
+        ...modulePayload,
       };
       setSelectedTenant(prev => prev && prev.id === tenant.id ? { ...prev, profile: { ...prev.profile, ...profilePatch } } : prev);
       setPreviewTenant(prev => prev && prev.id === tenant.id ? { ...prev, profile: { ...prev.profile, ...profilePatch } } : prev);
