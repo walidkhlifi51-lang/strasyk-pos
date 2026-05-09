@@ -44,12 +44,15 @@ const ADMIN_TENANT_FALLBACK_FIELDS = [
 const ADMIN_PROFILE_FIELDS = [
   'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url',
   'custom_domain', 'domain_verified', 'manages_kiosk', 'customer_display_enabled',
-  'manages_table_plan', 'delivery_app_allowed', 'manages_delivery_app', 'manages_web_ordering',
+  'manages_table_plan', 'table_plan_allowed', 'delivery_app_allowed', 'manages_delivery_app', 'manages_web_ordering',
+  'ai_image_generation_enabled',
   'updated_date', 'created_date'
 ];
 
 const ADMIN_PROFILE_FALLBACK_FIELDS = [
-  'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url', 'created_date'
+  'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url',
+  'manages_kiosk', 'customer_display_enabled', 'delivery_app_allowed', 'manages_web_ordering',
+  'created_date'
 ];
 
 const ADMIN_REQUEST_FIELDS = [
@@ -106,6 +109,14 @@ const isSchemaFieldError = (error) => {
     || message.includes('could not find the')
     || message.includes('column')
     || error?.code === '42703';
+};
+
+const isPermissionError = (error) => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return error?.code === '42501'
+    || message.includes('row-level security')
+    || message.includes('permission denied')
+    || message.includes('not allowed');
 };
 
 const listWithSchemaFallback = async (entityApi, primaryFields, fallbackFields, sort) => {
@@ -453,20 +464,53 @@ export default function AdminTenants() {
         return;
       }
       const newStatus = !profile[moduleField];
-      await appClient.entities.RestaurantProfile.update(profile.id, { [moduleField]: newStatus });
+      let updatedProfile = null;
+      try {
+        updatedProfile = await appClient.entities.RestaurantProfile.update(profile.id, { [moduleField]: newStatus });
+      } catch (error) {
+        if (isSchemaFieldError(error)) {
+          toast({
+            title: "âŒ Colonne absente en base",
+            description: `Le module ${moduleField} n'existe pas encore dans le schema Supabase.`,
+            variant: "destructive"
+          });
+          return;
+        }
+        if (isPermissionError(error)) {
+          toast({
+            title: "âŒ Ecriture refusee",
+            description: "La base a refuse l'activation de ce module. Verifiez les policies RLS du profil commerce.",
+            variant: "destructive"
+          });
+          return;
+        }
+        throw error;
+      }
       const moduleNames = {
         manages_kiosk: 'Borne',
         customer_display_enabled: 'Écran client',
-        manages_table_plan: 'Plan de tables',
+        manages_table_plan: 'Gestion du plan de tables',
+        table_plan_allowed: 'Plan de tables',
         delivery_app_allowed: 'Application livreur',
         manages_web_ordering: 'Commande en ligne',
+        ai_image_generation_enabled: 'IA images',
       };
       toast({
         title: newStatus ? `✅ ${moduleNames[moduleField]} activé` : `🚫 ${moduleNames[moduleField]} désactivé`,
         description: tenant.nom_commercial,
       });
       // Mettre à jour le profil dans selectedTenant sans fermer la dialog
-      setSelectedTenant(prev => prev ? { ...prev, profile: { ...prev.profile, [moduleField]: newStatus } } : null);
+      const profilePatch = {
+        ...(updatedProfile || profile),
+        [moduleField]: newStatus,
+      };
+      setSelectedTenant(prev => prev && prev.id === tenant.id ? { ...prev, profile: { ...prev.profile, ...profilePatch } } : prev);
+      setPreviewTenant(prev => prev && prev.id === tenant.id ? { ...prev, profile: { ...prev.profile, ...profilePatch } } : prev);
+      setTenantsWithProfiles(prev => prev.map((entry) => (
+        entry.id === tenant.id
+          ? { ...entry, profile: { ...(entry.profile || {}), ...profilePatch } }
+          : entry
+      )));
       await refetch();
     } catch (error) {
       toast({ title: "❌ Erreur", description: error.message, variant: "destructive" });
