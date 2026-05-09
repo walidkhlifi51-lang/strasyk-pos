@@ -47,6 +47,7 @@ const PARAM_DELIVERY_PEOPLE_FIELDS = [
 const PARAM_PROFILE_FIELDS = [
     'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url', 'page_pins',
     'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',
+    'delivery_app_allowed', 'manages_delivery_app', 'table_plan_allowed', 'manages_table_plan',
     'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit', 'ai_image_generation_enabled',
     'updated_date', 'created_date'
 ];
