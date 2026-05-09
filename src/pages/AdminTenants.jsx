@@ -37,11 +37,19 @@ const ADMIN_TENANT_FIELDS = [
   'stripe_subscription_id', 'slug', 'created_date', 'updated_date'
 ];
 
+const ADMIN_TENANT_FALLBACK_FIELDS = [
+  'id', 'nom_commercial', 'owner_email', 'active', 'slug', 'created_date'
+];
+
 const ADMIN_PROFILE_FIELDS = [
   'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url',
   'custom_domain', 'domain_verified', 'manages_kiosk', 'customer_display_enabled',
   'manages_table_plan', 'delivery_app_allowed', 'manages_delivery_app', 'manages_web_ordering',
   'updated_date', 'created_date'
+];
+
+const ADMIN_PROFILE_FALLBACK_FIELDS = [
+  'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url', 'created_date'
 ];
 
 const ADMIN_REQUEST_FIELDS = [
@@ -92,6 +100,32 @@ class AdminSectionBoundary extends React.Component {
   }
 }
 
+const isSchemaFieldError = (error) => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return message.includes('schema cache')
+    || message.includes('could not find the')
+    || message.includes('column')
+    || error?.code === '42703';
+};
+
+const listWithSchemaFallback = async (entityApi, primaryFields, fallbackFields, sort) => {
+  try {
+    return await entityApi.list(sort, null, { fields: primaryFields });
+  } catch (error) {
+    if (!isSchemaFieldError(error)) throw error;
+    return await entityApi.list(sort, null, { fields: fallbackFields });
+  }
+};
+
+const filterWithSchemaFallback = async (entityApi, query, primaryFields, fallbackFields, sort, limit) => {
+  try {
+    return await entityApi.filter(query, sort, limit, { fields: primaryFields });
+  } catch (error) {
+    if (!isSchemaFieldError(error)) throw error;
+    return await entityApi.filter(query, sort, limit, { fields: fallbackFields });
+  }
+};
+
 export default function AdminTenants() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -122,8 +156,20 @@ export default function AdminTenants() {
   const { data: tenants = [], refetch, isLoading } = useQuery({
     queryKey: ['allTenants'],
     queryFn: async () => {
-      const tenantsList = await appClient.entities.Tenant.list('-created_date', null, { fields: ADMIN_TENANT_FIELDS });
-      const profiles = await appClient.entities.RestaurantProfile.list('-updated_date', null, { fields: ADMIN_PROFILE_FIELDS });
+      const [tenantsList, profiles] = await Promise.all([
+        listWithSchemaFallback(
+          appClient.entities.Tenant,
+          ADMIN_TENANT_FIELDS,
+          ADMIN_TENANT_FALLBACK_FIELDS,
+          '-created_date'
+        ),
+        listWithSchemaFallback(
+          appClient.entities.RestaurantProfile,
+          ADMIN_PROFILE_FIELDS,
+          ADMIN_PROFILE_FALLBACK_FIELDS,
+          '-updated_date'
+        ),
+      ]);
       const enriched = tenantsList.map(tenant => ({
         ...tenant,
         profile: profiles.find(p => p.tenant_id === tenant.id)
@@ -393,7 +439,14 @@ export default function AdminTenants() {
 
   const handleToggleModule = async (tenant, moduleField) => {
     try {
-      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tenant.id }, '-updated_date', 5, { fields: ADMIN_PROFILE_FIELDS });
+      const profiles = await filterWithSchemaFallback(
+        appClient.entities.RestaurantProfile,
+        { tenant_id: tenant.id },
+        ADMIN_PROFILE_FIELDS,
+        ADMIN_PROFILE_FALLBACK_FIELDS,
+        '-updated_date',
+        5
+      );
       const profile = profiles[0];
       if (!profile) {
         toast({ title: "❌ Erreur", description: "Profil introuvable", variant: "destructive" });
@@ -467,8 +520,20 @@ export default function AdminTenants() {
 
   const refreshTenantSnapshot = async (tenantId) => {
     const [tenantsList, profiles] = await Promise.all([
-      appClient.entities.Tenant.list('-created_date', null, { fields: ADMIN_TENANT_FIELDS }),
-      appClient.entities.RestaurantProfile.filter({ tenant_id: tenantId }, '-updated_date', 5, { fields: ADMIN_PROFILE_FIELDS }),
+      listWithSchemaFallback(
+        appClient.entities.Tenant,
+        ADMIN_TENANT_FIELDS,
+        ADMIN_TENANT_FALLBACK_FIELDS,
+        '-created_date'
+      ),
+      filterWithSchemaFallback(
+        appClient.entities.RestaurantProfile,
+        { tenant_id: tenantId },
+        ADMIN_PROFILE_FIELDS,
+        ADMIN_PROFILE_FALLBACK_FIELDS,
+        '-updated_date',
+        5
+      ),
     ]);
 
     const refreshedTenant = tenantsList.find((tenant) => tenant.id === tenantId) || null;
@@ -489,7 +554,14 @@ export default function AdminTenants() {
     setIsCreating(true);
     try {
       const ownerEmail = normalizeEmail(formData.owner_email);
-      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5, { fields: ADMIN_TENANT_FIELDS });
+      const existingTenants = await filterWithSchemaFallback(
+        appClient.entities.Tenant,
+        { owner_email: ownerEmail },
+        ADMIN_TENANT_FIELDS,
+        ADMIN_TENANT_FALLBACK_FIELDS,
+        '-created_date',
+        5
+      );
       const existingTenant = existingTenants.find((tenant) => normalizeEmail(tenant.owner_email) === ownerEmail);
 
       if (existingTenant) {
@@ -627,7 +699,14 @@ export default function AdminTenants() {
     setIsCreating(true);
     try {
       const ownerEmail = normalizeEmail(request.email);
-      const existingTenants = await appClient.entities.Tenant.filter({ owner_email: ownerEmail }, '-created_date', 5, { fields: ADMIN_TENANT_FIELDS });
+      const existingTenants = await filterWithSchemaFallback(
+        appClient.entities.Tenant,
+        { owner_email: ownerEmail },
+        ADMIN_TENANT_FIELDS,
+        ADMIN_TENANT_FALLBACK_FIELDS,
+        '-created_date',
+        5
+      );
       const existingTenant = existingTenants.find((tenant) => normalizeEmail(tenant.owner_email) === ownerEmail);
 
       if (existingTenant) {
