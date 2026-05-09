@@ -119,6 +119,11 @@ const isPermissionError = (error) => {
     || message.includes('not allowed');
 };
 
+const isTenantSyncError = (error) => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return message.includes('tenant_sync_versions');
+};
+
 const listWithSchemaFallback = async (entityApi, primaryFields, fallbackFields, sort) => {
   try {
     return await entityApi.list(sort, null, { fields: primaryFields });
@@ -477,6 +482,14 @@ export default function AdminTenants() {
           return;
         }
         if (isPermissionError(error)) {
+          if (isTenantSyncError(error)) {
+            toast({
+              title: "âŒ SQL Supabase a mettre a jour",
+              description: "Executez docs/SUPABASE_TENANT_SYNC_VERSIONS.sql dans Supabase pour autoriser la synchronisation des modules admin.",
+              variant: "destructive"
+            });
+            return;
+          }
           toast({
             title: "âŒ Ecriture refusee",
             description: "La base a refuse l'activation de ce module. Verifiez les policies RLS du profil commerce.",

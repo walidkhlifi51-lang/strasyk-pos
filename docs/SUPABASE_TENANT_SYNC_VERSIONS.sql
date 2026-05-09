@@ -32,6 +32,8 @@ create table if not exists public.tenant_sync_versions (
 create or replace function public.touch_tenant_sync_versions()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   insert into public.tenant_sync_versions (
@@ -135,7 +137,9 @@ on public.tenant_sync_versions
 for insert
 to authenticated
 with check (
-  tenant_id = public.app_current_tenant_id()
+  public.app_is_platform_admin()
+  or public.app_is_active_reseller_user()
+  or tenant_id = public.app_current_tenant_id()
   or exists (
     select 1
     from public.tenants t
@@ -150,7 +154,9 @@ on public.tenant_sync_versions
 for update
 to authenticated
 using (
-  tenant_id = public.app_current_tenant_id()
+  public.app_is_platform_admin()
+  or public.app_is_active_reseller_user()
+  or tenant_id = public.app_current_tenant_id()
   or exists (
     select 1
     from public.tenants t
@@ -159,7 +165,9 @@ using (
   )
 )
 with check (
-  tenant_id = public.app_current_tenant_id()
+  public.app_is_platform_admin()
+  or public.app_is_active_reseller_user()
+  or tenant_id = public.app_current_tenant_id()
   or exists (
     select 1
     from public.tenants t
