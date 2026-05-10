@@ -10,6 +10,7 @@ import { Package, MapPin, Phone, CreditCard, CheckCircle, Truck, LogOut, QrCode,
 import { useToast } from '@/components/ui/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import QrScannerView from '../components/delivery/QrScannerView';
+import { getSupabaseBrowserClient } from '@/api/supabase/client';
 
 const ACTIVE_DELIVERY_STATUSES = ['en_cours_de_livraison', 'en_preparation', 'prete', 'en_attente', 'en_attente_paiement'];
 const HISTORY_DELIVERY_STATUSES = ['livree', 'payÃ©'];
@@ -80,6 +81,26 @@ export default function DeliveryAppPublic() {
     return `${parisDate.getFullYear()}-${String(parisDate.getMonth() + 1).padStart(2, '0')}-${String(parisDate.getDate()).padStart(2, '0')}`;
   }, []);
 
+  const invokeDeliveryAction = useCallback(async (action, payload = {}) => {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data, error } = await supabase.rpc('delivery_app_action', {
+        action_name: action,
+        payload,
+      });
+      if (!error) return { data };
+    }
+
+    if (action === 'assign') {
+      return appClient.functions.invoke('assignDeliveryOrder', payload);
+    }
+
+    return appClient.functions.invoke('assignDeliveryOrder', {
+      action,
+      ...payload,
+    });
+  }, []);
+
   // Load restaurant profile when logged in
   useEffect(() => {
     if (!deliveryPerson) return;
@@ -147,16 +168,18 @@ export default function DeliveryAppPublic() {
   const loginWithCredentials = async (user, pass, silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const filter = { username: user, password: pass };
-      if (tenantId) filter.tenant_id = tenantId;
-      const results = await appClient.entities.DeliveryPerson.filter(filter, '-created_date', 5, { fields: DELIVERY_PUBLIC_PERSON_FIELDS });
-      const person = results[0];
-      if (!person) throw new Error('Identifiants incorrects');
+      const loginRes = await invokeDeliveryAction('login', {
+        username: user,
+        password: pass,
+        tenant_id: tenantId || null,
+      });
+      const person = loginRes?.data?.person || null;
+      const profile = loginRes?.data?.profile || null;
+
+      if (!person) throw new Error(loginRes?.data?.error || 'Identifiants incorrects');
       if (person.app_access_enabled === false) throw new Error('Acces application livreur desactive');
       const tId = tenantId || person.tenant_id;
       if (!tId) throw new Error('Aucun commerce rattache a ce livreur');
-      const profiles = await appClient.entities.RestaurantProfile.filter({ tenant_id: tId }, undefined, 1, { fields: deliveryProfileFields });
-      const profile = profiles[0] || null;
       if (!profile?.delivery_app_allowed) throw new Error('Application livreur non autorisee par l administrateur');
       if (!profile?.manages_delivery_app) throw new Error('Application livreur non activee par le commercant');
       setDeliveryPerson(person);
@@ -190,9 +213,7 @@ export default function DeliveryAppPublic() {
     setIsLoadingOrders(true);
     try {
       const tId = tenantId || person.tenant_id;
-      // Utiliser la fonction backend pour contourner le RLS
-      const res = await appClient.functions.invoke('assignDeliveryOrder', {
-        action: 'list',
+      const res = await invokeDeliveryAction('list', {
         delivery_person_id: person.id,
         tenant_id: tId,
       });
@@ -226,8 +247,7 @@ export default function DeliveryAppPublic() {
           console.warn('[DeliveryAppPublic] fallback clients via function invoke', error);
           await Promise.all(customerIds.map(async (cid) => {
             try {
-              const cRes = await appClient.functions.invoke('assignDeliveryOrder', {
-                action: 'getCustomer',
+              const cRes = await invokeDeliveryAction('getCustomer', {
                 customer_id: cid,
                 tenant_id: tId,
               });
@@ -253,7 +273,7 @@ export default function DeliveryAppPublic() {
     toast({ title: '⏳ Recherche commande #' + numInt + '...' });
     try {
       const tId = tenantId || person.tenant_id;
-      const res = await appClient.functions.invoke('assignDeliveryOrder', {
+      const res = await invokeDeliveryAction('assign', {
         numero_caisse: numInt,
         tenant_id: tId,
         delivery_person_id: person.id,
@@ -292,8 +312,7 @@ export default function DeliveryAppPublic() {
     setIsLoading(true);
     try {
       try {
-        await appClient.functions.invoke('assignDeliveryOrder', {
-          action: 'confirmDelivery',
+        await invokeDeliveryAction('confirmDelivery', {
           order_id: order.id,
           delivery_person_id: deliveryPerson.id,
           payment_method: paymentData ? paymentData.methode : null,
@@ -357,8 +376,7 @@ export default function DeliveryAppPublic() {
       await loadOrders(deliveryPerson);
       // Rafraîchir les données du livreur pour mettre à jour le compteur
       try {
-        const freshPersons = await appClient.functions.invoke('assignDeliveryOrder', {
-          action: 'getDeliveryPerson',
+        const freshPersons = await invokeDeliveryAction('getDeliveryPerson', {
           delivery_person_id: deliveryPerson.id,
         });
         if (freshPersons.data?.person) {
