@@ -36,6 +36,15 @@ const normalizeKioskWelcomeImages = (images = []) => (
     : []
 );
 
+const resolveTerminalWelcomeImages = (terminalImages, defaultImages) => {
+  const normalizedTerminalImages = normalizeKioskWelcomeImages(terminalImages);
+  if (normalizedTerminalImages.length > 0) {
+    return normalizedTerminalImages;
+  }
+
+  return normalizeKioskWelcomeImages(defaultImages);
+};
+
 const getWelcomeImageLabel = (imageUrl) => {
   if (!imageUrl || typeof imageUrl !== 'string') return '';
 
@@ -541,7 +550,7 @@ export default function Kiosk() {
   // Carrousel d'images - DOIT être avant les retours conditionnels
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const welcomeImages = isTerminalMode
-    ? normalizeKioskWelcomeImages(profile?.kiosk_terminal_welcome_images || profile?.kiosk_welcome_images)
+    ? resolveTerminalWelcomeImages(profile?.kiosk_terminal_welcome_images, profile?.kiosk_welcome_images)
     : [];
   
   useEffect(() => {
