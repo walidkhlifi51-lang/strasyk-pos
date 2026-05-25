@@ -192,8 +192,10 @@ export default function Kiosk() {
   // Récupérer le tenant_id depuis l'URL (format: /kiosk?tenant=xxx)
   const urlParams = new URLSearchParams(window.location.search);
   const tenantIdFromUrl = urlParams.get('tenant');
-  const forceMobileMode = urlParams.get('display') === 'mobile';
-  const terminalRouteRequested = window.location.pathname === '/KioskTerminal' || urlParams.get('display') === 'terminal';
+  const displayMode = (urlParams.get('display') || '').toLowerCase();
+  const normalizedPathname = window.location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+  const forceMobileMode = displayMode === 'mobile';
+  const terminalRouteRequested = /(^|\/)kioskterminal$/.test(normalizedPathname) || displayMode === 'terminal';
   const isTerminalMode = !forceMobileMode && terminalRouteRequested;
 
   useEffect(() => {
