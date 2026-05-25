@@ -23,7 +23,7 @@ export default function DeliveryApp() {
   const queryClient = useQueryClient();
 
   // Charger la commande active du livreur
-  const { data: currentOrder, isLoading: orderLoading } = useQuery({
+  const { data: currentOrder, isLoading: orderLoading, refetch: refetchCurrentOrder } = useQuery({
     queryKey: ['currentDeliveryOrder', deliveryPerson?.id],
     queryFn: async () => {
       if (!deliveryPerson) return null;
@@ -34,7 +34,6 @@ export default function DeliveryApp() {
       return orders.length > 0 ? orders[0] : null;
     },
     enabled: !!deliveryPerson,
-    refetchInterval: 120000,
     refetchOnWindowFocus: false,
   });
 
@@ -69,6 +68,26 @@ export default function DeliveryApp() {
 
     return unsubscribe;
   }, [deliveryPerson?.id, currentOrder?.id, queryClient]);
+
+  useEffect(() => {
+    if (!deliveryPerson?.id) return undefined;
+
+    const handleRefresh = () => {
+      refetchCurrentOrder();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetchCurrentOrder();
+      }
+    };
+
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [deliveryPerson?.id, refetchCurrentOrder]);
 
   // Mutation pour prendre une nouvelle commande
   const assignOrderMutation = useMutation({

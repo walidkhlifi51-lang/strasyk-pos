@@ -198,7 +198,6 @@ export default function AdminTenants() {
   const { data: requests = [], refetch: refetchRequests } = useQuery({
     queryKey: ['inscriptionRequests'],
     queryFn: () => appClient.entities.InscriptionRequest.list('-created_date', null, { fields: ADMIN_REQUEST_FIELDS }),
-    refetchInterval: 120000,
     refetchOnWindowFocus: false,
   });
 
@@ -243,6 +242,24 @@ export default function AdminTenants() {
       }
     });
     return unsubscribe;
+  }, [refetchRequests]);
+
+  React.useEffect(() => {
+    const handleFocus = () => {
+      refetchRequests();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetchRequests();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refetchRequests]);
 
   React.useEffect(() => {

@@ -72,14 +72,33 @@ export default function RestaurantSite() {
   const tenant = siteContext?.tenant;
   const profile = siteContext?.profile;
 
-  const { data: siteCatalog } = useQuery({
+  const { data: siteCatalog, refetch: refetchSiteCatalog } = useQuery({
     queryKey: ['site-catalog', tenant?.id],
     queryFn: () => fetchPublicSiteCatalogWithCache(tenant?.id),
     enabled: !!tenant?.id,
-    refetchInterval: 120000,
     refetchOnWindowFocus: false,
     staleTime: 110000,
   });
+
+  React.useEffect(() => {
+    if (!tenant?.id) return undefined;
+
+    const handleRefresh = () => {
+      refetchSiteCatalog();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetchSiteCatalog();
+      }
+    };
+
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [tenant?.id, refetchSiteCatalog]);
 
   const products = siteCatalog?.products || [];
   const categories = siteCatalog?.categories || [];

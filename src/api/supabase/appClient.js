@@ -56,17 +56,76 @@ const normalizeFilterArgs = (sort, limit) => {
 };
 
 const missingFieldsWarnings = new Set();
+const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
-const normalizeSelectFields = (fields, contextKey = 'unknown') => {
+const LEGACY_ENTITY_FIELDS = {
+  Tenant: ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'pos_suspended', 'slug', 'created_date', 'updated_date'],
+  RestaurantProfile: [
+    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'ville', 'telephone', 'logo_url', 'horaires',
+    'custom_domain', 'site_template', 'site_primary_color', 'site_subtitle', 'site_hero_images',
+    'site_hero_source', 'site_hero_messages', 'site_video_url', 'site_video_titre', 'kiosk_primary_color',
+    'customer_display_enabled', 'customer_display_images', 'customer_display_color', 'customer_display_info_message',
+    'delivery_app_allowed', 'manages_delivery_app', 'manages_kiosk', 'manages_table_plan', 'table_plan_allowed',
+    'manages_web_ordering', 'impression_auto', 'impression_bouton_visible', 'impression_double', 'page_pins',
+    'tva_rates', 'prix_differencies_par_mode', 'kiosk_welcome_images', 'kiosk_terminal_welcome_images',
+    'kiosk_welcome_message', 'kiosk_welcome_title_size', 'kiosk_welcome_title_style', 'kiosk_card_payment_enabled',
+    'web_ordering_flash_offer', 'web_ordering_horaires', 'scratch_tickets_enabled', 'updated_date', 'created_date',
+  ],
+  DeliveryPerson: ['id', 'tenant_id', 'user_email', 'username', 'password', 'nom', 'prenom', 'telephone', 'vehicule', 'disponible', 'app_access_enabled', 'en_livraison', 'nb_livraisons_jour', 'total_encaisse', 'created_date', 'updated_date'],
+  Category: ['id', 'tenant_id', 'parent_id', 'nom', 'disponible', 'color', 'image_url', 'image_display', 'manages_sizes', 'size_template', 'sort_order', 'created_date', 'updated_date'],
+  Product: ['id', 'tenant_id', 'category_id', 'nom', 'description', 'disponible', 'temps_preparation', 'tva', 'image_url', 'image_display', 'color', 'featured', 'sort_order', 'prix', 'base_price', 'size_prices', 'prix_par_mode', 'size_prix_par_mode', 'web_price', 'web_size_prices', 'created_date', 'updated_date'],
+  Table: ['id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y', 'zone', 'created_date', 'updated_date'],
+  Customer: ['id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville', 'etage', 'interphone', 'adresses', 'cagnotte_balance', 'created_date', 'updated_date'],
+  Order: ['id', 'tenant_id', 'numero_commande', 'numero_caisse', 'type_commande', 'customer_id', 'customer_name', 'table_id', 'delivery_person_id', 'delivery_address', 'articles', 'total_ht', 'total_tva', 'total_ttc', 'statut', 'mode_paiement', 'mode_paiement_prevu', 'numero_bipeur', 'numero_table', 'payee', 'notes', 'cagnotte_spent', 'scratch_reduction', 'print_at_counter', 'from_kiosk', 'from_web', 'created_date', 'updated_date'],
+  Offer: ['id', 'tenant_id', 'nom', 'type', 'active', 'condition_type', 'condition_product_ids', 'condition_category_ids', 'condition_quantity', 'condition_sizes', 'reward_type', 'reward_product_ids', 'reward_category_ids', 'reward_quantity', 'reward_sizes', 'reduction_value', 'canaux', 'modes_commande', 'updated_date', 'created_date'],
+  LoyaltyRule: ['id', 'tenant_id', 'nom', 'active', 'type', 'points_required', 'discount_amount', 'discount_percent', 'product_ids', 'category_ids', 'canaux', 'created_date', 'updated_date'],
+  CagnotteRule: ['id', 'tenant_id', 'nom', 'active', 'type', 'value', 'min_order_total', 'canaux', 'accumulation_rate', 'created_date', 'updated_date'],
+  CagnotteHistory: ['id', 'tenant_id', 'customer_id', 'order_id', 'type', 'amount', 'balance_before', 'balance_after', 'created_date', 'updated_date'],
+  PromoCode: ['id', 'tenant_id', 'code', 'active', 'type', 'value', 'description', 'expires_at', 'usage_limit', 'usage_count', 'canaux', 'modes_commande', 'created_date', 'updated_date'],
+  MenuFormula: ['id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'tva', 'disponible', 'created_date', 'updated_date'],
+  MenuFormulaItem: ['id', 'tenant_id', 'menu_formula_id', 'nom_affichage', 'quantite', 'taille_fixe', 'produits_inclus', 'created_date', 'updated_date'],
+  ClotureCaisse: ['id', 'tenant_id', 'date_cloture', 'statut', 'montant_theorique', 'montant_reel', 'ecarts', 'created_by', 'notes', 'created_date', 'updated_date'],
+  DrawerOpening: ['id', 'tenant_id', 'amount', 'reason', 'created_by', 'created_date', 'updated_date'],
+  CustomerDisplayCart: ['id', 'tenant_id', 'cart_data', 'updated_at', 'created_date', 'updated_date'],
+  SiteConfig: ['id', 'tenant_id', 'key', 'value', 'created_date', 'updated_date'],
+  ScratchTicketConfig: ['id', 'tenant_id', 'active', 'display_on', 'winning_mode', 'winning_product_id', 'winning_product_nom', 'reduction_value', 'updated_date', 'created_date'],
+  InscriptionRequest: ['id', 'nom_commercial', 'prenom_contact', 'nom_contact', 'email', 'adresse', 'telephone', 'formule_choisie', 'statut', 'message', 'created_date', 'updated_date'],
+  TenantInvoice: ['id', 'tenant_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'lignes_materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'created_date', 'updated_date'],
+  UserAccess: ['id', 'tenant_id', 'user_email', 'role', 'is_active', 'created_date', 'updated_date'],
+  PlatformAdminAccess: ['id', 'user_email', 'is_active', 'created_date', 'updated_date'],
+  Reseller: ['id', 'nom', 'email', 'telephone', 'status', 'created_date', 'updated_date'],
+  ResellerUser: ['id', 'reseller_id', 'user_email', 'role', 'is_active', 'created_date', 'updated_date'],
+  ResellerBranding: ['id', 'reseller_id', 'name', 'logo_url', 'created_date', 'updated_date'],
+  ResellerPricingRule: ['id', 'reseller_id', 'type', 'value', 'created_date', 'updated_date'],
+  ResellerTenant: ['id', 'reseller_id', 'tenant_id', 'status', 'created_date', 'updated_date'],
+  ResellerCommission: ['id', 'reseller_id', 'tenant_id', 'status', 'montant', 'created_date', 'updated_date'],
+  ResellerPayout: ['id', 'reseller_id', 'status', 'montant', 'created_date', 'updated_date'],
+};
+
+const UNIQUE_SELECT_FIELDS = (fields = []) => [...new Set(fields.filter(Boolean))];
+const MINIMAL_WRITE_RETURN_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
+const MINIMAL_BULK_WRITE_RETURN_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
+const resolveLegacyFields = (entityName) => UNIQUE_SELECT_FIELDS([
+  ...(LEGACY_ENTITY_FIELDS[entityName] || []),
+  'id',
+  'tenant_id',
+  'created_date',
+  'updated_date',
+]);
+
+const normalizeSelectFields = (fields, contextKey = 'unknown', entityName = 'unknown') => {
   if (!fields) {
     if (!missingFieldsWarnings.has(contextKey) && typeof console !== 'undefined') {
       missingFieldsWarnings.add(contextKey);
-      console.warn(`[appClient] Missing fields for ${contextKey}; falling back to select('*').`);
+      const fallbackFields = resolveLegacyFields(entityName);
+      const warning = `[appClient] Missing fields for ${contextKey}; using legacy projection (${fallbackFields.join(', ')}).`;
+      if (isDev) console.warn(warning);
+      else console.info?.(warning);
     }
-    return '*';
+    return resolveLegacyFields(entityName).join(',');
   }
   if (Array.isArray(fields)) return fields.join(',');
-  return typeof fields === 'string' ? fields : '*';
+  return typeof fields === 'string' ? fields : resolveLegacyFields(entityName).join(',');
 };
 
 const applyQueryFilters = (queryBuilder, query = {}) => {
@@ -137,6 +196,8 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
+const mergeWriteResult = (payload, record) => ({ ...(payload || {}), ...(record || {}) });
+
 const createEntityApi = (entityName) => {
   const tableName = resolveTableName(entityName);
 
@@ -144,7 +205,7 @@ const createEntityApi = (entityName) => {
     async list(sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.list`));
+      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.list`, entityName));
       query = applySortAndLimit(query, args.sort, args.limit);
       const { data, error } = await query;
       const fallback = maybeReturnEmptyArray(error);
@@ -155,7 +216,7 @@ const createEntityApi = (entityName) => {
     async filter(query = {}, sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.filter`));
+      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.filter`, entityName));
       request = applyQueryFilters(request, query);
       request = applySortAndLimit(request, args.sort, args.limit);
       const { data, error } = await request;
@@ -166,38 +227,51 @@ const createEntityApi = (entityName) => {
 
     async create(data = {}) {
       const supabase = getSupabaseBrowserClient();
-      const { data: created, error } = await supabase.from(tableName).insert(data).select().single();
+      const { data: created, error } = await supabase
+        .from(tableName)
+        .insert(data)
+        .select(MINIMAL_WRITE_RETURN_FIELDS.join(','))
+        .single();
       if (isPermissionError(error)) {
         const fallback = await supabase.from(tableName).insert(data);
         maybeReturnSuccess(fallback.error);
         return { ...data };
       }
       maybeReturnSuccess(error);
-      return created;
+      return mergeWriteResult(data, created);
     },
 
     async bulkCreate(records = []) {
       const supabase = getSupabaseBrowserClient();
-      const { data: created, error } = await supabase.from(tableName).insert(records).select();
+      const { data: created, error } = await supabase
+        .from(tableName)
+        .insert(records)
+        .select(MINIMAL_BULK_WRITE_RETURN_FIELDS.join(','));
       if (isPermissionError(error)) {
         const fallback = await supabase.from(tableName).insert(records);
         maybeReturnSuccess(fallback.error);
         return records;
       }
       maybeReturnSuccess(error);
-      return created || [];
+      if (!Array.isArray(created) || created.length === 0) return records;
+      return records.map((record, index) => mergeWriteResult(record, created[index]));
     },
 
     async update(id, data = {}) {
       const supabase = getSupabaseBrowserClient();
-      const { data: updated, error } = await supabase.from(tableName).update(data).eq('id', id).select().single();
+      const { data: updated, error } = await supabase
+        .from(tableName)
+        .update(data)
+        .eq('id', id)
+        .select(MINIMAL_WRITE_RETURN_FIELDS.join(','))
+        .single();
       if (isPermissionError(error)) {
         const fallback = await supabase.from(tableName).update(data).eq('id', id);
         maybeReturnSuccess(fallback.error);
         return { id, ...data };
       }
       maybeReturnSuccess(error);
-      return updated;
+      return mergeWriteResult({ id, ...data }, updated);
     },
 
     async delete(id) {

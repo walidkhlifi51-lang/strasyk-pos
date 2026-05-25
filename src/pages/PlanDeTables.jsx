@@ -321,7 +321,6 @@ export default function PlanDeTables() {
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['tablesAndActiveOrders'],
         queryFn: fetchTablesAndOrders,
-        refetchInterval: 120000,
         staleTime: 110000,
         refetchOnWindowFocus: false, // Évite les requêtes supplémentaires lors du changement d'onglet
         retry: 2, // Ajouté: Réessaie la requête 2 fois en cas d'échec
@@ -347,6 +346,41 @@ export default function PlanDeTables() {
             setTables(populated);
         }
     }, [fetchedTables, orderMap]);
+
+    useEffect(() => {
+        const invalidatePlan = () => {
+            queryClient.invalidateQueries({ queryKey: ['tablesAndActiveOrders'] });
+        };
+
+        const unsubscribeTables = appClient.entities.Table.subscribe(() => {
+            invalidatePlan();
+        });
+
+        const unsubscribeOrders = appClient.entities.Order.subscribe((event) => {
+            const order = event?.data;
+            if (!order || order.type_commande !== 'sur_place') return;
+            invalidatePlan();
+        });
+
+        const handleFocus = () => {
+            refetch();
+        };
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                refetch();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            unsubscribeTables();
+            unsubscribeOrders();
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [queryClient, refetch]);
 
     // NOUVEAU : Correctif automatique au chargement
     useEffect(() => {

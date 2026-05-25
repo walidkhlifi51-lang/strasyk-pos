@@ -122,12 +122,9 @@ export default function DeliveryAppPublic() {
     }
   }, []);
 
-  // Auto-refresh
   useEffect(() => {
     if (!deliveryPerson) return;
     loadOrders(deliveryPerson);
-    const interval = setInterval(() => loadOrders(deliveryPerson), 120000);
-    return () => clearInterval(interval);
   }, [deliveryPerson?.id]);
 
   useEffect(() => {
@@ -307,6 +304,26 @@ export default function DeliveryAppPublic() {
   useEffect(() => {
     loadOrdersRef.current = loadOrders;
   }, [loadOrders]);
+
+  useEffect(() => {
+    if (!deliveryPerson?.id) return undefined;
+
+    const refreshOrders = () => {
+      loadOrdersRef.current?.(deliveryPersonRef.current || deliveryPerson);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshOrders();
+      }
+    };
+
+    window.addEventListener('focus', refreshOrders);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshOrders);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [deliveryPerson?.id]);
 
   const handleConfirmDelivery = async (order, paymentData) => {
     setIsLoading(true);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { Menu, X, ShoppingCart, Lock, CheckCircle, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -106,6 +106,21 @@ const POS_CLOTURE_FIELDS = [
   'created_by', 'notes', 'created_date', 'updated_date'
 ];
 
+const CUSTOMER_DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
+const CUSTOMER_DISPLAY_CART_ID_PREFIX = 'customer_display_cart_id';
+const CUSTOMER_DISPLAY_HEARTBEAT_TTL_MS = 90 * 1000;
+const CUSTOMER_DISPLAY_SYNC_DEBOUNCE_MS = 800;
+
+const getCustomerDisplayHeartbeatKey = (tenantId) => `${CUSTOMER_DISPLAY_HEARTBEAT_PREFIX}:${tenantId}`;
+const getCustomerDisplayCartIdKey = (tenantId) => `${CUSTOMER_DISPLAY_CART_ID_PREFIX}:${tenantId}`;
+
+const isCustomerDisplayHeartbeatFresh = (tenantId) => {
+  if (!tenantId || typeof window === 'undefined') return false;
+  const rawValue = window.localStorage.getItem(getCustomerDisplayHeartbeatKey(tenantId));
+  const lastHeartbeat = rawValue ? Number(rawValue) : 0;
+  return Number.isFinite(lastHeartbeat) && Date.now() - lastHeartbeat <= CUSTOMER_DISPLAY_HEARTBEAT_TTL_MS;
+};
+
 export default function StrasykPos() {
   const { withTenant, filterByTenant, currentTenant, currentUser } = useTenant();
   const { isOnline, addPendingOperation, cacheData, getCachedData } = useOffline();
@@ -135,29 +150,88 @@ export default function StrasykPos() {
   const { toast } = useToast();
   const { profile } = useSecurity();
   const queryClient = useQueryClient();
+  const customerDisplaySyncTimeoutRef = useRef(null);
+  const customerDisplayCartRowIdRef = useRef(null);
+  const lastCustomerDisplayPayloadRef = useRef(null);
+  const [isCustomerDisplayActive, setIsCustomerDisplayActive] = useState(false);
   
   useEffect(() => {
-    if (!profile?.customer_display_enabled || !currentTenant?.id) return;
+    customerDisplayCartRowIdRef.current = null;
+    lastCustomerDisplayPayloadRef.current = null;
+    if (!currentTenant?.id || typeof window === 'undefined') return;
+    customerDisplayCartRowIdRef.current = window.localStorage.getItem(getCustomerDisplayCartIdKey(currentTenant.id)) || null;
+  }, [currentTenant?.id]);
+
+  useEffect(() => {
+    if (!profile?.customer_display_enabled || !currentTenant?.id) {
+      setIsCustomerDisplayActive(false);
+      return undefined;
+    }
+
+    const updateActiveState = () => {
+      setIsCustomerDisplayActive(isCustomerDisplayHeartbeatFresh(currentTenant.id));
+    };
+
+    updateActiveState();
+    const intervalId = window.setInterval(updateActiveState, 10000);
+    return () => window.clearInterval(intervalId);
+  }, [profile?.customer_display_enabled, currentTenant?.id]);
+
+  useEffect(() => {
+    if (!profile?.customer_display_enabled || !currentTenant?.id || !isCustomerDisplayActive) return undefined;
+
+    const cartData = currentOrder?.articles?.length > 0 ? currentOrder : null;
+    const payloadSignature = JSON.stringify(cartData);
+    if (payloadSignature === lastCustomerDisplayPayloadRef.current) return undefined;
+
     const syncToDb = async () => {
       try {
-        const existing = await appClient.entities.CustomerDisplayCart.filter(
-          { tenant_id: currentTenant.id },
-          null,
-          1,
-          { fields: ['id', 'tenant_id'] }
-        );
-        const cartData = currentOrder?.articles?.length > 0 ? currentOrder : null;
-        if (existing?.length > 0) {
-          await appClient.entities.CustomerDisplayCart.update(existing[0].id, { cart_data: cartData, updated_at: new Date().toISOString() });
-        } else {
-          await appClient.entities.CustomerDisplayCart.create(withTenant({ cart_data: cartData, updated_at: new Date().toISOString() }));
+        const cartIdKey = getCustomerDisplayCartIdKey(currentTenant.id);
+        if (!customerDisplayCartRowIdRef.current && typeof window !== 'undefined') {
+          customerDisplayCartRowIdRef.current = window.localStorage.getItem(cartIdKey) || null;
         }
+
+        if (!customerDisplayCartRowIdRef.current) {
+          const existing = await appClient.entities.CustomerDisplayCart.filter(
+            { tenant_id: currentTenant.id },
+            '-updated_at',
+            1,
+            { fields: ['id', 'tenant_id'] }
+          );
+          if (existing?.[0]?.id) {
+            customerDisplayCartRowIdRef.current = existing[0].id;
+            window.localStorage.setItem(cartIdKey, existing[0].id);
+          }
+        }
+
+        const payload = { cart_data: cartData, updated_at: new Date().toISOString() };
+        if (customerDisplayCartRowIdRef.current) {
+          try {
+            await appClient.entities.CustomerDisplayCart.update(customerDisplayCartRowIdRef.current, payload);
+          } catch (updateError) {
+            customerDisplayCartRowIdRef.current = null;
+            window.localStorage.removeItem(cartIdKey);
+            throw updateError;
+          }
+        } else {
+          const created = await appClient.entities.CustomerDisplayCart.create(withTenant(payload));
+          if (created?.id) {
+            customerDisplayCartRowIdRef.current = created.id;
+            window.localStorage.setItem(cartIdKey, created.id);
+          }
+        }
+
+        lastCustomerDisplayPayloadRef.current = payloadSignature;
       } catch (error) {
         console.error('❌ [Pos] Erreur sync DB:', error);
       }
     };
-    syncToDb();
-  }, [currentOrder, profile?.customer_display_enabled, currentTenant?.id, withTenant]);
+
+    window.clearTimeout(customerDisplaySyncTimeoutRef.current);
+    customerDisplaySyncTimeoutRef.current = window.setTimeout(syncToDb, CUSTOMER_DISPLAY_SYNC_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(customerDisplaySyncTimeoutRef.current);
+  }, [currentOrder, currentTenant?.id, isCustomerDisplayActive, profile?.customer_display_enabled, withTenant]);
 
   const getCurrentOrderType = useCallback(() => {
     return currentOrder?.orderType || 'sur_place';

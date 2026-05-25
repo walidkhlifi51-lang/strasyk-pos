@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ShoppingCart, Euro } from 'lucide-react';
 import { appClient } from '@/api/appClient';
 import { getSupabaseBrowserClient } from '@/api/supabase/client';
@@ -24,6 +24,10 @@ const CART_FIELDS = [
 ];
 
 const DISPLAY_FALLBACK_MS = 60000;
+const DISPLAY_HEARTBEAT_MS = 30000;
+const DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
+
+const getDisplayHeartbeatKey = (tenantId) => `${DISPLAY_HEARTBEAT_PREFIX}:${tenantId || 'global'}`;
 
 const toDisplaySettings = (profile) => ({
   images: Array.isArray(profile?.customer_display_images) ? profile.customer_display_images : [],
@@ -48,10 +52,22 @@ export default function CustomerDisplay() {
     info_message: '',
   });
   const [profile, setProfile] = useState(null);
+  const fallbackIntervalRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
     const supabase = getSupabaseBrowserClient();
+    const heartbeatKey = getDisplayHeartbeatKey(tenantId);
+
+    const writeHeartbeat = () => {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(heartbeatKey, String(Date.now()));
+    };
+
+    const clearHeartbeat = () => {
+      if (typeof window === 'undefined') return;
+      window.localStorage.removeItem(heartbeatKey);
+    };
 
     const applyProfile = (nextProfile) => {
       if (!isMounted || !nextProfile) return;
@@ -102,7 +118,41 @@ export default function CustomerDisplay() {
       }
     };
 
+    const stopFallbackRefresh = () => {
+      if (fallbackIntervalRef.current) {
+        window.clearInterval(fallbackIntervalRef.current);
+        fallbackIntervalRef.current = null;
+      }
+    };
+
+    const startFallbackRefresh = () => {
+      if (fallbackIntervalRef.current) return;
+      fallbackIntervalRef.current = window.setInterval(() => {
+        loadProfile().catch((error) => {
+          console.error('[CustomerDisplay] Profile fallback refresh failed:', error);
+        });
+        loadCart().catch((error) => {
+          console.error('[CustomerDisplay] Cart fallback refresh failed:', error);
+        });
+      }, DISPLAY_FALLBACK_MS);
+    };
+
+    const handleVisibilityRefresh = () => {
+      writeHeartbeat();
+      if (document.visibilityState === 'visible') {
+        loadProfile().catch((error) => {
+          console.error('[CustomerDisplay] Profile refresh on visibility failed:', error);
+        });
+        loadCart().catch((error) => {
+          console.error('[CustomerDisplay] Cart refresh on visibility failed:', error);
+        });
+      }
+    };
+
     loadInitialData();
+    writeHeartbeat();
+    const heartbeatIntervalId = window.setInterval(writeHeartbeat, DISPLAY_HEARTBEAT_MS);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
 
     const profileChannel = supabase
       .channel(`customer-display-profile-${tenantId || 'global'}`)
@@ -126,7 +176,10 @@ export default function CustomerDisplay() {
           applyProfile(payload.new);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') stopFallbackRefresh();
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') startFallbackRefresh();
+      });
 
     const cartChannel = supabase
       .channel(`customer-display-cart-${tenantId || 'global'}`)
@@ -147,20 +200,17 @@ export default function CustomerDisplay() {
           applyCart(payload.new);
         }
       )
-      .subscribe();
-
-    const fallbackInterval = window.setInterval(() => {
-      loadProfile().catch((error) => {
-        console.error('[CustomerDisplay] Profile fallback refresh failed:', error);
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') stopFallbackRefresh();
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') startFallbackRefresh();
       });
-      loadCart().catch((error) => {
-        console.error('[CustomerDisplay] Cart fallback refresh failed:', error);
-      });
-    }, DISPLAY_FALLBACK_MS);
 
     return () => {
       isMounted = false;
-      window.clearInterval(fallbackInterval);
+      window.clearInterval(heartbeatIntervalId);
+      stopFallbackRefresh();
+      clearHeartbeat();
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(cartChannel);
     };
