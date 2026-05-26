@@ -966,6 +966,13 @@ function extractPrintStyles(html) {
     return styleMatches.map((match) => match[1]).join('\n');
 }
 
+function notifyPrintComplete(onComplete, status) {
+    if (onComplete) {
+        onComplete(status);
+    }
+    return status;
+}
+
 function triggerWindowPrint(html, printWindow, onComplete) {
     if (!printWindow || printWindow.closed) {
         triggerCurrentWindowPrint(html, onComplete);
@@ -974,6 +981,7 @@ function triggerWindowPrint(html, printWindow, onComplete) {
 
     let isCleanedUp = false;
     let fallbackTimeoutId;
+    let printTriggered = false;
 
     const cleanupAndComplete = () => {
         if (isCleanedUp) return;
@@ -984,9 +992,12 @@ function triggerWindowPrint(html, printWindow, onComplete) {
         } catch (closeError) {
             console.warn('[triggerPrint] Impossible de fermer la fenetre d\'impression:', closeError);
         }
-        if (onComplete) {
-            onComplete();
-        }
+        notifyPrintComplete(onComplete, {
+            ok: printTriggered,
+            triggered: printTriggered,
+            strategy: 'new-window',
+            reason: printTriggered ? 'print-dispatched' : 'print-not-dispatched',
+        });
     };
 
     try {
@@ -996,8 +1007,17 @@ function triggerWindowPrint(html, printWindow, onComplete) {
 
         waitForPrintableImages(printWindow.document, () => {
             fallbackTimeoutId = setTimeout(cleanupAndComplete, 2500);
-            printWindow.focus();
-            printWindow.print();
+            try {
+                printWindow.focus();
+                printWindow.print();
+                printTriggered = true;
+                console.log('[triggerPrint] Impression declenchee avec succes (new-window)');
+            } catch (printError) {
+                console.error('[triggerPrint] Impression bloquee via fenetre dediee:', printError);
+            }
+            if (!printTriggered) {
+                cleanupAndComplete();
+            }
         });
     } catch (error) {
         console.error('[triggerPrint] Erreur lors de l\'impression via fenetre dediee:', error);
@@ -1048,6 +1068,7 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
     let isCleanedUp = false;
     let fallbackTimeoutId;
     let focusCleanupTimeoutId;
+    let printTriggered = false;
 
     const handleAfterPrint = () => {
         setTimeout(cleanupAndComplete, 300);
@@ -1070,9 +1091,12 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
         if (document.body.contains(isolationStyle)) {
             document.body.removeChild(isolationStyle);
         }
-        if (onComplete) {
-            onComplete();
-        }
+        notifyPrintComplete(onComplete, {
+            ok: printTriggered,
+            triggered: printTriggered,
+            strategy: 'current-window',
+            reason: printTriggered ? 'print-dispatched' : 'print-not-dispatched',
+        });
     };
 
     window.addEventListener('afterprint', handleAfterPrint);
@@ -1080,8 +1104,15 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
 
     const runPrint = () => {
         fallbackTimeoutId = setTimeout(cleanupAndComplete, 60000);
-        window.focus();
-        window.print();
+        try {
+            window.focus();
+            window.print();
+            printTriggered = true;
+            console.log('[triggerPrint] Impression declenchee avec succes (current-window)');
+        } catch (printError) {
+            console.error('[triggerPrint] Impression bloquee dans la fenetre courante:', printError);
+            cleanupAndComplete();
+        }
     };
 
     if (options.immediate) {
@@ -1095,68 +1126,88 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
 export async function triggerPrint(html, onComplete, options = {}) {
     if (!html) {
         console.error('[triggerPrint] Contenu HTML manquant');
-        if (onComplete) onComplete();
-        return;
+        return notifyPrintComplete(onComplete, {
+            ok: false,
+            triggered: false,
+            strategy: options.strategy || 'iframe',
+            reason: 'missing-html',
+        });
     }
 
+    return await new Promise((resolve) => {
+        const complete = (status) => {
+            resolve(notifyPrintComplete(onComplete, status));
+        };
+
     if (options.strategy === 'new-window') {
-        triggerWindowPrint(html, options.printWindow, onComplete);
-        return;
+            triggerWindowPrint(html, options.printWindow, complete);
+            return;
     }
 
     if (options.strategy === 'current-window') {
-        triggerCurrentWindowPrint(html, onComplete, options);
-        return;
+            triggerCurrentWindowPrint(html, complete, options);
+            return;
     }
 
-    try {
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'absolute';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        iframe.style.visibility = 'hidden';
+        try {
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'absolute';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            iframe.style.visibility = 'hidden';
 
-        document.body.appendChild(iframe);
+            document.body.appendChild(iframe);
 
-        const doc = iframe.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
 
-        const cleanupAndComplete = () => {
-            if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-            }
-            if (onComplete) {
-                onComplete();
-            }
-        };
+            let printTriggered = false;
 
-        const tryPrint = () => {
-            try {
-                if (iframe && iframe.contentWindow) {
-                    iframe.contentWindow.focus();
-                    iframe.contentWindow.print();
-                    console.log('[triggerPrint] Impression declenchee avec succes');
-                } else {
-                    console.warn('[triggerPrint] Iframe ou contentWindow non disponible pour l\'impression.');
+            const cleanupAndComplete = (status) => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
                 }
-            } catch (printError) {
-                console.error('[triggerPrint] Erreur lors de l\'impression:', printError);
-            } finally {
-                setTimeout(cleanupAndComplete, 1000);
-            }
-        };
+                complete(status);
+            };
 
-        waitForPrintableImages(doc, tryPrint);
+            const tryPrint = () => {
+                try {
+                    if (iframe && iframe.contentWindow) {
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                        printTriggered = true;
+                        console.log('[triggerPrint] Impression declenchee avec succes');
+                    } else {
+                        console.warn('[triggerPrint] Iframe ou contentWindow non disponible pour l\'impression.');
+                    }
+                } catch (printError) {
+                    console.error('[triggerPrint] Impression bloquee dans l\'iframe:', printError);
+                } finally {
+                    setTimeout(() => cleanupAndComplete({
+                        ok: printTriggered,
+                        triggered: printTriggered,
+                        strategy: 'iframe',
+                        reason: printTriggered ? 'print-dispatched' : 'print-not-dispatched',
+                    }), 1000);
+                }
+            };
 
-    } catch (error) {
-        console.error('[triggerPrint] Erreur lors de la creation de l\'iframe:', error);
-        if (onComplete) {
-            onComplete();
+            waitForPrintableImages(doc, tryPrint);
+
+        } catch (error) {
+            console.error('[triggerPrint] Erreur lors de la creation de l\'iframe:', error);
+            complete({
+                ok: false,
+                triggered: false,
+                strategy: 'iframe',
+                reason: 'iframe-creation-failed',
+                error,
+            });
         }
-    }
+    });
 }
 
 

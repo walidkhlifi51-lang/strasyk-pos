@@ -84,12 +84,24 @@ export default function GlobalPrintListener() {
           console.log(
             `🖨️ [GlobalPrint] Impression automatique commande #${order.numero_caisse || order.id?.slice(-4)} (${isWebOrder ? 'web' : 'borne'} / ${source})`
           );
-          triggerPrint(html);
+          const printResult = await triggerPrint(html);
+          if (!printResult?.triggered) {
+            console.error(
+              `❌ [GlobalPrint] Impression non declenchee pour la commande #${order.numero_caisse || order.id?.slice(-4)}. Le navigateur a peut-etre bloque l impression.`
+            );
+            printedOrderIds.current.delete(order.id);
+            return;
+          }
         }
 
         try {
           await appClient.entities.Order.update(order.id, { print_at_counter: false });
-        } catch (_) {}
+        } catch (updateError) {
+          console.error(
+            `❌ [GlobalPrint] Impression declenchee mais impossible de marquer la commande #${order.numero_caisse || order.id?.slice(-4)} comme imprimee:`,
+            updateError
+          );
+        }
       } catch (err) {
         console.error('❌ [GlobalPrint] Erreur impression:', err);
         printedOrderIds.current.delete(order.id);
