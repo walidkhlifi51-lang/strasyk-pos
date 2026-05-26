@@ -56,6 +56,8 @@ const normalizeFilterArgs = (sort, limit) => {
 };
 
 const missingFieldsWarnings = new Set();
+const missingColumnWarnings = new Set();
+const prunedLegacyFieldsByEntity = new Map();
 const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
 const LEGACY_ENTITY_FIELDS = {
@@ -77,12 +79,12 @@ const LEGACY_ENTITY_FIELDS = {
   Table: ['id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y', 'zone', 'created_date', 'updated_date'],
   Customer: ['id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville', 'etage', 'interphone', 'adresses', 'cagnotte_balance', 'created_date', 'updated_date'],
   Order: ['id', 'tenant_id', 'numero_commande', 'numero_caisse', 'type_commande', 'customer_id', 'customer_name', 'table_id', 'delivery_person_id', 'delivery_address', 'articles', 'total_ht', 'total_tva', 'total_ttc', 'statut', 'mode_paiement', 'mode_paiement_prevu', 'numero_bipeur', 'numero_table', 'payee', 'notes', 'cagnotte_spent', 'scratch_reduction', 'print_at_counter', 'from_kiosk', 'from_web', 'created_date', 'updated_date'],
-  Offer: ['id', 'tenant_id', 'nom', 'type', 'active', 'condition_type', 'condition_product_ids', 'condition_category_ids', 'condition_quantity', 'condition_sizes', 'reward_type', 'reward_product_ids', 'reward_category_ids', 'reward_quantity', 'reward_sizes', 'reduction_value', 'canaux', 'modes_commande', 'updated_date', 'created_date'],
-  LoyaltyRule: ['id', 'tenant_id', 'nom', 'active', 'type', 'points_required', 'discount_amount', 'discount_percent', 'product_ids', 'category_ids', 'canaux', 'created_date', 'updated_date'],
-  CagnotteRule: ['id', 'tenant_id', 'nom', 'active', 'type', 'value', 'min_order_total', 'canaux', 'accumulation_rate', 'created_date', 'updated_date'],
+  Offer: ['id', 'tenant_id', 'nom', 'description', 'active', 'canaux', 'modes_commande', 'type_condition', 'condition_ids', 'condition_sizes', 'condition_excluded_product_ids', 'quantite_requise', 'type_recompense', 'recompense_ids', 'recompense_sizes', 'recompense_excluded_product_ids', 'quantite_offerte', 'updated_date', 'created_date'],
+  LoyaltyRule: ['id', 'tenant_id', 'nom', 'description', 'numero_commande', 'active', 'canaux', 'modes_commande', 'type_recompense', 'valeur_recompense', 'produit_offert_ids', 'created_date', 'updated_date'],
+  CagnotteRule: ['id', 'tenant_id', 'nom', 'active', 'canaux', 'accumulation_rate', 'created_date', 'updated_date'],
   CagnotteHistory: ['id', 'tenant_id', 'customer_id', 'order_id', 'type', 'amount', 'balance_before', 'balance_after', 'created_date', 'updated_date'],
   PromoCode: ['id', 'tenant_id', 'code', 'active', 'type', 'value', 'description', 'expires_at', 'usage_limit', 'usage_count', 'canaux', 'modes_commande', 'created_date', 'updated_date'],
-  MenuFormula: ['id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'tva', 'disponible', 'created_date', 'updated_date'],
+  MenuFormula: ['id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'disponible', 'color', 'image_url', 'created_date', 'updated_date'],
   MenuFormulaItem: ['id', 'tenant_id', 'menu_formula_id', 'nom_affichage', 'quantite', 'taille_fixe', 'produits_inclus', 'created_date', 'updated_date'],
   ClotureCaisse: ['id', 'tenant_id', 'date_cloture', 'statut', 'montant_theorique', 'montant_reel', 'ecarts', 'created_by', 'notes', 'created_date', 'updated_date'],
   DrawerOpening: ['id', 'tenant_id', 'amount', 'reason', 'created_by', 'created_date', 'updated_date'],
@@ -105,13 +107,30 @@ const LEGACY_ENTITY_FIELDS = {
 const UNIQUE_SELECT_FIELDS = (fields = []) => [...new Set(fields.filter(Boolean))];
 const MINIMAL_WRITE_RETURN_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
 const MINIMAL_BULK_WRITE_RETURN_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
+const getPrunedLegacyFields = (entityName) => prunedLegacyFieldsByEntity.get(entityName) || new Set();
 const resolveLegacyFields = (entityName) => UNIQUE_SELECT_FIELDS([
   ...(LEGACY_ENTITY_FIELDS[entityName] || []),
   'id',
   'tenant_id',
   'created_date',
   'updated_date',
-]);
+]).filter((field) => !getPrunedLegacyFields(entityName).has(field));
+
+const parseMissingColumnError = (error) => {
+  if (!error) return null;
+  const message = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] || null;
+};
+
+const warnMissingColumn = (entityName, columnName, contextKey) => {
+  const warningKey = `${entityName}:${columnName}:${contextKey}`;
+  if (missingColumnWarnings.has(warningKey) || typeof console === 'undefined') return;
+  missingColumnWarnings.add(warningKey);
+  const warning = `[appClient] Missing column "${columnName}" for ${contextKey}; pruning it from legacy ${entityName} projection.`;
+  if (isDev) console.warn(warning);
+  else console.info?.(warning);
+};
 
 const normalizeSelectFields = (fields, contextKey = 'unknown', entityName = 'unknown') => {
   if (!fields) {
@@ -126,6 +145,38 @@ const normalizeSelectFields = (fields, contextKey = 'unknown', entityName = 'unk
   }
   if (Array.isArray(fields)) return fields.join(',');
   return typeof fields === 'string' ? fields : resolveLegacyFields(entityName).join(',');
+};
+
+const retryLegacySelectWithoutMissingColumns = async ({
+  error,
+  entityName,
+  contextKey,
+  execute,
+}) => {
+  let currentError = error;
+  let attempts = 0;
+
+  while (attempts < 12) {
+    const missingColumn = parseMissingColumnError(currentError);
+    if (!missingColumn) break;
+
+    const nextPrunedFields = new Set(getPrunedLegacyFields(entityName));
+    if (nextPrunedFields.has(missingColumn)) break;
+
+    nextPrunedFields.add(missingColumn);
+    prunedLegacyFieldsByEntity.set(entityName, nextPrunedFields);
+    warnMissingColumn(entityName, missingColumn, contextKey);
+
+    const retryResult = await execute(resolveLegacyFields(entityName).join(','));
+    if (!retryResult.error) {
+      return retryResult;
+    }
+
+    currentError = retryResult.error;
+    attempts += 1;
+  }
+
+  return { data: null, error: currentError };
 };
 
 const applyQueryFilters = (queryBuilder, query = {}) => {
@@ -205,9 +256,23 @@ const createEntityApi = (entityName) => {
     async list(sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let query = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.list`, entityName));
-      query = applySortAndLimit(query, args.sort, args.limit);
-      const { data, error } = await query;
+      const contextKey = `${tableName}.list`;
+      const runSelect = async (selectFields) => {
+        let query = supabase.from(tableName).select(selectFields);
+        query = applySortAndLimit(query, args.sort, args.limit);
+        return await query;
+      };
+
+      let selectFields = normalizeSelectFields(options.fields, contextKey, entityName);
+      let { data, error } = await runSelect(selectFields);
+      if (error && !options.fields) {
+        ({ data, error } = await retryLegacySelectWithoutMissingColumns({
+          error,
+          entityName,
+          contextKey,
+          execute: runSelect,
+        }));
+      }
       const fallback = maybeReturnEmptyArray(error);
       if (fallback) return fallback;
       return data || [];
@@ -216,10 +281,24 @@ const createEntityApi = (entityName) => {
     async filter(query = {}, sort, limit, options = {}) {
       const supabase = getSupabaseBrowserClient();
       const args = normalizeFilterArgs(sort, limit);
-      let request = supabase.from(tableName).select(normalizeSelectFields(options.fields, `${tableName}.filter`, entityName));
-      request = applyQueryFilters(request, query);
-      request = applySortAndLimit(request, args.sort, args.limit);
-      const { data, error } = await request;
+      const contextKey = `${tableName}.filter`;
+      const runSelect = async (selectFields) => {
+        let request = supabase.from(tableName).select(selectFields);
+        request = applyQueryFilters(request, query);
+        request = applySortAndLimit(request, args.sort, args.limit);
+        return await request;
+      };
+
+      let selectFields = normalizeSelectFields(options.fields, contextKey, entityName);
+      let { data, error } = await runSelect(selectFields);
+      if (error && !options.fields) {
+        ({ data, error } = await retryLegacySelectWithoutMissingColumns({
+          error,
+          entityName,
+          contextKey,
+          execute: runSelect,
+        }));
+      }
       const fallback = maybeReturnEmptyArray(error);
       if (fallback) return fallback;
       return data || [];
