@@ -593,6 +593,14 @@ export default function Kiosk() {
 
     setIsCreatingOrder(true);
     try {
+      console.log('[PRINT_KIOSK_CREATE_ATTEMPT]', {
+        tenant_id: tenantIdFromUrl,
+        from_kiosk: orderData?.from_kiosk,
+        print_at_counter: orderData?.print_at_counter,
+        statut: orderData?.statut,
+        payee: orderData?.payee,
+        type_commande: orderData?.type_commande,
+      });
       try {
         const response = await appClient.functions.invoke('createKioskOrder', {
           tenantId: tenantIdFromUrl,
@@ -604,6 +612,16 @@ export default function Kiosk() {
         if (!createdOrder) {
           throw new Error("Aucune commande retournée par la fonction createKioskOrder");
         }
+        console.log('[PRINT_KIOSK_CREATE_RESULT]', {
+          source: 'function',
+          id: createdOrder?.id,
+          tenant_id: createdOrder?.tenant_id,
+          from_kiosk: createdOrder?.from_kiosk,
+          print_at_counter: createdOrder?.print_at_counter,
+          statut: createdOrder?.statut,
+          payee: createdOrder?.payee,
+          numero_caisse: createdOrder?.numero_caisse,
+        });
         onOrderCreated(createdOrder);
         return;
       } catch (functionError) {
@@ -641,6 +659,16 @@ export default function Kiosk() {
         created_date: new Date().toISOString(),
       });
 
+      console.log('[PRINT_KIOSK_CREATE_RESULT]', {
+        source: 'entity-fallback',
+        id: createdOrder?.id,
+        tenant_id: createdOrder?.tenant_id,
+        from_kiosk: createdOrder?.from_kiosk,
+        print_at_counter: createdOrder?.print_at_counter,
+        statut: createdOrder?.statut,
+        payee: createdOrder?.payee,
+        numero_caisse: createdOrder?.numero_caisse,
+      });
       onOrderCreated(createdOrder);
     } catch (error) {
       console.error('❌ Erreur création commande borne:', error);

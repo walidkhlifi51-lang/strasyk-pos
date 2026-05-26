@@ -39,17 +39,72 @@ export default function GlobalPrintListener() {
   ];
 
   useEffect(() => {
-    if (!currentTenant?.id || !profile?.impression_auto) return;
+    console.log('[PRINT_LISTENER_MOUNTED]', {
+      tenant_id: currentTenant?.id || null,
+      impression_auto: profile?.impression_auto ?? null,
+      has_profile: Boolean(profile && Object.keys(profile).length > 0),
+    });
+
+    if (!currentTenant?.id || !profile?.impression_auto) {
+      console.warn('[PRINT_LISTENER_SKIPPED]', {
+        tenant_id: currentTenant?.id || null,
+        impression_auto: profile?.impression_auto ?? null,
+        reason: !currentTenant?.id ? 'missing-tenant' : 'impression-auto-disabled',
+      });
+      return;
+    }
 
     const processOrderForPrinting = async (order, source = 'listener') => {
+      console.log('[PRINT_ORDER_RECEIVED]', {
+        source,
+        id: order?.id || null,
+        tenant_id: order?.tenant_id || null,
+        current_tenant_id: currentTenant.id,
+        from_kiosk: order?.from_kiosk ?? null,
+        from_web: order?.from_web ?? null,
+        print_at_counter: order?.print_at_counter ?? null,
+        statut: order?.statut ?? null,
+      });
+
       if (!order) return;
-      if (order.tenant_id !== currentTenant.id) return;
+      if (order.tenant_id !== currentTenant.id) {
+        console.warn('[PRINT_ORDER_FILTERED]', {
+          source,
+          id: order?.id || null,
+          reason: 'tenant-mismatch',
+          tenant_id: order?.tenant_id || null,
+          current_tenant_id: currentTenant.id,
+        });
+        return;
+      }
 
       const isWebOrder = order.from_web === true;
       const isKioskOrder = order.from_kiosk === true;
-      if (!isWebOrder && !isKioskOrder) return;
-      if (order.print_at_counter !== true) return;
-      if (printedOrderIds.current.has(order.id)) return;
+      if (!isWebOrder && !isKioskOrder) {
+        console.warn('[PRINT_ORDER_FILTERED]', {
+          source,
+          id: order?.id || null,
+          reason: 'not-web-or-kiosk',
+        });
+        return;
+      }
+      if (order.print_at_counter !== true) {
+        console.warn('[PRINT_ORDER_FILTERED]', {
+          source,
+          id: order?.id || null,
+          reason: 'print-flag-false',
+          print_at_counter: order?.print_at_counter ?? null,
+        });
+        return;
+      }
+      if (printedOrderIds.current.has(order.id)) {
+        console.warn('[PRINT_ORDER_FILTERED]', {
+          source,
+          id: order?.id || null,
+          reason: 'already-processing',
+        });
+        return;
+      }
 
       let shouldPrint = false;
 
@@ -61,7 +116,28 @@ export default function GlobalPrintListener() {
         shouldPrint = true;
       }
 
-      if (!shouldPrint) return;
+      if (!shouldPrint) {
+        console.warn('[PRINT_ORDER_FILTERED]', {
+          source,
+          id: order?.id || null,
+          reason: 'status-not-eligible',
+          statut: order?.statut ?? null,
+          from_kiosk: isKioskOrder,
+          from_web: isWebOrder,
+        });
+        return;
+      }
+
+      console.log('[PRINT_ORDER_ELIGIBLE]', {
+        source,
+        id: order?.id || null,
+        tenant_id: order?.tenant_id || null,
+        numero_caisse: order?.numero_caisse || null,
+        from_kiosk: isKioskOrder,
+        from_web: isWebOrder,
+        statut: order?.statut ?? null,
+        print_at_counter: order?.print_at_counter ?? null,
+      });
 
       printedOrderIds.current.add(order.id);
 
@@ -81,17 +157,30 @@ export default function GlobalPrintListener() {
 
         const html = await generateTicketHtml(order, customer, profile);
         if (html) {
-          console.log(
-            `🖨️ [GlobalPrint] Impression automatique commande #${order.numero_caisse || order.id?.slice(-4)} (${isWebOrder ? 'web' : 'borne'} / ${source})`
-          );
+          console.log('[PRINT_TRIGGER_CALLED]', {
+            source,
+            id: order?.id || null,
+            numero_caisse: order?.numero_caisse || null,
+            from_kiosk: isKioskOrder,
+            from_web: isWebOrder,
+          });
           const printResult = await triggerPrint(html);
           if (!printResult?.triggered) {
-            console.error(
-              `❌ [GlobalPrint] Impression non declenchee pour la commande #${order.numero_caisse || order.id?.slice(-4)}. Le navigateur a peut-etre bloque l impression.`
-            );
+            console.error('[PRINT_TRIGGER_BLOCKED]', {
+              source,
+              id: order?.id || null,
+              numero_caisse: order?.numero_caisse || null,
+              result: printResult || null,
+            });
             printedOrderIds.current.delete(order.id);
             return;
           }
+          console.log('[PRINT_TRIGGER_SUCCESS]', {
+            source,
+            id: order?.id || null,
+            numero_caisse: order?.numero_caisse || null,
+            result: printResult || null,
+          });
         }
 
         try {

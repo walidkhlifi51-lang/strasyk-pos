@@ -1012,8 +1012,16 @@ function triggerWindowPrint(html, printWindow, onComplete) {
                 printWindow.print();
                 printTriggered = true;
                 console.log('[triggerPrint] Impression declenchee avec succes (new-window)');
+                console.log('[PRINT_TRIGGER_SUCCESS]', {
+                    strategy: 'new-window',
+                });
             } catch (printError) {
                 console.error('[triggerPrint] Impression bloquee via fenetre dediee:', printError);
+                console.error('[PRINT_TRIGGER_BLOCKED]', {
+                    strategy: 'new-window',
+                    reason: 'new-window-print-error',
+                    error: printError,
+                });
             }
             if (!printTriggered) {
                 cleanupAndComplete();
@@ -1109,8 +1117,16 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
             window.print();
             printTriggered = true;
             console.log('[triggerPrint] Impression declenchee avec succes (current-window)');
+            console.log('[PRINT_TRIGGER_SUCCESS]', {
+                strategy: 'current-window',
+            });
         } catch (printError) {
             console.error('[triggerPrint] Impression bloquee dans la fenetre courante:', printError);
+            console.error('[PRINT_TRIGGER_BLOCKED]', {
+                strategy: 'current-window',
+                reason: 'current-window-print-error',
+                error: printError,
+            });
             cleanupAndComplete();
         }
     };
@@ -1126,6 +1142,10 @@ function triggerCurrentWindowPrint(html, onComplete, options = {}) {
 export async function triggerPrint(html, onComplete, options = {}) {
     if (!html) {
         console.error('[triggerPrint] Contenu HTML manquant');
+        console.error('[PRINT_TRIGGER_BLOCKED]', {
+            strategy: options.strategy || 'iframe',
+            reason: 'missing-html',
+        });
         return notifyPrintComplete(onComplete, {
             ok: false,
             triggered: false,
@@ -1135,6 +1155,9 @@ export async function triggerPrint(html, onComplete, options = {}) {
     }
 
     return await new Promise((resolve) => {
+        console.log('[PRINT_TRIGGER_CALLED]', {
+            strategy: options.strategy || 'iframe',
+        });
         const complete = (status) => {
             resolve(notifyPrintComplete(onComplete, status));
         };
@@ -1175,19 +1198,31 @@ export async function triggerPrint(html, onComplete, options = {}) {
 
             const tryPrint = () => {
                 try {
-                    if (iframe && iframe.contentWindow) {
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                        printTriggered = true;
-                        console.log('[triggerPrint] Impression declenchee avec succes');
-                    } else {
-                        console.warn('[triggerPrint] Iframe ou contentWindow non disponible pour l\'impression.');
-                    }
-                } catch (printError) {
-                    console.error('[triggerPrint] Impression bloquee dans l\'iframe:', printError);
-                } finally {
-                    setTimeout(() => cleanupAndComplete({
-                        ok: printTriggered,
+                if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                    printTriggered = true;
+                    console.log('[triggerPrint] Impression declenchee avec succes');
+                    console.log('[PRINT_TRIGGER_SUCCESS]', {
+                        strategy: 'iframe',
+                    });
+                } else {
+                    console.warn('[triggerPrint] Iframe ou contentWindow non disponible pour l\'impression.');
+                    console.warn('[PRINT_TRIGGER_BLOCKED]', {
+                        strategy: 'iframe',
+                        reason: 'missing-content-window',
+                    });
+                }
+            } catch (printError) {
+                console.error('[triggerPrint] Impression bloquee dans l\'iframe:', printError);
+                console.error('[PRINT_TRIGGER_BLOCKED]', {
+                    strategy: 'iframe',
+                    reason: 'iframe-print-error',
+                    error: printError,
+                });
+            } finally {
+                setTimeout(() => cleanupAndComplete({
+                    ok: printTriggered,
                         triggered: printTriggered,
                         strategy: 'iframe',
                         reason: printTriggered ? 'print-dispatched' : 'print-not-dispatched',
