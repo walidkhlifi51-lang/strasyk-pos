@@ -61,6 +61,7 @@ export default function MenuCustomizationModal({
 
     const hasCustomization = 
       (product.size_prices && product.size_prices.length > 0 && !menuItem.taille_fixe) ||
+            (product.size_prix_par_mode && product.size_prix_par_mode.length > 0 && !menuItem.taille_fixe) ||
       (optionGroups || []).some(og => og.product_id === product.id) ||
       (allProductIngredients || []).some(pi => pi.product_id === product.id && pi.retirable);
 
@@ -338,3 +339,4 @@ export default function MenuCustomizationModal({
     </>
   );
 }
+

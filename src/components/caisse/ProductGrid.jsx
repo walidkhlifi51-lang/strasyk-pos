@@ -49,30 +49,6 @@ const ProductCard = ({ product, categories, onAddToCart }) => {
   );
   
   const getDisplayPrice = () => {
-    // Vérifier les prix par mode (si prix différenciés activés)
-    if (product.prix_par_mode) {
-      const prices = [
-        product.prix_par_mode.sur_place,
-        product.prix_par_mode.emporter,
-        product.prix_par_mode.livraison
-      ].filter(p => p !== null && p !== undefined && !isNaN(p) && p > 0);
-      
-      if (prices.length > 0) {
-        const minPrice = Math.min(...prices);
-        return `dès ${minPrice.toFixed(2)}€`;
-      }
-    }
-
-    // Vérifier les prix par taille
-    if (product.size_prices && product.size_prices.length > 0) {
-      const prices = product.size_prices.map(p => p.price).filter(p => p != null && p > 0);
-      if (prices.length > 0) {
-        const minPrice = Math.min(...prices);
-        return `dès ${minPrice.toFixed(2)}€`;
-      }
-    }
-
-    // Vérifier les prix par taille et mode
     if (product.size_prix_par_mode && product.size_prix_par_mode.length > 0) {
       const allPrices = [];
       product.size_prix_par_mode.forEach(sp => {
@@ -80,16 +56,31 @@ const ProductCard = ({ product, categories, onAddToCart }) => {
         if (sp.emporter && sp.emporter > 0) allPrices.push(sp.emporter);
         if (sp.livraison && sp.livraison > 0) allPrices.push(sp.livraison);
       });
-      
       if (allPrices.length > 0) {
         const minPrice = Math.min(...allPrices);
-        return `dès ${minPrice.toFixed(2)}€`;
+        return `a partir de ${minPrice.toFixed(2)} EUR`;
       }
     }
-
-    // Prix de base
-    if (product.base_price != null && product.base_price > 0) return `${product.base_price.toFixed(2)}€`;
-    if (product.prix != null && product.prix > 0) return `${product.prix.toFixed(2)}€`;
+    if (product.size_prices && product.size_prices.length > 0) {
+      const prices = product.size_prices.map(p => p.price).filter(p => p != null && p > 0);
+      if (prices.length > 0) {
+        const minPrice = Math.min(...prices);
+        return `a partir de ${minPrice.toFixed(2)} EUR`;
+      }
+    }
+    if (product.prix_par_mode) {
+      const prices = [
+        product.prix_par_mode.sur_place,
+        product.prix_par_mode.emporter,
+        product.prix_par_mode.livraison
+      ].filter(p => p !== null && p !== undefined && !isNaN(p) && p > 0);
+      if (prices.length > 0) {
+        const minPrice = Math.min(...prices);
+        return `a partir de ${minPrice.toFixed(2)} EUR`;
+      }
+    }
+    if (product.base_price != null && product.base_price > 0) return `${product.base_price.toFixed(2)} EUR`;
+    if (product.prix != null && product.prix > 0) return `${product.prix.toFixed(2)} EUR`;
     return 'N/A';
   };
 
@@ -493,3 +484,6 @@ export default function ProductGrid({
     </div>
   );
 }
+
+
+

@@ -73,23 +73,6 @@ export default function KioskProductGrid({
   }, [menus, selectedCategoryId, searchTerm]);
 
   const getProductPrice = (product) => {
-    // Essayer d'abord les prix différenciés
-    if (product.prix_par_mode) {
-      const prices = Object.values(product.prix_par_mode).filter(p => p > 0);
-      if (prices.length > 0) {
-        return Math.min(...prices);
-      }
-    }
-    
-    // Ensuite les prix par taille
-    if (product.size_prices?.length > 0) {
-      const validPrices = product.size_prices.filter(sp => sp.price != null && sp.price > 0);
-      if (validPrices.length > 0) {
-        return Math.min(...validPrices.map(sp => sp.price));
-      }
-    }
-    
-    // Prix par taille et mode
     if (product.size_prix_par_mode?.length > 0) {
       const allPrices = [];
       product.size_prix_par_mode.forEach(spm => {
@@ -101,12 +84,21 @@ export default function KioskProductGrid({
         return Math.min(...allPrices);
       }
     }
-    
-    // Enfin le prix de base
+    if (product.size_prices?.length > 0) {
+      const validPrices = product.size_prices.filter(sp => sp.price != null && sp.price > 0);
+      if (validPrices.length > 0) {
+        return Math.min(...validPrices.map(sp => sp.price));
+      }
+    }
+    if (product.prix_par_mode) {
+      const prices = Object.values(product.prix_par_mode).filter(p => p > 0);
+      if (prices.length > 0) {
+        return Math.min(...prices);
+      }
+    }
     if (product.base_price != null && product.base_price > 0) {
       return product.base_price;
     }
-    
     return 0;
   };
 
@@ -279,3 +271,4 @@ export default function KioskProductGrid({
     </div>
   );
 }
+
