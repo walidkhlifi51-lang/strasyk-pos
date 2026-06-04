@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -48,14 +48,14 @@ const resolveProductDisplayPrice = (product) => {
     });
     if (allPrices.length > 0) {
       const minPrice = Math.min(...allPrices);
-      return `a partir de ${minPrice.toFixed(2)} EUR`;
+      return `Des ${minPrice.toFixed(2)} EUR`;
     }
   }
   if (product.size_prices && product.size_prices.length > 0) {
     const prices = product.size_prices.map(p => p.price).filter(p => p != null && p > 0);
     if (prices.length > 0) {
       const minPrice = Math.min(...prices);
-      return `a partir de ${minPrice.toFixed(2)} EUR`;
+      return `Des ${minPrice.toFixed(2)} EUR`;
     }
   }
   if (product.prix_par_mode) {
@@ -66,7 +66,7 @@ const resolveProductDisplayPrice = (product) => {
     ].filter(p => p !== null && p !== undefined && !isNaN(p) && p > 0);
     if (prices.length > 0) {
       const minPrice = Math.min(...prices);
-      return `a partir de ${minPrice.toFixed(2)} EUR`;
+      return `Des ${minPrice.toFixed(2)} EUR`;
     }
   }
   if (product.base_price != null && product.base_price > 0) return `${product.base_price.toFixed(2)} EUR`;
@@ -201,38 +201,10 @@ export default function ProductGrid({
   onShowOrders
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const loggedProductIdRef = useRef(null);
   
   console.log('[ProductGrid] menuFormulas received:', menuFormulas);
   console.log('[ProductGrid] products received:', products);
   console.log('[ProductGrid] categories received:', categories);
-
-  useEffect(() => {
-    const debugProduct = (products || []).find((product) =>
-      (Array.isArray(product?.size_prices) && product.size_prices.length > 0)
-      || (Array.isArray(product?.size_prix_par_mode) && product.size_prix_par_mode.length > 0)
-      || product?.sizes != null
-      || product?.tailles != null
-    ) || products?.[0];
-
-    if (!debugProduct || loggedProductIdRef.current === debugProduct.id) return;
-
-    loggedProductIdRef.current = debugProduct.id;
-    console.log('[ProductGrid][runtime product debug]', {
-      id: debugProduct.id,
-      nom: debugProduct.nom,
-      prix: debugProduct.prix,
-      prix_par_mode: debugProduct.prix_par_mode,
-      size_prices: debugProduct.size_prices,
-      size_prix_par_mode: debugProduct.size_prix_par_mode,
-      sizes: debugProduct.sizes,
-      tailles: debugProduct.tailles,
-      price: debugProduct.price,
-      base_price: debugProduct.base_price,
-      resolvedDisplayPrice: resolveProductDisplayPrice(debugProduct),
-      available_keys: Object.keys(debugProduct).sort(),
-    });
-  }, [products]);
 
   const categoryTree = useMemo(() => {
     if (!categories || categories.length === 0) return [];

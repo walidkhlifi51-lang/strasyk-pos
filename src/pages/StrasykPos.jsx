@@ -257,28 +257,6 @@ export default function StrasykPos() {
           appClient.entities.Order.filter(orderScope, '-created_date', 200, { fields: POS_ORDER_FIELDS }).catch(() => []),
           appClient.entities.Customer.filter(filterByTenant(), '-updated_date', 250, { fields: POS_CUSTOMER_FIELDS }).catch(() => []),
         ]);
-        const debugProduct = (productsData || []).find((product) =>
-          (Array.isArray(product?.size_prices) && product.size_prices.length > 0)
-          || (Array.isArray(product?.size_prix_par_mode) && product.size_prix_par_mode.length > 0)
-          || product?.sizes != null
-          || product?.tailles != null
-        ) || productsData?.[0];
-        if (debugProduct) {
-          console.log('[StrasykPos][supabase products fetch debug]', {
-            fields_requested: POS_PRODUCTS_FIELDS,
-            id: debugProduct.id,
-            nom: debugProduct.nom,
-            prix: debugProduct.prix,
-            prix_par_mode: debugProduct.prix_par_mode,
-            size_prices: debugProduct.size_prices,
-            size_prix_par_mode: debugProduct.size_prix_par_mode,
-            sizes: debugProduct.sizes,
-            tailles: debugProduct.tailles,
-            price: debugProduct.price,
-            base_price: debugProduct.base_price,
-            available_keys: Object.keys(debugProduct).sort(),
-          });
-        }
         const combinedOrders = [...allOrdersData, ...cachedOfflineOrders];
         await new Promise(resolve => setTimeout(resolve, 100));
         const [clotureData, optionGroupsData, optionItemsData, ingredientsData, productIngredientsData] = await Promise.all([
