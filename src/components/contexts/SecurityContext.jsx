@@ -5,6 +5,27 @@ import { useQuery } from '@tanstack/react-query';
 import { useTenant } from './TenantContext';
 
 const SecurityContext = createContext(null);
+const SECURITY_PROFILE_FIELDS = [
+  'id',
+  'tenant_id',
+  'nom_etablissement',
+  'adresse',
+  'telephone',
+  'logo_url',
+  'page_pins',
+  'customer_display_enabled',
+  'manages_deliveries',
+  'frais_livraison',
+  'tva_rates',
+  'prix_differencies_par_mode',
+  'allow_price_edit',
+  'allow_item_edit',
+  'impression_auto',
+  'impression_bouton_visible',
+  'impression_double',
+  'bipeur_enabled',
+  'force_immediate_payment',
+];
 
 export const SecurityProvider = ({ children }) => {
   const { currentTenant, filterByTenant } = useTenant();
@@ -12,7 +33,12 @@ export const SecurityProvider = ({ children }) => {
   const { data: profile, isLoading } = useQuery({
     queryKey: ['restaurantProfile', currentTenant?.id],
     queryFn: async () => {
-      const profiles = await appClient.entities.RestaurantProfile.filter(filterByTenant());
+      const profiles = await appClient.entities.RestaurantProfile.filter(
+        filterByTenant(),
+        null,
+        1,
+        { fields: SECURITY_PROFILE_FIELDS }
+      );
       return profiles[0] || null;
     },
     enabled: !!currentTenant?.id,

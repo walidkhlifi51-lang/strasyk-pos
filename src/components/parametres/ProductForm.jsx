@@ -99,11 +99,38 @@ export default function ProductForm({ product, categories, ingredients, profile,
       }))
       .filter((sp) => sp.sur_place > 0 || sp.emporter > 0 || sp.livraison > 0)
   );
+  const buildSyncedSizePrices = (sizePrices = [], sizePrixParMode = []) => {
+    const normalizedModeEntries = normalizeSizeModeEntries(sizePrixParMode);
+
+    return (sizePrices || [])
+      .filter((sp) => sp?.size)
+      .map((sp) => {
+        const matchingModeEntry = normalizedModeEntries.find((entry) => entry.size === sp.size);
+        const syncedPrice = matchingModeEntry
+          ? [matchingModeEntry.sur_place, matchingModeEntry.emporter, matchingModeEntry.livraison]
+              .find((price) => price > 0)
+          : null;
+
+        return {
+          size: sp.size,
+          price: syncedPrice ?? parseNumber(sp.price, 0),
+        };
+      });
+  };
 
   const buildProductPayload = (mode = 'full') => {
+    const syncedSizePrices = managesSizes
+      ? (
+        prixDifferencies
+          ? buildSyncedSizePrices(productData.size_prices, productData.size_prix_par_mode)
+          : (productData.size_prices || [])
+              .filter((sp) => sp?.size)
+              .map((sp) => ({ size: sp.size, price: parseNumber(sp.price, 0) }))
+      )
+      : [];
     const legacyPrice = managesSizes
       ? Math.min(
-          ...(productData.size_prices || [])
+          ...syncedSizePrices
             .map((sp) => parseNumber(sp.price, 0))
             .filter((price) => price > 0)
         )
@@ -122,9 +149,7 @@ export default function ProductForm({ product, categories, ingredients, profile,
 
     if (managesSizes) {
       basePayload.base_price = null;
-      basePayload.size_prices = productData.size_prices
-        .filter(sp => sp.size)
-        .map(sp => ({ size: sp.size, price: parseNumber(sp.price, 0) }));
+      basePayload.size_prices = syncedSizePrices;
     } else {
       basePayload.base_price = parseNumber(productData.base_price, 0);
       basePayload.size_prices = [];

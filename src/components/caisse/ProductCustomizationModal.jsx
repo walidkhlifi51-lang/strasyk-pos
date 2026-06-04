@@ -93,6 +93,24 @@ export default function ProductCustomizationModal({
     return groupsWithItems;
   }, [allOptionGroups, allOptionItems, product?.id]);
 
+  useEffect(() => {
+    if (!productOptionGroups.length) return;
+
+    setExpandedGroups((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      productOptionGroups.forEach((group) => {
+        if ((group.items || []).length > 0 && next[group.id] === undefined) {
+          next[group.id] = true;
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [productOptionGroups]);
+
   const removableIngredients = useMemo(() => {
     if (!allProductIngredients || !allIngredients || !product?.id) return [];
     
@@ -175,6 +193,19 @@ export default function ProductCustomizationModal({
     );
   };
 
+  const getSizePriceForCurrentMode = (size) => {
+    const sizePrice = product.size_prices?.find((sp) => sp.size === size);
+    const fallbackSizePrice = Number(sizePrice?.price) || 0;
+    const sizeMode = product.size_prix_par_mode?.find((sp) => sp.size === size);
+    const modePrice = Number(sizeMode?.[orderType]) || 0;
+    const prixDifferencies = profile?.prix_differencies_par_mode === true;
+
+    if (prixDifferencies && modePrice > 0) return modePrice;
+    if (fallbackSizePrice > 0) return fallbackSizePrice;
+    if (modePrice > 0) return modePrice;
+    return fallbackSizePrice;
+  };
+
   const calculatePrice = useMemo(() => {
     let basePrice = 0;
     const prixDifferencies = profile?.prix_differencies_par_mode === true;
@@ -192,6 +223,10 @@ export default function ProductCustomizationModal({
       } else {
         const sizePrice = product.size_prices?.find(sp => sp.size === selectedSize);
         basePrice = sizePrice?.price || 0;
+      }
+
+      if (basePrice <= 0) {
+        basePrice = getSizePriceForCurrentMode(selectedSize);
       }
     } else {
       // Produit sans taille - vérifier les prix différenciés par mode
@@ -377,6 +412,10 @@ export default function ProductCustomizationModal({
                     } else {
                       const sizePrice = product.size_prices?.find(sp => sp.size === size);
                       displayPrice = sizePrice?.price || 0;
+                    }
+
+                    if (displayPrice <= 0) {
+                      displayPrice = getSizePriceForCurrentMode(size);
                     }
                     
                     return (
