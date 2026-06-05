@@ -5,7 +5,7 @@ import { generateTicketHtml, triggerPrint } from './ticketUtils';
  * Composant déclencheur d'impression pour la compatibilité descendante.
  * Il ne rend rien visuellement mais déclenche une impression via un effet.
  */
-export default function TicketPrint({ order, customer, profile, onPrinted }) {
+export default function TicketPrint({ order, customer, profile, tenant, onPrinted }) {
     useEffect(() => {
         console.log('🖨️ [TicketPrint] useEffect déclenché', { 
             hasOrder: !!order, 
@@ -16,7 +16,7 @@ export default function TicketPrint({ order, customer, profile, onPrinted }) {
         if (order && profile) {
             // generateTicketHtml est async, il faut l'attendre
             (async () => {
-                const html = await generateTicketHtml(order, customer, profile);
+                const html = await generateTicketHtml(order, customer, profile, tenant);
                 if (html) {
                     console.log('✅ [TicketPrint] HTML généré, déclenchement impression...');
                     triggerPrint(html, onPrinted);
@@ -29,7 +29,7 @@ export default function TicketPrint({ order, customer, profile, onPrinted }) {
             console.warn('⚠️ [TicketPrint] Données manquantes:', { order: !!order, profile: !!profile });
             if (onPrinted) onPrinted();
         }
-    }, [order, customer, profile, onPrinted]);
+    }, [order, customer, profile, tenant, onPrinted]);
 
     return null; // Ce composant ne rend rien
 }

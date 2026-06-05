@@ -7,7 +7,7 @@ import { toParisDate as toParisDateValue } from '@/lib/dateParsing';
 /**
  * Génère le HTML d'un ticket de caisse pour impression thermique
  */
-export async function generateTicketHtml(order, customer, profile) {
+export async function generateTicketHtml(order, customer, profile, tenant = null) {
     if (!order || !profile) {
         console.error('[generateTicketHtml] Données manquantes:', { order, profile });
         return null;
@@ -36,6 +36,10 @@ export async function generateTicketHtml(order, customer, profile) {
     const orderTypeLabel = orderTypeLabels[order.type_commande] || 'COMMANDE';
     let tableLabel = order?.table?.nom || order?.table_name || order?.table_nom || order?.nom_table || order?.numero_table || null;
     const beeperLabel = order?.numero_bipeur ? String(order.numero_bipeur) : null;
+    const enseigneName = `${tenant?.nom_commercial || ''}`.trim();
+    const establishmentName = `${profile?.nom_etablissement || ''}`.trim();
+    const ticketHeaderName = enseigneName || establishmentName || 'Restaurant';
+    const showEstablishmentSubtitle = establishmentName && enseigneName && enseigneName.toLowerCase() !== establishmentName.toLowerCase();
 
     if (!tableLabel && order?.table_id) {
         try {
@@ -262,15 +266,20 @@ export async function generateTicketHtml(order, customer, profile) {
     if (profile.logo_url) {
         html += `
         <div class="logo-container">
-            <img src="${profile.logo_url}" alt="${profile.nom_etablissement || 'Logo'}" class="logo" />
+            <img src="${profile.logo_url}" alt="${ticketHeaderName || 'Logo'}" class="logo" />
         </div>
         `;
     }
 
     html += `
         <div class="center xlarge" style="margin-bottom: 8px;">
-            ${profile.nom_etablissement || 'Restaurant'}
+            ${ticketHeaderName}
         </div>
+        ${showEstablishmentSubtitle ? `
+        <div class="center header-info" style="font-weight: 700; margin-top: -4px; margin-bottom: 6px;">
+            ${establishmentName}
+        </div>
+        ` : ''}
         <div class="center header-info">
             ${profile.adresse || ''}
         </div>

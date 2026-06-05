@@ -29,7 +29,7 @@ const statusConfig = {
   annulee: { label: 'Annulée', color: 'bg-red-100 text-red-800', icon: <AlertTriangle className="w-3 h-3" /> },
 };
 
-const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder, profile, onManualPrint }) => {
+const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder, profile, tenant, onManualPrint }) => {
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isTicketViewOpen, setIsTicketViewOpen] = useState(false);
@@ -73,6 +73,10 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
 
   const customerDisplay = getCustomerDisplay();
   const isAnonymous = !hasCustomer;
+  const enseigneName = `${tenant?.nom_commercial || ''}`.trim();
+  const establishmentName = `${profile?.nom_etablissement || ''}`.trim();
+  const ticketHeaderName = enseigneName || establishmentName || 'Restaurant';
+  const showEstablishmentSubtitle = establishmentName && enseigneName && enseigneName.toLowerCase() !== establishmentName.toLowerCase();
 
   // MODIFICATION : Seules les vraies commandes en attente (pas les non payées)
   const isWaitingOrder = order.statut === 'en_attente';
@@ -241,9 +245,14 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                 <div className="text-center mb-3">
                   <img src={profile.logo_url} alt="Logo" className="max-w-[60mm] max-h-[30mm] mx-auto" />
                 </div>
-              ) : (
-                <div className="text-center font-bold text-base mb-2">{profile?.nom_etablissement}</div>
-              )}
+                  ) : (
+                    <>
+                      <div className="text-center font-bold text-base mb-2">{ticketHeaderName}</div>
+                      {showEstablishmentSubtitle ? (
+                        <div className="text-center text-[10px] font-semibold mb-2">{establishmentName}</div>
+                      ) : null}
+                    </>
+                  )}
               
               {/* Infos établissement */}
               <div className="text-center text-[10px] leading-tight mb-2">
@@ -403,6 +412,7 @@ export default function OrdersList({
   onSettleOrder,
   onCancelOrder,
   profile,
+  tenant,
   onManualPrint,
   onHide
 }) {
@@ -489,6 +499,7 @@ export default function OrdersList({
               onSettleOrder={onSettleOrder}
               onCancelOrder={onCancelOrder}
               profile={profile}
+              tenant={tenant}
               onManualPrint={onManualPrint}
             />
           ))

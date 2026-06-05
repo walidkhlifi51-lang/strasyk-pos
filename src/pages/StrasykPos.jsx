@@ -1102,7 +1102,7 @@ export default function StrasykPos() {
             <div className="flex justify-end p-4 border-b bg-indigo-600 rounded-tr-2xl">
               <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsOrdersListVisible(false)}><X className="w-5 h-5" /></Button>
             </div>
-            <OrdersList orders={orders} onEditOrder={handleEditOrderWrapper} customers={customers} onRefresh={refreshData} isLoading={isFetchingPosData} workingDate={workingDate} onSettleOrder={handleSettleOrder} onCancelOrder={handleCancelOrder} profile={profile} onManualPrint={setLastCompletedOrder} onHide={() => setIsOrdersListVisible(false)} />
+            <OrdersList orders={orders} onEditOrder={handleEditOrderWrapper} customers={customers} onRefresh={refreshData} isLoading={isFetchingPosData} workingDate={workingDate} onSettleOrder={handleSettleOrder} onCancelOrder={handleCancelOrder} profile={profile} tenant={currentTenant} onManualPrint={setLastCompletedOrder} onHide={() => setIsOrdersListVisible(false)} />
           </div>
           <main className="flex-1 flex flex-col min-h-0">
             <header className="flex-shrink-0 p-4 border-b bg-white shadow-lg flex justify-between items-center gap-4">
@@ -1142,7 +1142,7 @@ export default function StrasykPos() {
           <div className="flex gap-4 flex-1 min-h-0">
             {isDesktopOrdersVisible && (
               <div className="w-[340px] flex-shrink-0 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden">
-                <OrdersList orders={orders} onEditOrder={handleEditOrderWrapper} customers={customers} onRefresh={refreshData} isLoading={isFetchingPosData} workingDate={workingDate} onSettleOrder={handleSettleOrder} onCancelOrder={handleCancelOrder} profile={profile} onManualPrint={setLastCompletedOrder} onHide={() => setIsDesktopOrdersVisible(false)} />
+                <OrdersList orders={orders} onEditOrder={handleEditOrderWrapper} customers={customers} onRefresh={refreshData} isLoading={isFetchingPosData} workingDate={workingDate} onSettleOrder={handleSettleOrder} onCancelOrder={handleCancelOrder} profile={profile} tenant={currentTenant} onManualPrint={setLastCompletedOrder} onHide={() => setIsDesktopOrdersVisible(false)} />
               </div>
             )}
             <div className="flex-1 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden min-w-[400px]">
@@ -1208,7 +1208,7 @@ export default function StrasykPos() {
       )}
 
       {lastCompletedOrder && (
-        <TicketPrint order={lastCompletedOrder} customer={lastOrderCustomer || customers[lastCompletedOrder.customer_id]} profile={profile} onPrinted={() => setLastCompletedOrder(null)} />
+        <TicketPrint order={lastCompletedOrder} customer={lastOrderCustomer || customers[lastCompletedOrder.customer_id]} profile={profile} tenant={currentTenant} onPrinted={() => setLastCompletedOrder(null)} />
       )}
 
       {showMenuCustomization && customizingMenu && (
