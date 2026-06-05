@@ -12,6 +12,17 @@ import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useTenant } from '../contexts/TenantContext';
 
+const OPTION_IMPORT_INGREDIENT_FIELDS = [
+  'id',
+  'tenant_id',
+  'nom',
+  'unite',
+  'cout_unitaire',
+  'quantite_stock',
+  'created_date',
+  'updated_date',
+];
+
 const GroupPreview = ({ group, items }) => (
   <div className="text-xs text-gray-500 mt-1">
     {items.length > 0 ? (
@@ -221,7 +232,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
 
   useEffect(() => {
     if (!item) {
-      appClient.entities.Ingredient.filter(withTenant())
+      appClient.entities.Ingredient.filter(withTenant(), null, null, { fields: OPTION_IMPORT_INGREDIENT_FIELDS })
         .then((ingredients) => {
           setAllIngredients(ingredients);
         })

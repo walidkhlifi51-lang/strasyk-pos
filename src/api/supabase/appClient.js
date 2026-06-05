@@ -76,6 +76,7 @@ const LEGACY_ENTITY_FIELDS = {
   DeliveryPerson: ['id', 'tenant_id', 'user_email', 'username', 'password', 'nom', 'prenom', 'telephone', 'vehicule', 'disponible', 'app_access_enabled', 'en_livraison', 'nb_livraisons_jour', 'total_encaisse', 'created_date', 'updated_date'],
   Category: ['id', 'tenant_id', 'parent_id', 'nom', 'disponible', 'color', 'image_url', 'image_display', 'manages_sizes', 'size_template', 'sort_order', 'created_date', 'updated_date'],
   Product: ['id', 'tenant_id', 'category_id', 'nom', 'description', 'disponible', 'temps_preparation', 'tva', 'image_url', 'image_display', 'color', 'featured', 'sort_order', 'prix', 'base_price', 'size_prices', 'prix_par_mode', 'size_prix_par_mode', 'web_price', 'web_size_prices', 'created_date', 'updated_date'],
+  Ingredient: ['id', 'tenant_id', 'nom', 'unite', 'cout_unitaire', 'quantite_stock', 'created_date', 'updated_date'],
   OptionGroup: ['id', 'tenant_id', 'product_id', 'nom', 'selection_type', 'min_selections', 'max_selections', 'required', 'manages_sizes', 'created_date', 'updated_date'],
   OptionItem: ['id', 'tenant_id', 'option_group_id', 'nom', 'price_surcharge', 'size_surcharges', 'created_date', 'updated_date'],
   Table: ['id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y', 'zone', 'created_date', 'updated_date'],
