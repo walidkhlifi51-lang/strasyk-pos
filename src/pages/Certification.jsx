@@ -18,6 +18,10 @@ export default function CertificationPage() {
     select: (data) => data[0],
   });
 
+  const enseigneName = `${currentTenant?.nom_commercial || ''}`.trim();
+  const establishmentName = `${profile?.nom_etablissement || ''}`.trim();
+  const showBothNames = enseigneName && establishmentName && enseigneName.toLowerCase() !== establishmentName.toLowerCase();
+
   const generatePDF = async () => {
     setGenerating(true);
     try {
@@ -53,7 +57,9 @@ export default function CertificationPage() {
       y += 10;
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      doc.text(`Nom de l'établissement : ${profile?.nom_etablissement || 'Non renseigné'}`, margin, y);
+      doc.text(`Nom de l'établissement : ${establishmentName || 'Non renseigné'}`, margin, y);
+      y += 7;
+      doc.text(`Nom de l'enseigne : ${enseigneName || establishmentName || 'Non renseigné'}`, margin, y);
       y += 7;
       doc.text(`Adresse : ${profile?.adresse || 'Non renseigné'}`, margin, y);
       y += 7;
@@ -350,7 +356,13 @@ export default function CertificationPage() {
             <CardContent className="space-y-3">
               <div>
                 <p className="text-sm text-gray-500">Établissement</p>
-                <p className="font-semibold text-gray-900">{profile?.nom_etablissement || 'Non renseigné'}</p>
+                <p className="font-semibold text-gray-900">{establishmentName || 'Non renseigné'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Enseigne</p>
+                <p className="font-semibold text-gray-900">
+                  {showBothNames ? enseigneName : (enseigneName || establishmentName || 'Non renseigné')}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">SIRET</p>
