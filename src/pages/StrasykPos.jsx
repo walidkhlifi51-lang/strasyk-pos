@@ -261,11 +261,21 @@ export default function StrasykPos() {
         await new Promise(resolve => setTimeout(resolve, 100));
         const [clotureData, optionGroupsData, optionItemsData, ingredientsData, productIngredientsData] = await Promise.all([
           appClient.entities.ClotureCaisse.filter(filterByTenant(), null, null, { fields: POS_CLOTURE_FIELDS }).catch(() => []),
-          appClient.entities.OptionGroup.filter(filterByTenant(), null, null, { fields: POS_OPTION_GROUP_FIELDS }).catch(() => []),
-          appClient.entities.OptionItem.filter(filterByTenant(), null, null, { fields: POS_OPTION_ITEM_FIELDS }).catch(() => []),
+          appClient.entities.OptionGroup.filter(filterByTenant(), null, null, { fields: POS_OPTION_GROUP_FIELDS }).catch((error) => {
+            console.error('[StrasykPos][option_groups fetch error]', error);
+            return [];
+          }),
+          appClient.entities.OptionItem.filter(filterByTenant(), null, null, { fields: POS_OPTION_ITEM_FIELDS }).catch((error) => {
+            console.error('[StrasykPos][option_items fetch error]', error);
+            return [];
+          }),
           appClient.entities.Ingredient.filter(filterByTenant(), null, null, { fields: POS_INGREDIENT_FIELDS }).catch(() => []),
           appClient.entities.ProductIngredient.filter(filterByTenant(), null, null, { fields: POS_PRODUCT_INGREDIENT_FIELDS }).catch(() => []),
         ]);
+        console.log('[StrasykPos][options fetch counts]', {
+          optionGroupsDataCount: optionGroupsData?.length || 0,
+          optionItemsDataCount: optionItemsData?.length || 0,
+        });
         await new Promise(resolve => setTimeout(resolve, 100));
         const [menuFormulasData, menuItemsData, offersData, loyaltyRulesData, cagnotteRuleData, tablesData] = await Promise.all([
           appClient.entities.MenuFormula.filter(filterByTenant(), null, null, { fields: POS_MENU_FIELDS }).catch(() => []),
@@ -797,7 +807,21 @@ export default function StrasykPos() {
     if (isDateClosed) { toast({ title: "Journée clôturée", description: "Impossible d'ajouter des produits, la caisse est fermée.", variant: "destructive" }); return; }
     const productCategory = categories.find(c => c.id === product.category_id);
     const productOptionGroups = optionGroups.filter(g => g.product_id === product.id);
+    const productOptionGroupIds = productOptionGroups.map((group) => group.id);
+    const productOptionItems = optionItems.filter((item) => productOptionGroupIds.includes(item.option_group_id));
     const productRetirableIngredients = productIngredients.filter(pi => pi.product_id === product.id && pi.retirable);
+    console.log('[StrasykPos][selected product options debug]', {
+      product: {
+        id: product?.id,
+        nom: product?.nom,
+      },
+      optionGroupsDataCount: optionGroups.length,
+      optionItemsDataCount: optionItems.length,
+      linkedGroupsCount: productOptionGroups.length,
+      linkedItemsCount: productOptionItems.length,
+      linkedGroups: productOptionGroups,
+      linkedItems: productOptionItems,
+    });
     const categoryManagesSizes = productCategory?.manages_sizes === true
       && Array.isArray(productCategory?.size_template)
       && productCategory.size_template.length > 0;
