@@ -75,6 +75,20 @@ const normalizeKioskWelcomeImages = (images = []) => (
         : []
 );
 
+const resolveTerminalWelcomeImages = (terminalImages, defaultImages) => {
+    const normalizedTerminalImages = normalizeKioskWelcomeImages(terminalImages);
+    if (normalizedTerminalImages.length > 0) {
+        return normalizedTerminalImages;
+    }
+
+    return normalizeKioskWelcomeImages(defaultImages);
+};
+
+const LEGACY_OPTIONAL_PROFILE_FIELDS = new Set([
+    'kiosk_welcome_images',
+    'kiosk_terminal_welcome_images',
+]);
+
 const areValuesEqual = (left, right) => {
     if (left === right) return true;
     if (Array.isArray(left) || Array.isArray(right) || (left && typeof left === 'object') || (right && typeof right === 'object')) {
@@ -87,6 +101,12 @@ const areValuesEqual = (left, right) => {
     return false;
 };
 
+const extractMissingSchemaColumn = (error) => {
+    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+    const match = message.match(/Could not find the '([^']+)' column/i);
+    return match?.[1] || null;
+};
+
 export default function RestaurantSettings({ data, onDataChange }) {
     const { profile } = data || {};
     const { toast } = useToast();
@@ -94,6 +114,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
     const { currentTenant } = useTenant();
 
     const [localProfile, setLocalProfile] = useState(null);
+    const [commercialName, setCommercialName] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [isManualSaving, setIsManualSaving] = useState(false);
     const [saveSucceeded, setSaveSucceeded] = useState(false);
@@ -125,7 +146,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
             setLocalProfile({
                 ...profile,
                 kiosk_welcome_images: normalizeKioskWelcomeImages(profile.kiosk_welcome_images),
-                kiosk_terminal_welcome_images: normalizeKioskWelcomeImages(profile.kiosk_terminal_welcome_images || profile.kiosk_welcome_images),
+                kiosk_terminal_welcome_images: resolveTerminalWelcomeImages(profile.kiosk_terminal_welcome_images, profile.kiosk_welcome_images),
             });
         } else {
             setLocalProfile({
@@ -157,6 +178,10 @@ export default function RestaurantSettings({ data, onDataChange }) {
             });
         }
     }, [profile]);
+
+    useEffect(() => {
+        setCommercialName(currentTenant?.nom_commercial || '');
+    }, [currentTenant?.nom_commercial]);
 
     const mutation = useMutation({
         mutationFn: (profilePayload) => {
@@ -220,6 +245,9 @@ export default function RestaurantSettings({ data, onDataChange }) {
         }
         
         try {
+            const normalizedCommercialName = `${commercialName || ''}`.trim();
+            const currentCommercialName = `${currentTenant?.nom_commercial || ''}`.trim();
+            const tenantNameChanged = normalizedCommercialName !== currentCommercialName;
             const { id, created_date, updated_date, created_by, ...rawPayload } = localProfile;
             const payload = Object.fromEntries(
                 Object.entries(rawPayload).filter(([key]) => RESTAURANT_PROFILE_SCHEMA_FIELDS.has(key))
@@ -254,6 +282,38 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 }),
             ]);
 
+            const saveProfileWithSchemaFallback = async (profileId, basePayload) => {
+                let attemptPayload = { ...basePayload };
+                const removedColumns = [];
+
+                while (true) {
+                    try {
+                        const result = profileId
+                            ? await runWithTimeout(
+                                appClient.entities.RestaurantProfile.update(profileId, attemptPayload),
+                                "La sauvegarde"
+                            )
+                            : await runWithTimeout(
+                                appClient.entities.RestaurantProfile.create(attemptPayload),
+                                "La creation du profil"
+                            );
+                        return { result, removedColumns, finalPayload: attemptPayload };
+                    } catch (error) {
+                        const missingColumn = extractMissingSchemaColumn(error);
+                        if (!missingColumn || !(missingColumn in attemptPayload)) {
+                            throw error;
+                        }
+
+                        delete attemptPayload[missingColumn];
+                        removedColumns.push(missingColumn);
+
+                        if (Object.keys(attemptPayload).length === 0) {
+                            throw error;
+                        }
+                    }
+                }
+            };
+
             const targetProfileId = localProfile?.id || profile?.id || null;
             const updatePayload = targetProfileId
                 ? Object.fromEntries(
@@ -261,7 +321,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 )
                 : payload;
 
-            if (targetProfileId && Object.keys(updatePayload).length === 1 && updatePayload.tenant_id) {
+            if (!tenantNameChanged && targetProfileId && Object.keys(updatePayload).length === 1 && updatePayload.tenant_id) {
                 setSaveFeedback({
                     type: 'warning',
                     message: "Aucun changement detecte a enregistrer.",
@@ -273,18 +333,27 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 return;
             }
 
-            const savedProfile = targetProfileId
-                ? await runWithTimeout(
-                    appClient.entities.RestaurantProfile.update(targetProfileId, updatePayload),
-                    "La sauvegarde"
-                )
-                : await runWithTimeout(
-                    appClient.entities.RestaurantProfile.create(payload),
-                    "La creation du profil"
+            if (tenantNameChanged) {
+                await runWithTimeout(
+                    appClient.entities.Tenant.update(currentTenant.id, {
+                        nom_commercial: normalizedCommercialName,
+                    }),
+                    "La sauvegarde du nom de l'enseigne"
                 );
+            }
+
+            const payloadToPersist = targetProfileId ? updatePayload : payload;
+            const shouldPersistProfile = !targetProfileId || Object.keys(payloadToPersist).some((key) => key !== 'tenant_id');
+            const {
+                result: savedProfile,
+                removedColumns,
+                finalPayload: persistedPayload,
+            } = shouldPersistProfile
+                ? await saveProfileWithSchemaFallback(targetProfileId, payloadToPersist)
+                : { result: profile || localProfile, removedColumns: [], finalPayload: payloadToPersist };
 
             const savedProfileId = savedProfile?.id || targetProfileId;
-            const verificationFields = Object.keys(targetProfileId ? updatePayload : payload)
+            const verificationFields = Object.keys(persistedPayload)
                 .filter((key) => key !== 'tenant_id');
             const verifiedProfiles = savedProfileId
                 ? await runWithTimeout(
@@ -299,12 +368,16 @@ export default function RestaurantSettings({ data, onDataChange }) {
             }
 
             const refusedFields = verificationFields.filter(
-                (key) => !areValuesEqual(verifiedProfile?.[key], payload[key])
+                (key) => !areValuesEqual(verifiedProfile?.[key], persistedPayload[key])
             );
 
-            if (refusedFields.length > 0) {
+            const blockingRefusedFields = refusedFields.filter(
+                (key) => !LEGACY_OPTIONAL_PROFILE_FIELDS.has(key)
+            );
+
+            if (blockingRefusedFields.length > 0) {
                 throw new Error(
-                    `La base n'a pas confirme la sauvegarde. Champs refuses: ${refusedFields.join(', ')}.`
+                    `La base n'a pas confirme la sauvegarde. Champs refuses: ${blockingRefusedFields.join(', ')}.`
                 );
             }
 
@@ -318,14 +391,23 @@ export default function RestaurantSettings({ data, onDataChange }) {
             setLocalProfile({
                 ...mergedProfile,
                 kiosk_welcome_images: normalizeKioskWelcomeImages(mergedProfile.kiosk_welcome_images),
-                kiosk_terminal_welcome_images: normalizeKioskWelcomeImages(
-                    mergedProfile.kiosk_terminal_welcome_images || mergedProfile.kiosk_welcome_images
+                kiosk_terminal_welcome_images: resolveTerminalWelcomeImages(
+                    mergedProfile.kiosk_terminal_welcome_images,
+                    mergedProfile.kiosk_welcome_images
                 ),
             });
             setSaveSucceeded(true);
             setSaveFeedback({
                 type: 'success',
-                message: "Sauvegarde confirmee par la base.",
+                message: [
+                    "Sauvegarde confirmee par la base.",
+                    removedColumns.length > 0
+                        ? `Colonnes absentes ignorees: ${removedColumns.join(', ')}.`
+                        : '',
+                    refusedFields.length > 0
+                        ? `Champs optionnels non confirmes: ${refusedFields.join(', ')}.`
+                        : '',
+                ].filter(Boolean).join(' '),
             });
             window.setTimeout(() => setSaveSucceeded(false), 2500);
             queryClient.invalidateQueries({ queryKey: ['restaurantProfile'] });
@@ -419,6 +501,18 @@ export default function RestaurantSettings({ data, onDataChange }) {
                         <div className="space-y-2">
                             <Label htmlFor="nom_etablissement">Nom de l'établissement *</Label>
                             <Input id="nom_etablissement" value={localProfile.nom_etablissement || ''} onChange={(e) => handleFieldChange('nom_etablissement', e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="nom_commercial">Nom de l'enseigne</Label>
+                            <Input
+                                id="nom_commercial"
+                                value={commercialName}
+                                onChange={(e) => setCommercialName(e.target.value)}
+                                placeholder="Nom affiche sur le ticket si different"
+                            />
+                            <p className="text-xs text-gray-500">
+                                Utilise en priorite sur les tickets. Les factures et certificats gardent le nom de l'etablissement.
+                            </p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="telephone">Téléphone *</Label>
