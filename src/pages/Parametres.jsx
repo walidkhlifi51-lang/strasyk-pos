@@ -47,10 +47,18 @@ const PARAM_DELIVERY_PEOPLE_FIELDS = [
 ];
 
 const PARAM_PROFILE_FIELDS = [
-    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'telephone', 'logo_url', 'page_pins',
+    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'ville', 'telephone', 'logo_url', 'page_pins',
+    'siret', 'tva_intracommunautaire', 'frais_livraison', 'montant_minimum_livraison', 'zone_livraison_km',
+    'impression_auto', 'impression_bouton_visible', 'impression_double', 'tva_rates',
     'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',
     'delivery_app_allowed', 'manages_delivery_app', 'table_plan_allowed', 'manages_table_plan',
-    'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit', 'ai_image_generation_enabled', 'tva_rates',
+    'bipeur_enabled', 'scratch_tickets_enabled', 'ai_image_generation_enabled',
+    'force_immediate_payment', 'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit',
+    'web_ordering_closed', 'web_frais_livraison_enabled', 'web_frais_livraison',
+    'site_template', 'site_primary_color',
+    'kiosk_welcome_message', 'kiosk_welcome_images', 'kiosk_terminal_welcome_images',
+    'kiosk_welcome_title_size', 'kiosk_welcome_title_style',
+    'kiosk_primary_color', 'kiosk_secondary_color', 'kiosk_card_payment_enabled',
     'updated_date', 'created_date'
 ];
 
