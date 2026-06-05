@@ -93,7 +93,7 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                 Table {order.table?.nom || order.table_name || order.numero_table}
               </div>
             ) : null}
-            {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
+            {profile?.bipeur_enabled === true && (order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
               <div className="text-sm font-semibold text-blue-600 mb-2">
                 Bippeur {order.numero_bipeur}
               </div>
@@ -266,7 +266,7 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
                     TABLE {order.table?.nom || order.table_name || order.numero_table}
                   </div>
                 ) : null}
-                {(order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
+                {profile?.bipeur_enabled === true && (order.type_commande === 'sur_place' || order.type_commande === 'emporter') && order.numero_bipeur ? (
                   <div className="text-[11px] font-bold mt-2 border-2 border-blue-700 text-blue-700 inline-block px-3 py-1">
                     BIPPEUR {order.numero_bipeur}
                   </div>
