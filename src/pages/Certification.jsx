@@ -15,10 +15,12 @@ const EDITEUR = {
   rcs: "990 508 665 R.C.S. Reims",
   adresse: "47 Rue Adolphe Laberte",
   ville: "51100 Reims - France",
+  activite: "Conseil en systemes et logiciels informatiques",
   representant: "Walid Khlifi",
   logiciel: "Strasyk POS",
   module: "Module d'encaissement / caisse enregistreuse",
   version: "2.1",
+  dateVersion: "2025-01-01",
 };
 
 const CERTIFICATION_PROFILE_FIELDS = [
@@ -61,6 +63,20 @@ const checkNewPage = (doc, y, threshold = 260) => {
   return y;
 };
 
+const loadImageAsBase64 = (url) => new Promise((resolve) => {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d')?.drawImage(img, 0, 0);
+    resolve(canvas.toDataURL('image/png'));
+  };
+  img.onerror = () => resolve(null);
+  img.src = url;
+});
+
 export default function CertificationPage() {
   const { currentTenant, currentUser } = useTenant();
   const [generating, setGenerating] = useState(false);
@@ -92,27 +108,42 @@ export default function CertificationPage() {
     setGenerating(true);
     try {
       const doc = new jsPDF();
+      const cachetBase64 = await loadImageAsBase64("https://media.base44.com/images/public/68fd3a46517ad27393f2904a/137f24d33_ChatGPTImage22mai202621_15_16.png");
       const pageWidth = doc.internal.pageSize.getWidth();
       const margin = 20;
       const maxWidth = pageWidth - margin * 2;
       let y = 20;
 
       doc.setFillColor(15, 23, 42);
-      doc.rect(0, 0, pageWidth, 42, 'F');
+      doc.rect(0, 0, pageWidth, 48, 'F');
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
+      doc.setFontSize(13);
       doc.setFont(undefined, 'bold');
-      doc.text("ATTESTATION INDIVIDUELLE DE CONFORMITE", pageWidth / 2, 12, { align: 'center' });
+      doc.text("ATTESTATION INDIVIDUELLE DE CONFORMITE", pageWidth / 2, 13, { align: 'center' });
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      doc.text("Article 286 I-3 bis du Code General des Impots", pageWidth / 2, 20, { align: 'center' });
-      doc.text("Document etabli pour l'editeur et l'etablissement utilisateur", pageWidth / 2, 27, { align: 'center' });
-      doc.text(`Date d'emission : ${new Date().toLocaleDateString('fr-FR')}`, pageWidth / 2, 34, { align: 'center' });
+      doc.text("Article 286 I-3 bis du Code General des Impots", pageWidth / 2, 21, { align: 'center' });
+      doc.setFontSize(8.5);
+      doc.setTextColor(180, 200, 255);
+      doc.text("Loi n 2015-1785 du 29 decembre 2015 - Arrete du 3 aout 2018", pageWidth / 2, 29, { align: 'center' });
+      doc.setFontSize(8);
+      doc.text("Cette attestation est etablie sous la responsabilite exclusive de l'editeur du logiciel.", pageWidth / 2, 37, { align: 'center' });
+      doc.setTextColor(170, 190, 240);
+      doc.text(`Document genere le : ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`, pageWidth / 2, 44, { align: 'center' });
 
       doc.setTextColor(0, 0, 0);
-      y = 52;
+      y = 58;
 
-      y = drawSectionTitle(doc, "PARTIE 1 - EDITEUR DU LOGICIEL", y, margin, pageWidth);
+      doc.setFillColor(239, 246, 255);
+      doc.rect(margin - 2, y - 3, maxWidth + 4, 7, 'F');
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text("PARTIE 1 - ATTESTATION DE L'EDITEUR", margin, y + 1);
+      doc.setTextColor(0, 0, 0);
+      y += 12;
+
+      y = drawSectionTitle(doc, "1. IDENTIFICATION DE L'EDITEUR", y, margin, pageWidth);
       doc.setFontSize(9);
       const editorInfo = [
         ["Raison sociale :", `${EDITEUR.nom} ${EDITEUR.formeJuridique}`],
@@ -120,9 +151,8 @@ export default function CertificationPage() {
         ["TVA intracommunautaire :", EDITEUR.tva],
         ["RCS :", EDITEUR.rcs],
         ["Siege social :", `${EDITEUR.adresse}, ${EDITEUR.ville}`],
+        ["Activite :", EDITEUR.activite],
         ["Representant legal :", EDITEUR.representant],
-        ["Logiciel :", `${EDITEUR.logiciel} - ${EDITEUR.module}`],
-        ["Version :", EDITEUR.version],
       ];
       editorInfo.forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
@@ -133,24 +163,133 @@ export default function CertificationPage() {
       });
 
       y += 3;
-      y = drawSectionTitle(doc, "DECLARATION DE CONFORMITE DE L'EDITEUR", y, margin, pageWidth);
+      y = drawSectionTitle(doc, "2. IDENTIFICATION DU LOGICIEL", y, margin, pageWidth);
+      const softwareInfo = [
+        ["Nom du logiciel :", EDITEUR.logiciel],
+        ["Module concerne :", EDITEUR.module],
+        ["Version :", EDITEUR.version],
+        ["Date de version :", EDITEUR.dateVersion],
+      ];
+      softwareInfo.forEach(([label, value]) => {
+        doc.setFont(undefined, 'bold');
+        doc.text(label, margin + 2, y);
+        doc.setFont(undefined, 'normal');
+        doc.text(value, margin + 45, y);
+        y += 6;
+      });
+
+      y += 3;
+      y = drawSectionTitle(doc, "3. DECLARATION DE CONFORMITE", y, margin, pageWidth);
       y = addWrappedText(
         doc,
-        `La societe ${EDITEUR.nom} ${EDITEUR.formeJuridique}, representee par ${EDITEUR.representant}, atteste que ${EDITEUR.logiciel} version ${EDITEUR.version} respecte les exigences d'inalterabilite, de securisation, de conservation et d'archivage des donnees prevues par l'article 286 I-3 bis du Code General des Impots.`,
+        `La societe ${EDITEUR.nom} ${EDITEUR.formeJuridique}, representee par ${EDITEUR.representant} en sa qualite de representant legal, declare que le logiciel ${EDITEUR.logiciel} - ${EDITEUR.module} - version ${EDITEUR.version}, satisfait aux conditions d'inalterabilite, de securisation, de conservation et d'archivage des donnees conformement a l'article 286 I-3 bis du Code General des Impots, tel que precise par l'arrete du 3 aout 2018. Cette attestation est etablie sous la responsabilite exclusive de l'editeur du logiciel.`,
         margin + 2,
         y,
         maxWidth - 4,
       );
 
-      y = checkNewPage(doc, y + 10, 235);
-      y = drawSectionTitle(doc, "PARTIE 2 - ETABLISSEMENT UTILISATEUR", y, margin, pageWidth);
+      y += 5;
+      y = drawSectionTitle(doc, "4. GARANTIES TECHNIQUES", y, margin, pageWidth);
+      const garanties = [
+        "a) INALTERABILITE",
+        "   • Numerotation sequentielle et continue des tickets de caisse",
+        "   • Horodatage automatique et non modifiable de chaque transaction",
+        "   • Interdiction de suppression ou modification des donnees d'encaissement validees",
+        "   • Toute modification d'une donnee d'encaissement laisse une trace horodatee et journalisee",
+        "   • Journal des annulations et avoirs trace avec motif, date et utilisateur",
+        "",
+        "b) SECURISATION",
+        "   • Chiffrement des donnees en transit (HTTPS/TLS) et au repos",
+        "   • Controle d'acces multi-niveaux : proprietaire, manager, employe",
+        "   • Authentification par identifiant, mot de passe et code PIN pour les operations sensibles",
+        "   • Journal des evenements et tracabilite complete des actions utilisateurs",
+        "   • Journalisation des ouvertures du tiroir-caisse avec horodatage",
+        "",
+        "c) CONSERVATION",
+        "   • Conservation de l'integralite des donnees de vente sur infrastructure cloud securisee",
+        "   • Duree minimale legale de conservation : 6 ans garantie",
+        "   • Acces permanent a l'historique complet des transactions",
+        "   • Donnees exportables a tout moment pour controle fiscal",
+        "",
+        "d) ARCHIVAGE PERIODIQUE",
+        "   • Clotures Z journalieres enregistrees avec totaux et ventilation par taux de TVA",
+        "   • Rapports comptables periodiques jour, semaine, mois et annee",
+        "   • Grand livre des operations accessible et exportable",
+        "   • Journal fiscal exportable au format structure CSV et PDF",
+      ];
+      garanties.forEach((line) => {
+        y = checkNewPage(doc, y);
+        doc.setFont(undefined, line.match(/^[a-d]\)/) ? 'bold' : 'normal');
+        if (line) doc.text(line, margin + 2, y);
+        y += line === "" ? 3 : 5.5;
+      });
+
+      y = checkNewPage(doc, y + 8, 220);
+      y += 5;
+      y = drawSectionTitle(doc, "5. COMPATIBILITE ET EVOLUTIONS REGLEMENTAIRES", y, margin, pageWidth);
+      const evolutions = [
+        "   • Preparation a la facturation electronique obligatoire reforme 2026/2027",
+        "   • Compatibilite e-reporting B2C pour transmission des donnees de transactions",
+        "   • Architecture compatible PDP et plateformes de dematerialisation partenaires",
+        "   • Export des donnees fiscales au format structure compatible Factur-X, UBL et e-reporting",
+        "   • Ventilation TVA multi-taux exportable pour declarations comptables",
+      ];
+      evolutions.forEach((line) => {
+        doc.setFont(undefined, 'normal');
+        doc.text(line, margin + 2, y);
+        y += 5.5;
+      });
+
+      y = checkNewPage(doc, y + 10, 220);
+      y += 8;
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text("Signature et cachet de l'editeur :", margin, y);
+      y += 6;
+      doc.setFont(undefined, 'normal');
+      doc.text(`Societe : ${EDITEUR.nom} ${EDITEUR.formeJuridique}`, margin + 2, y);
+      y += 5;
+      doc.text(`Representant legal : ${EDITEUR.representant}`, margin + 2, y);
+      y += 5;
+      doc.text(`Fait a Reims, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 2, y);
+      y += 10;
+
+      if (cachetBase64) {
+        const imgW = 70;
+        const imgH = 70 / 2.12;
+        doc.addImage(cachetBase64, 'PNG', margin, y, imgW, imgH);
+        y += imgH + 4;
+      } else {
+        doc.setDrawColor(80, 80, 80);
+        doc.rect(margin, y, 70, 20);
+        doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
+        doc.setFont(undefined, 'italic');
+        doc.text("Cachet + Signature STRASYK SASU", margin + 3, y + 10);
+        doc.setTextColor(0, 0, 0);
+        y += 24;
+      }
+
+      y = checkNewPage(doc, y + 10, 230);
+      y += 8;
+      doc.setFillColor(239, 246, 255);
+      doc.rect(margin - 2, y - 3, maxWidth + 4, 7, 'F');
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text("PARTIE 2 - ETABLISSEMENT UTILISATEUR", margin, y + 1);
+      doc.setTextColor(0, 0, 0);
+      y += 12;
+
+      y = drawSectionTitle(doc, "6. INFORMATIONS ETABLISSEMENT", y, margin, pageWidth);
       const establishmentInfo = [
-        ["Nom de l'etablissement :", displayedEstablishmentName],
-        ["Nom de l'enseigne :", displayedEnseigneName],
-        ["Adresse :", displayedAddress],
+        ["Raison sociale :", displayedEstablishmentName],
+        ["Enseigne :", displayedEnseigneName],
+        ["Adresse :", profile?.adresse || 'Non renseigne'],
+        ["Ville :", profile?.ville || 'Non renseigne'],
         ["Telephone :", profile?.telephone || 'Non renseigne'],
         ["SIRET :", profile?.siret || 'Non renseigne'],
-        ["TVA intracommunautaire :", profile?.tva_intracommunautaire || 'Non renseigne'],
+        ["N TVA intracommunautaire :", profile?.tva_intracommunautaire || 'Non renseigne'],
       ];
       establishmentInfo.forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
@@ -160,55 +299,56 @@ export default function CertificationPage() {
         y += 6;
       });
 
-      y += 3;
-      y = drawSectionTitle(doc, "RESPONSABLE DE L'ETABLISSEMENT", y, margin, pageWidth);
+      y += 4;
+      y = drawSectionTitle(doc, "7. RESPONSABLE ETABLISSEMENT", y, margin, pageWidth);
       const userInfo = [
         ["Nom et prenom :", displayedManagerName],
         ["Email :", currentUser?.email || 'Non renseigne'],
-        ["Qualite :", displayedRole],
-        ["Date d'emission :", new Date().toLocaleDateString('fr-FR')],
+        ["Qualite :", "Proprietaire / Gerant"],
+        ["Date de mise en service :", new Date().toLocaleDateString('fr-FR')],
       ];
       userInfo.forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
         doc.text(label, margin + 2, y);
         doc.setFont(undefined, 'normal');
-        doc.text(value, margin + 46, y);
+        doc.text(value, margin + 52, y);
         y += 6;
       });
 
-      y = checkNewPage(doc, y + 10, 225);
-      y = drawSectionTitle(doc, "GARANTIES TECHNIQUES", y, margin, pageWidth);
-      const garanties = [
-        "Inalterabilite : numerotation sequentielle des tickets, horodatage automatique, impossibilite de modifier une commande payee sans trace.",
-        "Securisation : authentification utilisateur, gestion des roles, codes PIN sur les pages sensibles, chiffrement des donnees.",
-        "Conservation : historique complet des ventes, clotures journalieres, exports comptables, conservation minimale de 6 ans.",
-        "Archivage periodique : rapports detailles, grand livre des operations, ventilation des taux de TVA.",
-      ];
-      garanties.forEach((line) => {
-        y = addWrappedText(doc, `- ${line}`, margin + 2, y, maxWidth - 4, 5.5);
-        y += 1;
-      });
-
-      y = checkNewPage(doc, y + 10, 225);
-      y = drawSectionTitle(doc, "ENGAGEMENT DE L'UTILISATEUR", y, margin, pageWidth);
+      y += 4;
+      y = drawSectionTitle(doc, "8. ENGAGEMENT UTILISATEUR", y, margin, pageWidth);
       y = addWrappedText(
         doc,
-        `Je soussigne, ${displayedManagerName}, atteste utiliser ${EDITEUR.logiciel} pour les operations d'encaissement de l'etablissement ${displayedEstablishmentName}. Je certifie que les donnees d'encaissement enregistrees dans le systeme sont conservees et securisees conformement a l'article 286 I-3 bis du Code General des Impots.`,
+        `Je soussigne, ${displayedManagerName}, agissant en qualite de representant de l'etablissement utilisateur identifie dans le present document, atteste utiliser le logiciel ${EDITEUR.logiciel} version ${EDITEUR.version} pour les operations d'encaissement de l'etablissement. Je certifie que les donnees enregistrees dans ce systeme ne font l'objet d'aucune manipulation frauduleuse et que les conditions d'utilisation prevues par l'article 286 I-3 bis du Code General des Impots sont respectees.`,
         margin + 2,
         y,
         maxWidth - 4,
       );
 
       y += 8;
-      doc.setFont(undefined, 'bold');
       doc.text("Signature de l'utilisateur :", margin, y);
       y += 6;
-      doc.setFont(undefined, 'normal');
-      doc.text(`Nom : ${displayedManagerName}`, margin + 2, y);
+      doc.text(`Nom et qualite : ${displayedManagerName}`, margin + 2, y);
       y += 5;
       doc.text(`Fait a ${displayedCity}, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 2, y);
       y += 5;
       doc.text('Mention manuscrite : "Lu et approuve"', margin + 2, y);
+      y += 10;
+
+      doc.setDrawColor(80, 80, 80);
+      doc.rect(margin, y, 75, 22);
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 120, 120);
+      doc.setFont(undefined, 'italic');
+      doc.text("Signature de l'utilisateur", margin + 3, y + 5);
+      doc.text(displayedManagerName, margin + 3, y + 10);
+      doc.text("(version papier)", margin + 3, y + 15);
+
+      doc.rect(margin + 85, y, 55, 22);
+      doc.text("Cachet de l'etablissement", margin + 88, y + 5);
+      doc.text(displayedEstablishmentName, margin + 88, y + 10);
+      doc.text("(version papier)", margin + 88, y + 15);
+      doc.setTextColor(0, 0, 0);
 
       const totalPages = doc.internal.getNumberOfPages();
       for (let i = 1; i <= totalPages; i += 1) {
@@ -219,7 +359,7 @@ export default function CertificationPage() {
         doc.setFontSize(7.5);
         doc.setFont(undefined, 'italic');
         doc.text(
-          "Document a conserver et a presenter en cas de controle fiscal. Les informations editeur sont portees par Strasyk, les informations commerce par l'etablissement utilisateur.",
+          "Ce document constitue une attestation de conformite a l'article 286 I-3 bis du CGI. Il doit etre conserve pendant 6 ans minimum et presente lors de tout controle fiscal.",
           margin,
           pageHeight - 12
         );
