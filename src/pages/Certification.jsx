@@ -101,7 +101,6 @@ export default function CertificationPage() {
   const displayedEnseigneName = enseigneName || establishmentName || 'Non renseigne';
   const displayedAddress = [profile?.adresse, profile?.ville].filter(Boolean).join(', ') || profile?.adresse || 'Non renseigne';
   const displayedManagerName = currentUser?.full_name || 'Non renseigne';
-  const displayedRole = currentUser?.role === 'admin' ? 'Administrateur' : 'Utilisateur';
   const displayedCity = profile?.ville || '________________';
 
   const generatePDF = async () => {
@@ -145,52 +144,50 @@ export default function CertificationPage() {
 
       y = drawSectionTitle(doc, "1. IDENTIFICATION DE L'EDITEUR", y, margin, pageWidth);
       doc.setFontSize(9);
-      const editorInfo = [
-        ["Raison sociale :", `${EDITEUR.nom} ${EDITEUR.formeJuridique}`],
+      [
+        ["Raison sociale :", `${EDITEUR.nom} (${EDITEUR.formeJuridique})`],
         ["SIRET :", EDITEUR.siret],
-        ["TVA intracommunautaire :", EDITEUR.tva],
+        ["N TVA intracommunautaire :", EDITEUR.tva],
         ["RCS :", EDITEUR.rcs],
         ["Siege social :", `${EDITEUR.adresse}, ${EDITEUR.ville}`],
         ["Activite :", EDITEUR.activite],
         ["Representant legal :", EDITEUR.representant],
-      ];
-      editorInfo.forEach(([label, value]) => {
+      ].forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
-        doc.text(label, margin + 2, y);
+        doc.text(label, margin + 3, y);
         doc.setFont(undefined, 'normal');
         doc.text(value, margin + 58, y);
         y += 6;
       });
 
-      y += 3;
+      y += 4;
       y = drawSectionTitle(doc, "2. IDENTIFICATION DU LOGICIEL", y, margin, pageWidth);
-      const softwareInfo = [
+      [
         ["Nom du logiciel :", EDITEUR.logiciel],
         ["Module concerne :", EDITEUR.module],
         ["Version :", EDITEUR.version],
         ["Date de version :", EDITEUR.dateVersion],
-      ];
-      softwareInfo.forEach(([label, value]) => {
+      ].forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
-        doc.text(label, margin + 2, y);
+        doc.text(label, margin + 3, y);
         doc.setFont(undefined, 'normal');
         doc.text(value, margin + 45, y);
         y += 6;
       });
 
-      y += 3;
-      y = drawSectionTitle(doc, "3. DECLARATION DE CONFORMITE", y, margin, pageWidth);
+      y += 4;
+      y = drawSectionTitle(doc, "3. DECLARATION DE CONFORMITE DE L'EDITEUR", y, margin, pageWidth);
       y = addWrappedText(
         doc,
         `La societe ${EDITEUR.nom} ${EDITEUR.formeJuridique}, representee par ${EDITEUR.representant} en sa qualite de representant legal, declare que le logiciel ${EDITEUR.logiciel} - ${EDITEUR.module} - version ${EDITEUR.version}, satisfait aux conditions d'inalterabilite, de securisation, de conservation et d'archivage des donnees conformement a l'article 286 I-3 bis du Code General des Impots, tel que precise par l'arrete du 3 aout 2018. Cette attestation est etablie sous la responsabilite exclusive de l'editeur du logiciel.`,
-        margin + 2,
+        margin + 3,
         y,
-        maxWidth - 4,
+        maxWidth - 6,
       );
 
       y += 5;
-      y = drawSectionTitle(doc, "4. GARANTIES TECHNIQUES", y, margin, pageWidth);
-      const garanties = [
+      y = drawSectionTitle(doc, "4. GARANTIES TECHNIQUES DE L'EDITEUR", y, margin, pageWidth);
+      [
         "a) INALTERABILITE",
         "   • Numerotation sequentielle et continue des tickets de caisse",
         "   • Horodatage automatique et non modifiable de chaque transaction",
@@ -199,7 +196,7 @@ export default function CertificationPage() {
         "   • Journal des annulations et avoirs trace avec motif, date et utilisateur",
         "",
         "b) SECURISATION",
-        "   • Chiffrement des donnees en transit (HTTPS/TLS) et au repos",
+        "   • Chiffrement des donnees en transit HTTPS/TLS et au repos",
         "   • Controle d'acces multi-niveaux : proprietaire, manager, employe",
         "   • Authentification par identifiant, mot de passe et code PIN pour les operations sensibles",
         "   • Journal des evenements et tracabilite complete des actions utilisateurs",
@@ -216,42 +213,44 @@ export default function CertificationPage() {
         "   • Rapports comptables periodiques jour, semaine, mois et annee",
         "   • Grand livre des operations accessible et exportable",
         "   • Journal fiscal exportable au format structure CSV et PDF",
-      ];
-      garanties.forEach((line) => {
+        "   • Export des donnees fiscales au format structure compatible Factur-X / UBL / e-reporting",
+      ].forEach((line) => {
         y = checkNewPage(doc, y);
-        doc.setFont(undefined, line.match(/^[a-d]\)/) ? 'bold' : 'normal');
-        if (line) doc.text(line, margin + 2, y);
+        if (line) {
+          doc.setFont(undefined, line.match(/^[a-d]\)/) ? 'bold' : 'normal');
+          doc.text(line, margin + 3, y);
+        }
         y += line === "" ? 3 : 5.5;
       });
 
-      y = checkNewPage(doc, y + 8, 220);
+      y = checkNewPage(doc, y, 220);
       y += 5;
       y = drawSectionTitle(doc, "5. COMPATIBILITE ET EVOLUTIONS REGLEMENTAIRES", y, margin, pageWidth);
-      const evolutions = [
+      [
         "   • Preparation a la facturation electronique obligatoire reforme 2026/2027",
         "   • Compatibilite e-reporting B2C pour transmission des donnees de transactions",
         "   • Architecture compatible PDP et plateformes de dematerialisation partenaires",
-        "   • Export des donnees fiscales au format structure compatible Factur-X, UBL et e-reporting",
+        "   • Export des donnees fiscales au format structure compatible Factur-X / UBL / e-reporting",
         "   • Ventilation TVA multi-taux exportable pour declarations comptables",
-      ];
-      evolutions.forEach((line) => {
+        "   • Journal fiscal exportable pour transmission a l'administration fiscale",
+      ].forEach((line) => {
         doc.setFont(undefined, 'normal');
-        doc.text(line, margin + 2, y);
+        doc.text(line, margin + 3, y);
         y += 5.5;
       });
 
-      y = checkNewPage(doc, y + 10, 220);
+      y = checkNewPage(doc, y, 220);
       y += 8;
       doc.setFontSize(9);
       doc.setFont(undefined, 'bold');
       doc.text("Signature et cachet de l'editeur :", margin, y);
       y += 6;
       doc.setFont(undefined, 'normal');
-      doc.text(`Societe : ${EDITEUR.nom} ${EDITEUR.formeJuridique}`, margin + 2, y);
+      doc.text(`Societe : ${EDITEUR.nom} ${EDITEUR.formeJuridique}`, margin + 3, y);
       y += 5;
-      doc.text(`Representant legal : ${EDITEUR.representant}`, margin + 2, y);
+      doc.text(`Representant legal : ${EDITEUR.representant}`, margin + 3, y);
       y += 5;
-      doc.text(`Fait a Reims, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 2, y);
+      doc.text(`Fait a Reims, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 3, y);
       y += 10;
 
       if (cachetBase64) {
@@ -270,19 +269,19 @@ export default function CertificationPage() {
         y += 24;
       }
 
-      y = checkNewPage(doc, y + 10, 230);
+      y = checkNewPage(doc, y + 5, 230);
       y += 8;
       doc.setFillColor(239, 246, 255);
       doc.rect(margin - 2, y - 3, maxWidth + 4, 7, 'F');
       doc.setFontSize(12);
       doc.setFont(undefined, 'bold');
       doc.setTextColor(30, 58, 138);
-      doc.text("PARTIE 2 - ETABLISSEMENT UTILISATEUR", margin, y + 1);
+      doc.text("PARTIE 2 - IDENTIFICATION DE L'ETABLISSEMENT UTILISATEUR", margin, y + 1);
       doc.setTextColor(0, 0, 0);
       y += 12;
 
-      y = drawSectionTitle(doc, "6. INFORMATIONS ETABLISSEMENT", y, margin, pageWidth);
-      const establishmentInfo = [
+      y = drawSectionTitle(doc, "6. INFORMATIONS DE L'ETABLISSEMENT", y, margin, pageWidth);
+      [
         ["Raison sociale :", displayedEstablishmentName],
         ["Enseigne :", displayedEnseigneName],
         ["Adresse :", profile?.adresse || 'Non renseigne'],
@@ -290,49 +289,51 @@ export default function CertificationPage() {
         ["Telephone :", profile?.telephone || 'Non renseigne'],
         ["SIRET :", profile?.siret || 'Non renseigne'],
         ["N TVA intracommunautaire :", profile?.tva_intracommunautaire || 'Non renseigne'],
-      ];
-      establishmentInfo.forEach(([label, value]) => {
+      ].forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
-        doc.text(label, margin + 2, y);
+        doc.text(label, margin + 3, y);
         doc.setFont(undefined, 'normal');
-        doc.text(value, margin + 58, y);
+        doc.text(value, margin + 65, y);
         y += 6;
       });
 
       y += 4;
-      y = drawSectionTitle(doc, "7. RESPONSABLE ETABLISSEMENT", y, margin, pageWidth);
-      const userInfo = [
+      y = drawSectionTitle(doc, "7. RESPONSABLE DE L'ETABLISSEMENT", y, margin, pageWidth);
+      [
         ["Nom et prenom :", displayedManagerName],
         ["Email :", currentUser?.email || 'Non renseigne'],
         ["Qualite :", "Proprietaire / Gerant"],
         ["Date de mise en service :", new Date().toLocaleDateString('fr-FR')],
-      ];
-      userInfo.forEach(([label, value]) => {
+      ].forEach(([label, value]) => {
         doc.setFont(undefined, 'bold');
-        doc.text(label, margin + 2, y);
+        doc.text(label, margin + 3, y);
         doc.setFont(undefined, 'normal');
-        doc.text(value, margin + 52, y);
+        doc.text(value, margin + 55, y);
         y += 6;
       });
 
       y += 4;
-      y = drawSectionTitle(doc, "8. ENGAGEMENT UTILISATEUR", y, margin, pageWidth);
+      y = drawSectionTitle(doc, "8. ENGAGEMENT DE L'UTILISATEUR", y, margin, pageWidth);
       y = addWrappedText(
         doc,
         `Je soussigne, ${displayedManagerName}, agissant en qualite de representant de l'etablissement utilisateur identifie dans le present document, atteste utiliser le logiciel ${EDITEUR.logiciel} version ${EDITEUR.version} pour les operations d'encaissement de l'etablissement. Je certifie que les donnees enregistrees dans ce systeme ne font l'objet d'aucune manipulation frauduleuse et que les conditions d'utilisation prevues par l'article 286 I-3 bis du Code General des Impots sont respectees.`,
-        margin + 2,
+        margin + 3,
         y,
-        maxWidth - 4,
+        maxWidth - 6,
       );
 
       y += 8;
+      doc.setFont(undefined, 'bold');
       doc.text("Signature de l'utilisateur :", margin, y);
       y += 6;
-      doc.text(`Nom et qualite : ${displayedManagerName}`, margin + 2, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Nom et qualite : ${displayedManagerName}`, margin + 3, y);
       y += 5;
-      doc.text(`Fait a ${displayedCity}, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 2, y);
+      doc.text(`Fait a ${displayedCity}, le ${new Date().toLocaleDateString('fr-FR')}`, margin + 3, y);
       y += 5;
-      doc.text('Mention manuscrite : "Lu et approuve"', margin + 2, y);
+      doc.setFont(undefined, 'bold');
+      doc.text('Mention manuscrite obligatoire : "Lu et approuve"', margin + 3, y);
+      doc.setFont(undefined, 'normal');
       y += 10;
 
       doc.setDrawColor(80, 80, 80);
@@ -357,6 +358,7 @@ export default function CertificationPage() {
         doc.setDrawColor(200, 200, 200);
         doc.line(margin, pageHeight - 18, pageWidth - margin, pageHeight - 18);
         doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
         doc.setFont(undefined, 'italic');
         doc.text(
           "Ce document constitue une attestation de conformite a l'article 286 I-3 bis du CGI. Il doit etre conserve pendant 6 ans minimum et presente lors de tout controle fiscal.",
@@ -364,10 +366,11 @@ export default function CertificationPage() {
           pageHeight - 12
         );
         doc.text(`Page ${i} / ${totalPages}`, pageWidth - margin, pageHeight - 12, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
       }
 
-      const fileName = `Attestation_CGI_286_${displayedEstablishmentName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(fileName);
+      const nom = profile?.nom_etablissement?.replace(/\s+/g, '_') || 'etablissement';
+      doc.save(`Attestation_CGI_286_${nom}_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error("Erreur generation PDF:", error);
       alert("Erreur lors de la generation du PDF");
@@ -376,45 +379,49 @@ export default function CertificationPage() {
     }
   };
 
-  const features = [
+  const featuresData = [
     {
       icon: Lock,
       title: "Inalterabilite",
-      description: "Chaque encaissement reste trace et horodate",
+      color: "from-blue-500 to-blue-700",
       items: [
-        "Numerotation sequentielle des tickets",
-        "Horodatage automatique",
-        "Trace des annulations et corrections",
+        "Numerotation sequentielle continue des tickets",
+        "Horodatage automatique non modifiable",
+        "Toute modification laisse une trace horodatee",
+        "Journal des annulations et avoirs trace",
       ],
     },
     {
       icon: Shield,
       title: "Securisation",
-      description: "Protection et controle d'acces aux donnees",
+      color: "from-indigo-500 to-indigo-700",
       items: [
-        "Sauvegarde cloud automatique",
-        "Authentification utilisateur",
-        "Codes PIN pour pages sensibles",
+        "Chiffrement HTTPS/TLS en transit et au repos",
+        "Authentification multi-niveaux roles et PIN",
+        "Journal des evenements et actions utilisateurs",
+        "Tracabilite des ouvertures tiroir-caisse",
       ],
     },
     {
       icon: Archive,
       title: "Conservation",
-      description: "Archivage des donnees sur la duree legale",
+      color: "from-emerald-500 to-emerald-700",
       items: [
-        "Historique complet des ventes",
-        "Clotures de caisse enregistrees",
-        "Exports comptables disponibles",
+        "Duree minimale legale : 6 ans garantie",
+        "Historique complet des transactions",
+        "Donnees exportables pour controle fiscal",
+        "Infrastructure cloud securisee",
       ],
     },
     {
       icon: FileCheck,
       title: "Archivage periodique",
-      description: "Clotures et rapports reguliers",
+      color: "from-violet-500 to-violet-700",
       items: [
-        "Cloture journaliere obligatoire",
-        "Rapports detailles",
-        "Grand livre des operations",
+        "Clotures Z journalieres avec ventilation TVA",
+        "Grand livre des operations accessible",
+        "Journal fiscal exportable CSV et PDF",
+        "Rapports comptables periodiques",
       ],
     },
   ];
@@ -438,9 +445,9 @@ export default function CertificationPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-800">
-                  Document nominatif etabli pour l'editeur <strong>Strasyk</strong> et l'etablissement utilisateur.
-                  Les donnees affichees ici sont limitees aux champs strictement utiles et proviennent du tenant actif
-                  et du profil etablissement le plus recent.
+                  Ce document est une <strong>attestation individuelle de conformite a l'article 286 I-3 bis du CGI</strong>,
+                  portee conjointement par l'editeur <strong>Strasyk</strong> et l'etablissement utilisateur.
+                  Il remplace toute reference a une auto-certification ou a la norme NF525 qui necessite une certification par organisme agree.
                 </p>
               </div>
             </CardContent>
@@ -462,36 +469,41 @@ export default function CertificationPage() {
                 ["TVA intracommunautaire", EDITEUR.tva],
                 ["RCS", EDITEUR.rcs],
                 ["Siege social", `${EDITEUR.adresse}, ${EDITEUR.ville}`],
-                ["Representant", EDITEUR.representant],
-                ["Logiciel", `${EDITEUR.logiciel} ${EDITEUR.version}`],
+                ["Activite", EDITEUR.activite],
+                ["Representant legal", EDITEUR.representant],
+                ["Logiciel / Module", `${EDITEUR.logiciel} - ${EDITEUR.module}`],
+                ["Version", `${EDITEUR.version} (${EDITEUR.dateVersion})`],
               ].map(([label, value]) => (
-                <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-b-0">
-                  <p className="text-slate-500">{label}</p>
-                  <p className="font-medium text-right text-slate-900">{value}</p>
+                <div key={label}>
+                  <p className="text-gray-500 text-xs">{label}</p>
+                  <p className="font-medium text-gray-900 text-xs">{value}</p>
                 </div>
               ))}
+              <p className="text-xs text-indigo-600 italic mt-1">
+                Cette attestation est etablie sous la responsabilite exclusive de l'editeur du logiciel.
+              </p>
             </CardContent>
           </Card>
 
-          <Card className="border-blue-200">
+          <Card className="border-emerald-200">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Shield className="w-5 h-5 text-blue-600" />
+                <User className="w-5 h-5 text-emerald-600" />
                 Etablissement utilisateur
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {[
-                ["Etablissement", displayedEstablishmentName],
+                ["Raison sociale", displayedEstablishmentName],
                 ["Enseigne", displayedEnseigneName],
-                ["Adresse", displayedAddress],
-                ["Telephone", profile?.telephone || 'Non renseigne'],
                 ["SIRET", profile?.siret || 'Non renseigne'],
                 ["TVA intracommunautaire", profile?.tva_intracommunautaire || 'Non renseigne'],
+                ["Responsable", displayedManagerName],
+                ["Email", currentUser?.email || 'Non renseigne'],
               ].map(([label, value]) => (
-                <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-b-0">
-                  <p className="text-slate-500">{label}</p>
-                  <p className="font-medium text-right text-slate-900">{value}</p>
+                <div key={label}>
+                  <p className="text-gray-500 text-xs">{label}</p>
+                  <p className="font-medium text-gray-900">{value}</p>
                 </div>
               ))}
             </CardContent>
@@ -499,30 +511,24 @@ export default function CertificationPage() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          <Card>
+          <Card className="border-blue-100">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5 text-green-600" />
-                Utilisateur certifie
+                <Shield className="w-5 h-5 text-blue-600" />
+                Mentions de conformite
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Nom complet</p>
-                <p className="font-semibold text-gray-900">{displayedManagerName}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="font-mono text-sm text-gray-900">{currentUser?.email || 'Non renseigne'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Qualite</p>
-                <p className="font-semibold text-gray-900">{displayedRole}</p>
-              </div>
+              <p className="text-sm text-gray-700">
+                Le logiciel respecte les exigences d'inalterabilite, de securisation, de conservation et d'archivage des donnees d'encaissement.
+              </p>
+              <p className="text-sm text-gray-700">
+                Le PDF telecharge reprend une structure d'attestation detaillee avec partie editeur, partie etablissement et zones de signature.
+              </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-slate-200">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-green-600" />
@@ -543,16 +549,15 @@ export default function CertificationPage() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {features.map((feature) => (
+          {featuresData.map((feature) => (
             <Card key={feature.title} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                  <div className={`p-2 bg-gradient-to-br ${feature.color} rounded-lg`}>
                     <feature.icon className="w-5 h-5 text-white" />
                   </div>
                   {feature.title}
                 </CardTitle>
-                <p className="text-sm text-gray-600">{feature.description}</p>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
@@ -574,7 +579,7 @@ export default function CertificationPage() {
               <div>
                 <h3 className="text-xl font-bold mb-2">Telecharger l'attestation</h3>
                 <p className="text-blue-100 text-sm">
-                  PDF nominatif avec l'editeur, l'etablissement utilisateur et les garanties techniques.
+                  Document officiel nominatif conforme a la loi anti-fraude a la TVA.
                 </p>
               </div>
               <Button
@@ -597,7 +602,7 @@ export default function CertificationPage() {
               <strong>Reference legale :</strong> Article 286 du Code General des Impots, modifie par l'arrete du 3 aout 2018.
             </p>
             <p>
-              <strong>Obligation :</strong> le logiciel de caisse doit garantir l'inalterabilite, la securisation, la conservation et l'archivage des donnees d'encaissement.
+              <strong>Obligation :</strong> depuis le 1er janvier 2018, les logiciels de caisse doivent etre conformes aux conditions d'inalterabilite, de securisation, de conservation et d'archivage des donnees.
             </p>
             <p>
               <strong>Conservation :</strong> cette attestation doit etre conservee et presentee en cas de controle fiscal pendant une duree minimale de 6 ans.
