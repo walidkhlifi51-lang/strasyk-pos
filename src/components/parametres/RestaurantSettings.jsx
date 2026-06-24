@@ -16,6 +16,8 @@ import DeliveryAppQRCode from './DeliveryAppQRCode';
 const RESTAURANT_PROFILE_SCHEMA_FIELDS = new Set([
     'tenant_id',
     'nom_etablissement',
+    'prenom_gerant',
+    'nom_gerant',
     'adresse',
     'ville',
     'telephone',
@@ -151,6 +153,8 @@ export default function RestaurantSettings({ data, onDataChange }) {
         } else {
             setLocalProfile({
                 nom_etablissement: '',
+                prenom_gerant: '',
+                nom_gerant: '',
                 adresse: '',
                 telephone: '',
                 siret: '',
@@ -526,6 +530,26 @@ export default function RestaurantSettings({ data, onDataChange }) {
                     <div className="space-y-2">
                         <Label htmlFor="ville">Ville</Label>
                         <Input id="ville" value={localProfile.ville || ''} onChange={(e) => handleFieldChange('ville', e.target.value)} placeholder="Ex: Paris" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="prenom_gerant">Prenom du gerant</Label>
+                            <Input
+                                id="prenom_gerant"
+                                value={localProfile.prenom_gerant || ''}
+                                onChange={(e) => handleFieldChange('prenom_gerant', e.target.value)}
+                                placeholder="Ex: Walid"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="nom_gerant">Nom du gerant</Label>
+                            <Input
+                                id="nom_gerant"
+                                value={localProfile.nom_gerant || ''}
+                                onChange={(e) => handleFieldChange('nom_gerant', e.target.value)}
+                                placeholder="Ex: Khlifi"
+                            />
+                        </div>
                     </div>
 
                     <div className="space-y-2 pt-4">

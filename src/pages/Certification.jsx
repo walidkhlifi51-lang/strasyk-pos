@@ -27,6 +27,8 @@ const CERTIFICATION_PROFILE_FIELDS = [
   'id',
   'tenant_id',
   'nom_etablissement',
+  'prenom_gerant',
+  'nom_gerant',
   'adresse',
   'ville',
   'telephone',
@@ -100,7 +102,10 @@ export default function CertificationPage() {
   const displayedEstablishmentName = establishmentName || 'Non renseigne';
   const displayedEnseigneName = enseigneName || establishmentName || 'Non renseigne';
   const displayedAddress = [profile?.adresse, profile?.ville].filter(Boolean).join(', ') || profile?.adresse || 'Non renseigne';
-  const displayedManagerName = currentUser?.full_name || 'Non renseigne';
+  const displayedManagerName = [profile?.prenom_gerant, profile?.nom_gerant]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || currentUser?.full_name || 'Non renseigne';
   const displayedCity = profile?.ville || '________________';
 
   const generatePDF = async () => {

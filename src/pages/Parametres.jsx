@@ -47,7 +47,7 @@ const PARAM_DELIVERY_PEOPLE_FIELDS = [
 ];
 
 const PARAM_PROFILE_FIELDS = [
-    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'ville', 'telephone', 'logo_url', 'page_pins',
+    'id', 'tenant_id', 'nom_etablissement', 'prenom_gerant', 'nom_gerant', 'adresse', 'ville', 'telephone', 'logo_url', 'page_pins',
     'siret', 'tva_intracommunautaire', 'frais_livraison', 'montant_minimum_livraison', 'zone_livraison_km',
     'impression_auto', 'impression_bouton_visible', 'impression_double', 'tva_rates',
     'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',

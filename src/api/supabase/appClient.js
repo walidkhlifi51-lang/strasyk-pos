@@ -63,7 +63,7 @@ const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV
 const LEGACY_ENTITY_FIELDS = {
   Tenant: ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'pos_suspended', 'slug', 'created_date', 'updated_date'],
   RestaurantProfile: [
-    'id', 'tenant_id', 'nom_etablissement', 'adresse', 'ville', 'telephone', 'logo_url', 'horaires',
+    'id', 'tenant_id', 'nom_etablissement', 'prenom_gerant', 'nom_gerant', 'adresse', 'ville', 'telephone', 'logo_url', 'horaires',
     'siret', 'tva_intracommunautaire', 'frais_livraison', 'montant_minimum_livraison', 'zone_livraison_km',
     'custom_domain', 'site_template', 'site_primary_color', 'site_subtitle', 'site_hero_images',
     'site_hero_source', 'site_hero_messages', 'site_video_url', 'site_video_titre', 'kiosk_primary_color',
