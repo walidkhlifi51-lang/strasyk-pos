@@ -10,9 +10,7 @@ import {
   CreditCard,
   FileText,
   History,
-  Plus,
   RotateCcw,
-  Trash2,
   Truck,
   User,
 } from 'lucide-react';
@@ -22,15 +20,12 @@ import { useTenant } from '@/components/contexts/TenantContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import NumericKeyboard from '../components/encaissements/NumericKeyboard';
 import { toParisDate } from '@/lib/dateParsing';
 
 const safeToFixed = (value, decimals = 2) => {
@@ -62,6 +57,13 @@ const LABELS = {
   cheque: 'Cheque',
   ticket_restaurant: 'Ticket restaurant',
 };
+
+const PAYMENT_METHOD_CONFIG = [
+  { key: 'especes', label: 'Especes', icon: Banknote, buttonClass: 'border-green-200 bg-green-50 text-green-700', totalClass: 'text-green-700' },
+  { key: 'carte_bancaire', label: 'Carte bancaire', icon: CreditCard, buttonClass: 'border-blue-200 bg-blue-50 text-blue-700', totalClass: 'text-blue-700' },
+  { key: 'cheque', label: 'Cheque', icon: CheckSquare, buttonClass: 'border-violet-200 bg-violet-50 text-violet-700', totalClass: 'text-violet-700' },
+  { key: 'ticket_restaurant', label: 'Ticket restaurant', icon: FileText, buttonClass: 'border-orange-200 bg-orange-50 text-orange-700', totalClass: 'text-orange-700' },
+];
 
 const emptyPayments = () => ({
   especes: [],
@@ -344,52 +346,45 @@ const DriverCalculatorView = ({
   showOrderStatus = false,
   allowDifference = false,
 }) => {
-  const [activeKeyboard, setActiveKeyboard] = useState(null);
+  const [keypadValue, setKeypadValue] = useState('');
 
   const getTotalByType = (type) => (payments[type] || []).reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-  const totalEntered = getTotalByType('especes') + getTotalByType('carte_bancaire') + getTotalByType('ticket_restaurant') + getTotalByType('cheque');
+  const totalEntered = PAYMENT_METHOD_CONFIG.reduce((sum, method) => sum + getTotalByType(method.key), 0);
   const difference = totalExpected - totalEntered;
+  const totalCommands = orders.length;
+  const isBalanced = Math.abs(difference) < 0.01;
+  const hasOverflow = difference < -0.01;
+  const parsedKeypadValue = Number.parseFloat(keypadValue);
+  const currentEntryAmount = Number.isFinite(parsedKeypadValue) ? parsedKeypadValue : 0;
 
-  const addPaymentLine = (type) => {
+  const setPaymentTotal = (type, amount) => {
+    const normalized = Number(amount) || 0;
     setPayments((prev) => ({
       ...prev,
-      [type]: [...prev[type], { id: String(Date.now()) + Math.random().toString(36).slice(2, 9), amount: '' }],
+      [type]: normalized > 0 ? [{ id: `${type}-total`, amount: normalized.toFixed(2) }] : [],
     }));
   };
 
-  const removePaymentLine = (type, id) => {
-    setPayments((prev) => ({
-      ...prev,
-      [type]: prev[type].filter((item) => item.id !== id),
-    }));
+  const addAmountToType = (type) => {
+    if (currentEntryAmount <= 0) return;
+    const nextTotal = getTotalByType(type) + currentEntryAmount;
+    setPaymentTotal(type, nextTotal);
+    setKeypadValue('');
   };
 
-  const updatePaymentLine = (type, id, value) => {
-    setPayments((prev) => ({
-      ...prev,
-      [type]: prev[type].map((item) => (item.id === id ? { ...item, amount: value } : item)),
-    }));
-  };
-
-  const performCalculation = (type, id) => {
-    const line = payments[type]?.find((item) => item.id === id);
-    if (!line || !String(line.amount).trim()) return;
-
-    const sanitized = String(line.amount).replace(/[^0-9\.\+\-\*\/]/g, '');
-    try {
-      const result = new Function(`return ${sanitized}`)();
-      updatePaymentLine(type, id, typeof result === 'number' && Number.isFinite(result) ? result.toFixed(2) : '');
-    } catch {
-      updatePaymentLine(type, id, '');
+  const handleKeypadInput = (key) => {
+    if (key === '.' && keypadValue.includes('.')) return;
+    if (key === '.' && keypadValue === '') {
+      setKeypadValue('0.');
+      return;
     }
+    setKeypadValue((prev) => `${prev}${key}`);
   };
 
-  const keyboardValue = useMemo(() => {
-    if (!activeKeyboard) return '';
-    const [type, id] = activeKeyboard.split('-');
-    const line = payments[type]?.find((item) => item.id === id);
-    return line?.amount || '';
-  }, [activeKeyboard, payments]);
+  const clearAllPayments = () => {
+    setPayments(emptyPayments());
+    setKeypadValue('');
+  };
 
   return (
     <div>
@@ -400,41 +395,96 @@ const DriverCalculatorView = ({
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">
-          <Card className="bg-gray-50 shadow-lg">
+          <Card className="border-0 bg-white shadow-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
                 <CreditCard className="h-5 w-5" />
                 {title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1 rounded-lg border bg-white p-4 text-center">
-                <p className="text-sm text-gray-600">Total theorique</p>
-                <p className="text-3xl font-bold text-blue-600">{safeToFixed(totalExpected)}€</p>
+            <CardContent className="space-y-5">
+              <div className="rounded-2xl bg-slate-900 px-6 py-5 text-white">
+                <p className="text-sm uppercase tracking-[0.18em] text-slate-300">Total a verifier</p>
+                <p className="mt-3 text-5xl font-black tracking-tight">{safeToFixed(totalExpected)} EUR</p>
+                <p className="mt-3 text-sm text-slate-300">{totalCommands} commande{totalCommands > 1 ? 's' : ''} - 1 livreur</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <PaymentSection type="especes" label="Especes" icon={Banknote} colorClass="text-green-600" payments={payments} getTotalByType={getTotalByType} addPaymentLine={addPaymentLine} removePaymentLine={removePaymentLine} updatePaymentLine={updatePaymentLine} activeKeyboard={activeKeyboard} setActiveKeyboard={setActiveKeyboard} performCalculation={performCalculation} />
-                <PaymentSection type="carte_bancaire" label="Carte Bancaire" icon={CreditCard} colorClass="text-blue-600" payments={payments} getTotalByType={getTotalByType} addPaymentLine={addPaymentLine} removePaymentLine={removePaymentLine} updatePaymentLine={updatePaymentLine} activeKeyboard={activeKeyboard} setActiveKeyboard={setActiveKeyboard} performCalculation={performCalculation} />
-                <PaymentSection type="ticket_restaurant" label="Tickets Resto" icon={FileText} colorClass="text-orange-600" payments={payments} getTotalByType={getTotalByType} addPaymentLine={addPaymentLine} removePaymentLine={removePaymentLine} updatePaymentLine={updatePaymentLine} activeKeyboard={activeKeyboard} setActiveKeyboard={setActiveKeyboard} performCalculation={performCalculation} />
-                <PaymentSection type="cheque" label="Cheques" icon={CheckSquare} colorClass="text-purple-600" payments={payments} getTotalByType={getTotalByType} addPaymentLine={addPaymentLine} removePaymentLine={removePaymentLine} updatePaymentLine={updatePaymentLine} activeKeyboard={activeKeyboard} setActiveKeyboard={setActiveKeyboard} performCalculation={performCalculation} />
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-lg font-bold text-slate-900">Verification du comptage</p>
+                    <p className="text-sm text-slate-500">Saisis un montant puis clique sur un mode de paiement.</p>
+                  </div>
+                  <Button type="button" variant="outline" onClick={clearAllPayments}>
+                    Effacer tout
+                  </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {PAYMENT_METHOD_CONFIG.map((method) => {
+                    const Icon = method.icon;
+                    return (
+                      <button
+                        key={method.key}
+                        type="button"
+                        onClick={() => addAmountToType(method.key)}
+                        className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-transform hover:-translate-y-0.5 ${method.buttonClass} ${currentEntryAmount > 0 ? 'ring-2 ring-offset-2 ring-slate-300' : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-xl bg-white/80 p-3">
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-base font-bold">{method.label}</p>
+                            <p className="text-xs opacity-80">Ajouter le montant en cours</p>
+                          </div>
+                        </div>
+                        <p className={`text-2xl font-black ${method.totalClass}`}>{safeToFixed(getTotalByType(method.key))} EUR</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="space-y-1 rounded-lg border bg-white p-4 text-center">
-                <p className="text-sm text-gray-600">Total saisi</p>
-                <p className="text-2xl font-bold text-gray-900">{safeToFixed(totalEntered)}€</p>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm text-slate-500">Total attendu</p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">{safeToFixed(totalExpected)} EUR</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm text-slate-500">Total saisi</p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">{safeToFixed(totalEntered)} EUR</p>
+                </div>
+                <div className={`rounded-2xl border p-4 ${isBalanced ? 'border-green-200 bg-green-50' : hasOverflow ? 'border-amber-200 bg-amber-50' : 'border-red-200 bg-red-50'}`}>
+                  <p className={`text-sm ${isBalanced ? 'text-green-700' : hasOverflow ? 'text-amber-700' : 'text-red-700'}`}>
+                    {isBalanced ? 'Comptage equilibre' : hasOverflow ? 'Surplus saisi' : 'Restant a saisir'}
+                  </p>
+                  <p className={`mt-2 text-3xl font-black ${isBalanced ? 'text-green-700' : hasOverflow ? 'text-amber-700' : 'text-red-700'}`}>
+                    {safeToFixed(Math.abs(difference))} EUR
+                  </p>
+                </div>
               </div>
 
-              <div className={`rounded-lg border p-3 text-center ${Math.abs(difference) < 0.01 ? 'border-green-200 bg-green-100' : 'border-red-200 bg-red-100'}`}>
-                <p className="text-sm">{difference > 0.01 ? 'Restant a saisir' : difference < -0.01 ? 'Trop percu' : 'Ecart'}</p>
-                <p className={`text-xl font-bold ${Math.abs(difference) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>{safeToFixed(difference)}€</p>
-              </div>
+              {!allowDifference && !isBalanced && (
+                <div className={`rounded-xl border px-4 py-3 text-sm ${hasOverflow ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                  {hasOverflow
+                    ? 'Le total saisi depasse le total attendu. Corrige le comptage avant validation.'
+                    : 'Le total saisi est inferieur au total attendu. Complete le comptage avant validation.'}
+                </div>
+              )}
+
+              {allowDifference && !isBalanced && (
+                <div className={`rounded-xl border px-4 py-3 text-sm ${hasOverflow ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                  {hasOverflow
+                    ? 'Verification en excedent detectee. L enregistrement reste autorise.'
+                    : 'Verification avec restant a saisir detectee. L enregistrement reste autorise.'}
+                </div>
+              )}
 
               {showValidation && (
                 <Button
                   onClick={onValidate}
-                  disabled={(!allowDifference && Math.abs(difference) > 0.01) || totalExpected === 0}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={(!allowDifference && !isBalanced) || totalExpected === 0}
+                  className="h-14 w-full bg-blue-600 text-base font-bold hover:bg-blue-700 disabled:bg-slate-300"
                 >
                   {actionLabel}
                 </Button>
@@ -457,6 +507,7 @@ const DriverCalculatorView = ({
                       <TableHead>Numero</TableHead>
                       <TableHead>Date</TableHead>
                       {showOrderStatus && <TableHead>Etat</TableHead>}
+                      <TableHead>Mode</TableHead>
                       <TableHead className="text-right">Montant</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -478,6 +529,7 @@ const DriverCalculatorView = ({
                             </div>
                           </TableCell>
                         )}
+                        <TableCell>{Array.isArray(order.mode_paiement) && order.mode_paiement.length > 0 ? order.mode_paiement.map((payment) => LABELS[payment.methode] || payment.methode).join(', ') : '-'}</TableCell>
                         <TableCell className="text-right font-semibold">{safeToFixed(order.total_ttc)}€</TableCell>
                       </TableRow>
                     ))}
@@ -488,33 +540,63 @@ const DriverCalculatorView = ({
           </Card>
         </div>
 
-        <div>
-          <NumericKeyboard
-            currentValue={keyboardValue}
-            onInput={(key) => {
-              if (!activeKeyboard) return;
-              const [type, id] = activeKeyboard.split('-');
-              const line = payments[type]?.find((item) => item.id === id);
-              updatePaymentLine(type, id, `${line?.amount || ''}${key}`);
-            }}
-            onClear={() => {
-              if (!activeKeyboard) return;
-              const [type, id] = activeKeyboard.split('-');
-              updatePaymentLine(type, id, '');
-            }}
-            onBackspace={() => {
-              if (!activeKeyboard) return;
-              const [type, id] = activeKeyboard.split('-');
-              const line = payments[type]?.find((item) => item.id === id);
-              updatePaymentLine(type, id, String(line?.amount || '').slice(0, -1));
-            }}
-            onEnter={() => {
-              if (!activeKeyboard) return;
-              const [type, id] = activeKeyboard.split('-');
-              performCalculation(type, id);
-              setActiveKeyboard(null);
-            }}
-          />
+        <div className="space-y-4">
+          <Card className="sticky top-8 border-0 shadow-xl">
+            <CardContent className="space-y-4 p-4">
+              <div className="rounded-2xl bg-slate-900 p-4 text-right text-white">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Montant en cours</p>
+                <p className="mt-2 text-4xl font-black">{keypadValue || '0'} EUR</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map((key) => (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant="outline"
+                    className="h-16 text-2xl font-bold"
+                    onClick={() => handleKeypadInput(key)}
+                  >
+                    {key}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-16 text-lg font-bold text-red-600"
+                  onClick={() => setKeypadValue((prev) => prev.slice(0, -1))}
+                >
+                  Suppr
+                </Button>
+              </div>
+              <Button type="button" variant="outline" className="h-12 w-full" onClick={() => setKeypadValue('')}>
+                Effacer tout
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl">
+            <CardHeader>
+              <CardTitle>Recapitulatif</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Total attendu</span>
+                <span className="font-bold text-slate-900">{safeToFixed(totalExpected)} EUR</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Total saisi</span>
+                <span className="font-bold text-slate-900">{safeToFixed(totalEntered)} EUR</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={isBalanced ? 'text-green-700' : hasOverflow ? 'text-amber-700' : 'text-red-700'}>
+                  {isBalanced ? 'Ecart' : hasOverflow ? 'Surplus' : 'Restant'}
+                </span>
+                <span className={`font-black ${isBalanced ? 'text-green-700' : hasOverflow ? 'text-amber-700' : 'text-red-700'}`}>
+                  {safeToFixed(Math.abs(difference))} EUR
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
