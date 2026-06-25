@@ -871,53 +871,6 @@ export default function ComptageCaisse() {
                         </p>
                       </div>
                     </div>
-                    <div className="hidden grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
-                      {Object.entries(PAYMENT_LABELS).map(([key, label]) => {
-                        const Icon = PAYMENT_ICONS[key];
-                        const counted = parseFloat(caisseCount[key]) || 0;
-                        const expected = stats.paymentBreakdown[key] || 0;
-                        const itemDifference = counted - expected;
-
-                        return (
-                          <div key={key} className="space-y-2">
-                            <Label htmlFor={key} className="flex items-center gap-2"><Icon className="w-4 h-4" /> {label}</Label>
-                            <Input
-                              id={key}
-                              type="text"
-                              placeholder="0.00"
-                              value={caisseCount[key]}
-                              onChange={(e) => setCaisseCount({...caisseCount, [key]: e.target.value})}
-                              onFocus={() => {
-                                setActiveInput(key);
-                                setKeyboardValue('');
-                              }}
-                              onBlur={() => handleInputBlur(key)}
-                              readOnly
-                            />
-                            {Math.abs(itemDifference) > 0.01 && (
-                               <div className="text-xs text-center p-1 bg-gray-100 rounded-md">
-                                 <span className="font-semibold text-gray-600">Attendu: {expected.toFixed(2)}€</span> /
-                                 <span className={`font-bold ${itemDifference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                   {' '}Écart: {itemDifference > 0 ? '+' : ''}{itemDifference.toFixed(2)}€
-                                 </span>
-                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <div className={`p-4 rounded-lg border text-center ${
-                      Math.abs(difference) < 0.01
-                        ? 'bg-green-100 border-green-200'
-                        : 'bg-red-100 border-red-200'
-                    }`}>
-                      <p className="text-sm font-medium">Écart Total</p>
-                      <p className={`text-2xl font-bold ${
-                        Math.abs(difference) < 0.01 ? 'text-green-700' : 'text-red-700'
-                      }`}>
-                        {difference.toFixed(2)}€
-                      </p>
-                    </div>
                   </CardContent>
                 </Card>
 
@@ -974,15 +927,6 @@ export default function ComptageCaisse() {
                     </Button>
                   </CardContent>
                 </Card>
-                <div className="hidden">
-                  <NumericKeyboard
-                    currentValue={keypadValue}
-                    onInput={handleKeypadInput}
-                    onBackspace={handleKeypadBackspace}
-                    onClear={handleKeypadClear}
-                    onEnter={() => {}}
-                  />
-                </div>
                 <Card className="shadow-lg">
                    <CardHeader>
                     <CardTitle className="flex items-center gap-3 text-base">
@@ -1031,3 +975,4 @@ export default function ComptageCaisse() {
     </div>
   );
 }
+
