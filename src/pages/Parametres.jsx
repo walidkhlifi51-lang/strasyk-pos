@@ -68,7 +68,8 @@ const PARAM_PROFILE_FALLBACK_FIELDS = PARAM_PROFILE_FIELDS.filter(
 
 const isMissingColumnError = (error, columnName) => {
     const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
-    return message.includes(`Could not find the '${columnName}' column`);
+    return message.includes(`Could not find the '${columnName}' column`)
+        || new RegExp(`column\\s+(?:[\\w]+\\.)?${columnName}\\s+does not exist`, 'i').test(message);
 };
 
 const tabs = [

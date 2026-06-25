@@ -43,7 +43,8 @@ const CERTIFICATION_PROFILE_FALLBACK_FIELDS = CERTIFICATION_PROFILE_FIELDS.filte
 
 const isMissingColumnError = (error, columnName) => {
   const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
-  return message.includes(`Could not find the '${columnName}' column`);
+  return message.includes(`Could not find the '${columnName}' column`)
+    || new RegExp(`column\\s+(?:[\\w]+\\.)?${columnName}\\s+does not exist`, 'i').test(message);
 };
 
 const addWrappedText = (doc, text, x, y, maxWidth, lineHeight = 5.5) => {

@@ -126,8 +126,11 @@ const resolveLegacyFields = (entityName) => UNIQUE_SELECT_FIELDS([
 const parseMissingColumnError = (error) => {
   if (!error) return null;
   const message = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
-  const match = message.match(/Could not find the '([^']+)' column/i);
-  return match?.[1] || null;
+  const schemaCacheMatch = message.match(/Could not find the '([^']+)' column/i);
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1];
+
+  const relationMatch = message.match(/column\s+(?:[\w]+\.)?([\w]+)\s+does not exist/i);
+  return relationMatch?.[1] || null;
 };
 
 const warnMissingColumn = (entityName, columnName, contextKey) => {
