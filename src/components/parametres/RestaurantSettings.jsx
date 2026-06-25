@@ -91,6 +91,8 @@ const LEGACY_OPTIONAL_PROFILE_FIELDS = new Set([
     'kiosk_terminal_welcome_images',
 ]);
 
+const PROFILE_ID_LOOKUP_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
+
 const areValuesEqual = (left, right) => {
     if (left === right) return true;
     if (Array.isArray(left) || Array.isArray(right) || (left && typeof left === 'object') || (right && typeof right === 'object')) {
@@ -286,6 +288,19 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 }),
             ]);
 
+            const resolveExistingProfileId = async () => {
+                const existingProfiles = await runWithTimeout(
+                    appClient.entities.RestaurantProfile.filter(
+                        { tenant_id: currentTenant.id },
+                        '-updated_date',
+                        5,
+                        { fields: PROFILE_ID_LOOKUP_FIELDS }
+                    ),
+                    "La recherche du profil"
+                );
+                return existingProfiles?.[0]?.id || null;
+            };
+
             const saveProfileWithSchemaFallback = async (profileId, basePayload) => {
                 let attemptPayload = { ...basePayload };
                 const removedColumns = [];
@@ -318,7 +333,7 @@ export default function RestaurantSettings({ data, onDataChange }) {
                 }
             };
 
-            const targetProfileId = localProfile?.id || profile?.id || null;
+            const targetProfileId = localProfile?.id || profile?.id || await resolveExistingProfileId();
             const updatePayload = targetProfileId
                 ? Object.fromEntries(
                     Object.entries(payload).filter(([key, value]) => key === 'tenant_id' || !areValuesEqual(profile?.[key], value))
