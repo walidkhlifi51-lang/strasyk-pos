@@ -51,6 +51,10 @@ const POS_ORDER_FIELDS = [
   'created_date', 'updated_date'
 ];
 
+const POS_ORDER_GUARD_FIELDS = [
+  'id', 'tenant_id', 'numero_caisse', 'created_date', 'statut'
+];
+
 const POS_CUSTOMER_FIELDS = [
   'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville',
   'etage', 'interphone', 'adresses', 'created_date', 'updated_date'
@@ -105,6 +109,8 @@ const POS_CLOTURE_FIELDS = [
   'id', 'tenant_id', 'date_cloture', 'statut', 'montant_theorique', 'montant_reel', 'ecarts',
   'created_by', 'notes', 'created_date', 'updated_date'
 ];
+
+const POS_CLOTURE_GUARD_LOOKBACK_DAYS = 45;
 
 const CUSTOMER_DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
 const CUSTOMER_DISPLAY_CART_ID_PREFIX = 'customer_display_cart_id';
@@ -238,12 +244,16 @@ export default function StrasykPos() {
   }, [currentOrder]);
 
   const { data: posData, isLoading: isLoadingPosData, isFetching: isFetchingPosData, error: loadingError, refetch: refreshData } = useQuery({
-    queryKey: ['posData', currentTenant?.id, format(workingDate, 'yyyy-MM-dd', { locale: fr })],
+    queryKey: ['posData', currentTenant?.id, format(workingDate, 'yyyy-MM-dd', { locale: fr }), profile?.simulation_date || null],
     queryFn: async () => {
       try {
         const cachedOfflineOrders = getCachedData('offlineOrders') || [];
         const workingDayStart = startOfDay(workingDate);
         const workingDayEnd = endOfDay(workingDate);
+        const referenceDate = profile?.simulation_date ? parseISO(profile.simulation_date) : new Date();
+        const referenceDateInParis = toParisDateValue(referenceDate);
+        const orderGuardStart = new Date(referenceDateInParis);
+        orderGuardStart.setDate(orderGuardStart.getDate() - POS_CLOTURE_GUARD_LOOKBACK_DAYS);
         const orderScope = {
           ...filterByTenant(),
           created_date: {
@@ -251,13 +261,29 @@ export default function StrasykPos() {
             $lte: workingDayEnd.toISOString(),
           },
         };
-        const [productsData, categoriesData, allOrdersData, customersData] = await Promise.all([
+        const orderGuardScope = {
+          ...filterByTenant(),
+          created_date: {
+            $gte: startOfDay(orderGuardStart).toISOString(),
+            $lte: endOfDay(referenceDateInParis).toISOString(),
+          },
+        };
+        const [productsData, categoriesData, allOrdersData, orderGuardData, customersData] = await Promise.all([
           appClient.entities.Product.filter(filterByTenant(), null, null, { fields: POS_PRODUCTS_FIELDS }).catch(() => []),
           appClient.entities.Category.filter(filterByTenant(), null, null, { fields: POS_CATEGORIES_FIELDS }).catch(() => []),
           appClient.entities.Order.filter(orderScope, '-created_date', 200, { fields: POS_ORDER_FIELDS }).catch(() => []),
+          appClient.entities.Order.filter(orderGuardScope, '-created_date', 1000, { fields: POS_ORDER_GUARD_FIELDS }).catch(() => []),
           appClient.entities.Customer.filter(filterByTenant(), '-updated_date', 250, { fields: POS_CUSTOMER_FIELDS }).catch(() => []),
         ]);
         const combinedOrders = [...allOrdersData, ...cachedOfflineOrders];
+        const orderGuardMap = new Map();
+        [...(orderGuardData || []), ...combinedOrders].forEach((order, index) => {
+          if (!order?.created_date) return;
+          const key = order.id || `${order.created_date}-${order.numero_caisse || index}`;
+          if (!orderGuardMap.has(key)) {
+            orderGuardMap.set(key, order);
+          }
+        });
         await new Promise(resolve => setTimeout(resolve, 100));
         const [clotureData, optionGroupsData, optionItemsData, ingredientsData, productIngredientsData] = await Promise.all([
           appClient.entities.ClotureCaisse.filter(filterByTenant(), null, null, { fields: POS_CLOTURE_FIELDS }).catch(() => []),
@@ -294,6 +320,7 @@ export default function StrasykPos() {
           products: productsData || [],
           categories: categoriesData || [],
           allOrders: combinedOrders || [],
+          orderGuardHistory: [...orderGuardMap.values()],
           customers: customersData || [],
           cloture: clotureData || [],
           optionGroups: optionGroupsData || [],
@@ -321,7 +348,7 @@ export default function StrasykPos() {
   });
 
   const {
-    products = [], categories = [], allOrders = [], customers: customersList = [], cloture = [],
+    products = [], categories = [], allOrders = [], orderGuardHistory = [], customers: customersList = [], cloture = [],
     optionGroups = [], optionItems = [], ingredients = [], productIngredients = [],
     menuFormulas = [], menuItems = [], offers = [], loyaltyRules = [], cagnotteRule = null,
     tables: allTables = []
@@ -367,7 +394,7 @@ export default function StrasykPos() {
     const todayStr = format(todayInParis, 'yyyy-MM-dd');
 
     const allUniqueOrderDates = [...new Set(
-      (allOrders || []).filter(o => o && o.created_date).map(o => {
+      (orderGuardHistory || []).filter(o => o && o.created_date && o.statut !== 'annulee').map(o => {
         const d = parseSupabaseDate(o.created_date);
         if (!d) return null;
         return format(toParisDate(d), 'yyyy-MM-dd');
@@ -397,7 +424,7 @@ export default function StrasykPos() {
 
     const unclosedDays = allUniqueOrderDates.filter(date => date < todayStr && !closedDates.has(date)).sort();
     const workingDateInParisStr = format(workingDateInParis, 'yyyy-MM-dd');
-    const hasOrdersForWorkingDay = allUniqueOrderDates.includes(workingDateInParisStr);
+    const hasOrdersForWorkingDay = orders.length > 0 || allUniqueOrderDates.includes(workingDateInParisStr);
     const isCurrentDayClosedForPOS = closedDates.has(workingDateInParisStr) && hasOrdersForWorkingDay;
     const isDateClosed = isCurrentDayClosedForPOS || unclosedDays.length > 0;
 
@@ -411,6 +438,23 @@ export default function StrasykPos() {
       toast({ title: "Erreur de chargement", description: `Une erreur est survenue: ${loadingError.message}.`, variant: "destructive" });
     }
   }, [loadingError, toast]);
+
+  useEffect(() => {
+    if (profile?.simulation_date || typeof window === 'undefined') return undefined;
+
+    const nowInParis = toParisDateValue(new Date());
+    const nextMidnightInParis = new Date(nowInParis);
+    nextMidnightInParis.setDate(nextMidnightInParis.getDate() + 1);
+    nextMidnightInParis.setHours(0, 0, 5, 0);
+
+    const timeoutMs = Math.max(1000, nextMidnightInParis.getTime() - nowInParis.getTime());
+    const timeoutId = window.setTimeout(() => {
+      setWorkingDate(new Date());
+      refreshData();
+    }, timeoutMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [workingDate, profile?.simulation_date, refreshData]);
 
   useEffect(() => {
     if (!currentTenant?.id) return undefined;
