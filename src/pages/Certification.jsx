@@ -37,6 +37,15 @@ const CERTIFICATION_PROFILE_FIELDS = [
   'updated_date',
 ];
 
+const CERTIFICATION_PROFILE_FALLBACK_FIELDS = CERTIFICATION_PROFILE_FIELDS.filter(
+  (field) => field !== 'prenom_gerant' && field !== 'nom_gerant'
+);
+
+const isMissingColumnError = (error, columnName) => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  return message.includes(`Could not find the '${columnName}' column`);
+};
+
 const addWrappedText = (doc, text, x, y, maxWidth, lineHeight = 5.5) => {
   const lines = doc.splitTextToSize(text, maxWidth);
   lines.forEach((line) => {
@@ -86,12 +95,26 @@ export default function CertificationPage() {
   const { data: profile } = useQuery({
     queryKey: ['profile', currentTenant?.id],
     queryFn: async () => {
-      const profiles = await appClient.entities.RestaurantProfile.filter(
-        { tenant_id: currentTenant?.id },
-        '-updated_date',
-        1,
-        { fields: CERTIFICATION_PROFILE_FIELDS }
-      );
+      let profiles;
+      try {
+        profiles = await appClient.entities.RestaurantProfile.filter(
+          { tenant_id: currentTenant?.id },
+          '-updated_date',
+          1,
+          { fields: CERTIFICATION_PROFILE_FIELDS }
+        );
+      } catch (error) {
+        if (isMissingColumnError(error, 'prenom_gerant') || isMissingColumnError(error, 'nom_gerant')) {
+          profiles = await appClient.entities.RestaurantProfile.filter(
+            { tenant_id: currentTenant?.id },
+            '-updated_date',
+            1,
+            { fields: CERTIFICATION_PROFILE_FALLBACK_FIELDS }
+          );
+        } else {
+          throw error;
+        }
+      }
       return profiles?.[0] || null;
     },
     enabled: !!currentTenant?.id,

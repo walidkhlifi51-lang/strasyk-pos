@@ -62,6 +62,15 @@ const PARAM_PROFILE_FIELDS = [
     'updated_date', 'created_date'
 ];
 
+const PARAM_PROFILE_FALLBACK_FIELDS = PARAM_PROFILE_FIELDS.filter(
+    (field) => field !== 'prenom_gerant' && field !== 'nom_gerant'
+);
+
+const isMissingColumnError = (error, columnName) => {
+    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+    return message.includes(`Could not find the '${columnName}' column`);
+};
+
 const tabs = [
     { name: 'restaurant', label: 'Établissement', icon: Store, component: RestaurantSettings, requiredData: ['profile'] },
     { name: 'products', label: 'Produits', icon: Package, component: ProductManager, requiredData: ['products', 'categories', 'ingredients', 'profile'] },
@@ -111,7 +120,26 @@ export default function Parametres() {
                 appClient.entities.Category.filter(filterByTenant(), null, null, { fields: PARAM_CATEGORIES_FIELDS }).catch(() => []),
                 appClient.entities.Ingredient.filter(filterByTenant(), null, null, { fields: PARAM_INGREDIENTS_FIELDS }).catch(() => []),
                 appClient.entities.DeliveryPerson.filter(filterByTenant(), null, null, { fields: PARAM_DELIVERY_PEOPLE_FIELDS }).catch(() => []),
-                appClient.entities.RestaurantProfile.filter(filterByTenant(), '-updated_date', 5, { fields: PARAM_PROFILE_FIELDS }).catch(() => [])
+                (async () => {
+                    try {
+                        return await appClient.entities.RestaurantProfile.filter(
+                            filterByTenant(),
+                            '-updated_date',
+                            5,
+                            { fields: PARAM_PROFILE_FIELDS }
+                        );
+                    } catch (error) {
+                        if (isMissingColumnError(error, 'prenom_gerant') || isMissingColumnError(error, 'nom_gerant')) {
+                            return await appClient.entities.RestaurantProfile.filter(
+                                filterByTenant(),
+                                '-updated_date',
+                                5,
+                                { fields: PARAM_PROFILE_FALLBACK_FIELDS }
+                            );
+                        }
+                        throw error;
+                    }
+                })().catch(() => [])
             ]);
             
             const profile = profileList?.[0] || null;
