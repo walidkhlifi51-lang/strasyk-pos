@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -19,7 +17,6 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import NumericKeyboard from "../components/encaissements/NumericKeyboard";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useTenant } from "../components/contexts/TenantContext";
@@ -42,6 +39,13 @@ const PAYMENT_ICONS = {
   cheque: CheckSquare,
   ticket_restaurant: FileText
 };
+
+const PAYMENT_METHOD_CONFIG = [
+  { key: 'especes', label: 'Espèces', icon: Banknote, buttonClass: 'border-green-200 bg-green-50 text-green-700', totalClass: 'text-green-700' },
+  { key: 'carte_bancaire', label: 'Carte bancaire', icon: CreditCard, buttonClass: 'border-blue-200 bg-blue-50 text-blue-700', totalClass: 'text-blue-700' },
+  { key: 'cheque', label: 'Chèque', icon: CheckSquare, buttonClass: 'border-violet-200 bg-violet-50 text-violet-700', totalClass: 'text-violet-700' },
+  { key: 'ticket_restaurant', label: 'Ticket restaurant', icon: FileText, buttonClass: 'border-orange-200 bg-orange-50 text-orange-700', totalClass: 'text-orange-700' },
+];
 
 export default function ComptageCaisse() {
   const { withTenant, filterByTenant, currentTenant, currentUser } = useTenant();
@@ -72,8 +76,7 @@ export default function ComptageCaisse() {
     cheque: '',
     ticket_restaurant: ''
   });
-  const [activeInput, setActiveInput] = useState(null);
-  const [keyboardValue, setKeyboardValue] = useState('');
+  const [keypadValue, setKeypadValue] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [includeAllDeliveries, setIncludeAllDeliveries] = useState(false);
@@ -268,67 +271,44 @@ export default function ComptageCaisse() {
 
   const isLoading = isLoadingOrders || isLoadingCloture || isLoadingLastCloture;
 
-  const performKeyboardCalculation = () => {
-    if (typeof keyboardValue !== 'string' || !keyboardValue) return 0;
+  const currentEntryAmount = Number.isFinite(Number.parseFloat(keypadValue)) ? Number.parseFloat(keypadValue) : 0;
 
-    try {
-      const sanitizedValue = keyboardValue.replace(/[^0-9\.\+\-\*\/]/g, '');
-      const result = new Function(`return ${sanitizedValue}`)();
-      if (typeof result === 'number' && isFinite(result)) {
-        return result;
-      }
-      return null;
-    } catch (e) {
-      console.error("Expression invalide dans le clavier:", e);
-      return null;
+  const handleKeypadInput = (value) => {
+    if (value === '.' && keypadValue.includes('.')) return;
+    if (value === '.' && keypadValue === '') {
+      setKeypadValue('0.');
+      return;
     }
+    setKeypadValue(prev => prev + value);
   };
 
-  const handleKeyboardInput = (value) => {
-    setKeyboardValue(prev => prev + value);
+  const handleKeypadBackspace = () => {
+    setKeypadValue(prev => prev.slice(0, -1));
   };
 
-  const handleKeyboardBackspace = () => {
-    setKeyboardValue(prev => prev.slice(0, -1));
+  const handleKeypadClear = () => {
+    setKeypadValue('');
   };
 
-  const handleKeyboardClear = () => {
-    setKeyboardValue('');
+  const clearAllCountedPayments = () => {
+    setCaisseCount({
+      especes: '',
+      carte_bancaire: '',
+      cheque: '',
+      ticket_restaurant: ''
+    });
+    setKeypadValue('');
   };
 
-  const handleKeyboardEnter = () => {
-    if (activeInput) {
-      const calculatedAmount = performKeyboardCalculation();
-      if (calculatedAmount === null) {
-        setKeyboardValue('');
-        return;
-      }
-
-      const currentAmountInField = parseFloat(caisseCount[activeInput]) || 0;
-      const newTotal = currentAmountInField + calculatedAmount;
-
-      setCaisseCount(prev => ({
-        ...prev,
-        [activeInput]: newTotal.toFixed(2)
-      }));
-
-      setKeyboardValue('');
-    }
-  };
-
-  const handleInputBlur = (key) => {
-    const value = caisseCount[key];
-    if (typeof value === 'string' && (value.includes('+') || value.includes('-') || value.includes('*') || value.includes('/'))) {
-       try {
-        const sanitizedValue = value.replace(/[^0-9\.\+\-\*\/]/g, '');
-        const result = new Function(`return ${sanitizedValue}`)();
-        if (typeof result === 'number' && isFinite(result)) {
-          setCaisseCount(prev => ({...prev, [key]: result.toFixed(2)}));
-        }
-       } catch (e) {
-        console.error("Expression invalide dans le champ:", e);
-       }
-    }
+  const addAmountToType = (type) => {
+    if (currentEntryAmount <= 0) return;
+    const currentAmountInField = parseFloat(caisseCount[type]) || 0;
+    const newTotal = currentAmountInField + currentEntryAmount;
+    setCaisseCount(prev => ({
+      ...prev,
+      [type]: newTotal.toFixed(2)
+    }));
+    setKeypadValue('');
   };
 
   const stats = useMemo(() => {
@@ -807,7 +787,91 @@ export default function ComptageCaisse() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                    <div className="rounded-2xl bg-slate-900 px-6 py-5 text-white">
+                      <p className="text-sm uppercase tracking-[0.18em] text-slate-300">Total a verifier</p>
+                      <p className="mt-3 text-5xl font-black tracking-tight">{stats.totalExpected.toFixed(2)} EUR</p>
+                      <p className="mt-3 text-sm text-slate-300">{ordersOfDay.length} commande{ordersOfDay.length > 1 ? 's' : ''} - caisse du jour</p>
+                    </div>
+                    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-bold text-slate-900">Verification du comptage</p>
+                          <p className="text-sm text-slate-500">Saisis un montant puis clique sur un mode de paiement.</p>
+                        </div>
+                        <Button type="button" variant="outline" onClick={clearAllCountedPayments}>
+                          Effacer tout
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {PAYMENT_METHOD_CONFIG.map((method) => {
+                          const Icon = method.icon;
+                          const counted = parseFloat(caisseCount[method.key]) || 0;
+                          const expected = stats.paymentBreakdown[method.key] || 0;
+                          const itemDifference = counted - expected;
+                          return (
+                            <button
+                              key={method.key}
+                              type="button"
+                              onClick={() => addAmountToType(method.key)}
+                              className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-transform hover:-translate-y-0.5 ${method.buttonClass} ${currentEntryAmount > 0 ? 'ring-2 ring-offset-2 ring-slate-300' : ''}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="rounded-xl bg-white/80 p-3">
+                                  <Icon className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <p className="text-base font-bold">{method.label}</p>
+                                  <p className="text-xs opacity-80">Attendu {expected.toFixed(2)} EUR</p>
+                                  {Math.abs(itemDifference) > 0.01 && (
+                                    <p className={`text-xs font-semibold ${itemDifference > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                      Ecart {itemDifference > 0 ? '+' : ''}{itemDifference.toFixed(2)} EUR
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <p className={`text-2xl font-black ${method.totalClass}`}>{counted.toFixed(2)} EUR</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-sm text-slate-500">Total attendu</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{stats.totalExpected.toFixed(2)} EUR</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-sm text-slate-500">Total saisi</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{countedTotal.toFixed(2)} EUR</p>
+                      </div>
+                      <div className={`rounded-2xl border p-4 ${
+                        Math.abs(difference) < 0.01
+                          ? 'border-green-200 bg-green-50'
+                          : difference > 0
+                            ? 'border-green-200 bg-green-50'
+                            : 'border-red-200 bg-red-50'
+                      }`}>
+                        <p className={`text-sm ${
+                          Math.abs(difference) < 0.01
+                            ? 'text-green-700'
+                            : difference > 0
+                              ? 'text-green-700'
+                              : 'text-red-700'
+                        }`}>
+                          {Math.abs(difference) < 0.01 ? 'Comptage equilibre' : difference > 0 ? 'Surplus' : 'Restant a saisir'}
+                        </p>
+                        <p className={`mt-2 text-3xl font-black ${
+                          Math.abs(difference) < 0.01
+                            ? 'text-green-700'
+                            : difference > 0
+                              ? 'text-green-700'
+                              : 'text-red-700'
+                        }`}>
+                          {Math.abs(difference).toFixed(2)} EUR
+                        </p>
+                      </div>
+                    </div>
+                    <div className="hidden grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
                       {Object.entries(PAYMENT_LABELS).map(([key, label]) => {
                         const Icon = PAYMENT_ICONS[key];
                         const counted = parseFloat(caisseCount[key]) || 0;
@@ -878,13 +942,47 @@ export default function ComptageCaisse() {
               </div>
 
               <div className="lg:col-span-1 space-y-6">
-                <NumericKeyboard
-                  currentValue={keyboardValue}
-                  onInput={handleKeyboardInput}
-                  onBackspace={handleKeyboardBackspace}
-                  onClear={handleKeyboardClear}
-                  onEnter={handleKeyboardEnter}
-                />
+                <Card className="sticky top-8 border-0 shadow-xl">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="rounded-2xl bg-slate-900 p-4 text-right text-white">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Montant en cours</p>
+                      <p className="mt-2 text-4xl font-black">{keypadValue || '0'} EUR</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map((key) => (
+                        <Button
+                          key={key}
+                          type="button"
+                          variant="outline"
+                          className="h-16 text-2xl font-bold"
+                          onClick={() => handleKeypadInput(key)}
+                        >
+                          {key}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-16 text-lg font-bold text-red-600"
+                        onClick={handleKeypadBackspace}
+                      >
+                        Suppr
+                      </Button>
+                    </div>
+                    <Button type="button" variant="outline" className="h-12 w-full" onClick={handleKeypadClear}>
+                      Effacer tout
+                    </Button>
+                  </CardContent>
+                </Card>
+                <div className="hidden">
+                  <NumericKeyboard
+                    currentValue={keypadValue}
+                    onInput={handleKeypadInput}
+                    onBackspace={handleKeypadBackspace}
+                    onClear={handleKeypadClear}
+                    onEnter={() => {}}
+                  />
+                </div>
                 <Card className="shadow-lg">
                    <CardHeader>
                     <CardTitle className="flex items-center gap-3 text-base">
