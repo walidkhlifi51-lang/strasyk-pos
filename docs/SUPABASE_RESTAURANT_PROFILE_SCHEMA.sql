@@ -2,6 +2,8 @@ begin;
 
 alter table public.restaurant_profiles
   add column if not exists logo_url text,
+  add column if not exists prenom_gerant text,
+  add column if not exists nom_gerant text,
   add column if not exists siret text,
   add column if not exists tva_intracommunautaire text,
   add column if not exists kiosk_welcome_message text,
