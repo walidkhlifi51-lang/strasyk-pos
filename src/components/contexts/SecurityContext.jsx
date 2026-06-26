@@ -15,6 +15,8 @@ const SECURITY_PROFILE_FIELDS = [
   'page_pins',
   'customer_display_enabled',
   'manages_deliveries',
+  'manages_table_plan',
+  'table_plan_allowed',
   'frais_livraison',
   'tva_rates',
   'prix_differencies_par_mode',
