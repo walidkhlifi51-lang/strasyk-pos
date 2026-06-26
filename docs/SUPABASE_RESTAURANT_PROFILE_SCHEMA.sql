@@ -24,6 +24,9 @@ alter table public.restaurant_profiles
   add column if not exists table_plan_allowed boolean not null default false,
   add column if not exists bipeur_enabled boolean not null default false,
   add column if not exists customer_display_enabled boolean not null default false,
+  add column if not exists customer_display_images jsonb not null default '[]'::jsonb,
+  add column if not exists customer_display_color text,
+  add column if not exists customer_display_info_message text,
   add column if not exists manages_web_ordering boolean not null default false,
   add column if not exists web_ordering_closed boolean not null default false,
   add column if not exists web_frais_livraison_enabled boolean not null default false,
@@ -38,7 +41,8 @@ alter table public.restaurant_profiles
 
 alter table public.restaurant_profiles
   alter column kiosk_welcome_images set default '[]'::jsonb,
-  alter column kiosk_terminal_welcome_images set default '[]'::jsonb;
+  alter column kiosk_terminal_welcome_images set default '[]'::jsonb,
+  alter column customer_display_images set default '[]'::jsonb;
 
 update public.restaurant_profiles
 set kiosk_welcome_images = '[]'::jsonb
@@ -55,5 +59,9 @@ where kiosk_terminal_welcome_images is null
 update public.restaurant_profiles
 set kiosk_terminal_welcome_images = '[]'::jsonb
 where kiosk_terminal_welcome_images is null;
+
+update public.restaurant_profiles
+set customer_display_images = '[]'::jsonb
+where customer_display_images is null;
 
 commit;

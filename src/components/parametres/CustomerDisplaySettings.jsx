@@ -21,6 +21,13 @@ export default function CustomerDisplaySettings({ data, onDataChange, withTenant
   });
   const [uploading, setUploading] = useState(false);
 
+  const isMissingDisplayColumnError = (error) => {
+    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+    return /customer_display_images/i.test(message)
+      || /customer_display_color/i.test(message)
+      || /customer_display_info_message/i.test(message);
+  };
+
   useEffect(() => {
     if (profile) {
       setSettings({
@@ -61,7 +68,9 @@ export default function CustomerDisplaySettings({ data, onDataChange, withTenant
       console.error('❌ [CustomerDisplaySettings] Erreur sauvegarde:', error);
       toast({
         title: '❌ Erreur',
-        description: error.message,
+        description: isMissingDisplayColumnError(error)
+          ? "Les colonnes SQL de l'ecran client manquent encore dans restaurant_profiles. Appliquez la migration Supabase de restaurant profile."
+          : error.message,
         variant: 'destructive',
       });
     }
