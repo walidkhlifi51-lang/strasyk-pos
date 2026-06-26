@@ -114,11 +114,13 @@ const POS_CLOTURE_GUARD_LOOKBACK_DAYS = 45;
 
 const CUSTOMER_DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
 const CUSTOMER_DISPLAY_CART_ID_PREFIX = 'customer_display_cart_id';
+const CUSTOMER_DISPLAY_LIVE_CART_PREFIX = 'customer_display_live_cart';
 const CUSTOMER_DISPLAY_HEARTBEAT_TTL_MS = 90 * 1000;
 const CUSTOMER_DISPLAY_SYNC_DEBOUNCE_MS = 800;
 
 const getCustomerDisplayHeartbeatKey = (tenantId) => `${CUSTOMER_DISPLAY_HEARTBEAT_PREFIX}:${tenantId}`;
 const getCustomerDisplayCartIdKey = (tenantId) => `${CUSTOMER_DISPLAY_CART_ID_PREFIX}:${tenantId}`;
+const getCustomerDisplayLiveCartKey = (tenantId) => `${CUSTOMER_DISPLAY_LIVE_CART_PREFIX}:${tenantId}`;
 
 const isCustomerDisplayHeartbeatFresh = (tenantId) => {
   if (!tenantId || typeof window === 'undefined') return false;
@@ -159,6 +161,7 @@ export default function StrasykPos() {
   const customerDisplaySyncTimeoutRef = useRef(null);
   const customerDisplayCartRowIdRef = useRef(null);
   const lastCustomerDisplayPayloadRef = useRef(null);
+  const customerDisplayBroadcastRef = useRef(null);
   const [isCustomerDisplayActive, setIsCustomerDisplayActive] = useState(false);
   
   useEffect(() => {
@@ -182,6 +185,32 @@ export default function StrasykPos() {
     const intervalId = window.setInterval(updateActiveState, 10000);
     return () => window.clearInterval(intervalId);
   }, [profile?.customer_display_enabled, currentTenant?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !currentTenant?.id || !profile?.customer_display_enabled) return undefined;
+
+    if ('BroadcastChannel' in window) {
+      customerDisplayBroadcastRef.current = new BroadcastChannel(`customer-display-live-${currentTenant.id}`);
+    }
+
+    return () => {
+      customerDisplayBroadcastRef.current?.close?.();
+      customerDisplayBroadcastRef.current = null;
+    };
+  }, [currentTenant?.id, profile?.customer_display_enabled]);
+
+  useEffect(() => {
+    if (!profile?.customer_display_enabled || !currentTenant?.id || typeof window === 'undefined') return undefined;
+
+    const payload = {
+      tenantId: currentTenant.id,
+      cartData: currentOrder?.articles?.length > 0 ? currentOrder : null,
+      emittedAt: new Date().toISOString(),
+    };
+
+    customerDisplayBroadcastRef.current?.postMessage?.(payload);
+    window.localStorage.setItem(getCustomerDisplayLiveCartKey(currentTenant.id), JSON.stringify(payload));
+  }, [currentOrder, currentTenant?.id, profile?.customer_display_enabled]);
 
   useEffect(() => {
     if (!profile?.customer_display_enabled || !currentTenant?.id) return undefined;

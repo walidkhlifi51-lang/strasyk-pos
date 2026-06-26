@@ -26,8 +26,10 @@ const CART_FIELDS = [
 const DISPLAY_FALLBACK_MS = 60000;
 const DISPLAY_HEARTBEAT_MS = 30000;
 const DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
+const DISPLAY_LIVE_CART_PREFIX = 'customer_display_live_cart';
 
 const getDisplayHeartbeatKey = (tenantId) => `${DISPLAY_HEARTBEAT_PREFIX}:${tenantId || 'global'}`;
+const getDisplayLiveCartKey = (tenantId) => `${DISPLAY_LIVE_CART_PREFIX}:${tenantId || 'global'}`;
 
 const toDisplaySettings = (profile) => ({
   images: Array.isArray(profile?.customer_display_images) ? profile.customer_display_images : [],
@@ -78,6 +80,13 @@ export default function CustomerDisplay() {
     const applyCart = (nextCart) => {
       if (!isMounted) return;
       setCartData(nextCart?.cart_data || null);
+    };
+
+    const applyLiveCartPayload = (payload) => {
+      if (!isMounted || !payload) return;
+      const payloadTenantId = payload.tenantId || null;
+      if ((tenantId || null) !== payloadTenantId) return;
+      setCartData(payload.cartData || null);
     };
 
     const loadProfile = async () => {
@@ -149,10 +158,31 @@ export default function CustomerDisplay() {
       }
     };
 
+    const handleStorageLiveUpdate = (event) => {
+      if (event.key !== getDisplayLiveCartKey(tenantId)) return;
+      if (!event.newValue) {
+        applyLiveCartPayload({ tenantId, cartData: null });
+        return;
+      }
+
+      try {
+        applyLiveCartPayload(JSON.parse(event.newValue));
+      } catch (error) {
+        console.error('[CustomerDisplay] Invalid live cart payload:', error);
+      }
+    };
+
     loadInitialData();
     writeHeartbeat();
     const heartbeatIntervalId = window.setInterval(writeHeartbeat, DISPLAY_HEARTBEAT_MS);
     document.addEventListener('visibilitychange', handleVisibilityRefresh);
+    window.addEventListener('storage', handleStorageLiveUpdate);
+
+    let liveChannel = null;
+    if ('BroadcastChannel' in window) {
+      liveChannel = new BroadcastChannel(`customer-display-live-${tenantId || 'global'}`);
+      liveChannel.onmessage = (event) => applyLiveCartPayload(event.data);
+    }
 
     const profileChannel = supabase
       .channel(`customer-display-profile-${tenantId || 'global'}`)
@@ -211,6 +241,8 @@ export default function CustomerDisplay() {
       stopFallbackRefresh();
       clearHeartbeat();
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+      window.removeEventListener('storage', handleStorageLiveUpdate);
+      liveChannel?.close?.();
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(cartChannel);
     };
