@@ -184,7 +184,7 @@ export default function StrasykPos() {
   }, [profile?.customer_display_enabled, currentTenant?.id]);
 
   useEffect(() => {
-    if (!profile?.customer_display_enabled || !currentTenant?.id || !isCustomerDisplayActive) return undefined;
+    if (!profile?.customer_display_enabled || !currentTenant?.id) return undefined;
 
     const cartData = currentOrder?.articles?.length > 0 ? currentOrder : null;
     const payloadSignature = JSON.stringify(cartData);
@@ -237,7 +237,7 @@ export default function StrasykPos() {
     customerDisplaySyncTimeoutRef.current = window.setTimeout(syncToDb, CUSTOMER_DISPLAY_SYNC_DEBOUNCE_MS);
 
     return () => window.clearTimeout(customerDisplaySyncTimeoutRef.current);
-  }, [currentOrder, currentTenant?.id, isCustomerDisplayActive, profile?.customer_display_enabled, withTenant]);
+  }, [currentOrder, currentTenant?.id, profile?.customer_display_enabled, withTenant]);
 
   const getCurrentOrderType = useCallback(() => {
     return currentOrder?.orderType || 'sur_place';
