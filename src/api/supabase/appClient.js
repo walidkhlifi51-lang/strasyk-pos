@@ -68,7 +68,7 @@ const LEGACY_ENTITY_FIELDS = {
     'custom_domain', 'site_template', 'site_primary_color', 'site_subtitle', 'site_hero_images',
     'site_hero_source', 'site_hero_messages', 'site_video_url', 'site_video_titre', 'kiosk_primary_color',
     'kiosk_secondary_color',
-    'customer_display_enabled', 'customer_display_images', 'customer_display_color', 'customer_display_info_message',
+    'customer_display_enabled', 'customer_display_images', 'customer_display_color', 'customer_display_info_message', 'customer_display_settings',
     'delivery_app_allowed', 'manages_delivery_app', 'manages_kiosk', 'manages_table_plan', 'table_plan_allowed',
     'manages_web_ordering', 'impression_auto', 'impression_bouton_visible', 'impression_double', 'page_pins',
     'tva_rates', 'prix_differencies_par_mode', 'kiosk_welcome_images', 'kiosk_terminal_welcome_images',

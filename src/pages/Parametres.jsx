@@ -51,7 +51,7 @@ const PARAM_PROFILE_FIELDS = [
     'siret', 'tva_intracommunautaire', 'frais_livraison', 'montant_minimum_livraison', 'zone_livraison_km',
     'impression_auto', 'impression_bouton_visible', 'impression_double', 'tva_rates',
     'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',
-    'customer_display_images', 'customer_display_color', 'customer_display_info_message',
+    'customer_display_images', 'customer_display_color', 'customer_display_info_message', 'customer_display_settings',
     'delivery_app_allowed', 'manages_delivery_app', 'table_plan_allowed', 'manages_table_plan',
     'bipeur_enabled', 'scratch_tickets_enabled', 'ai_image_generation_enabled',
     'force_immediate_payment', 'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit',
@@ -69,6 +69,7 @@ const PARAM_PROFILE_FALLBACK_FIELDS = PARAM_PROFILE_FIELDS.filter(
         && field !== 'customer_display_images'
         && field !== 'customer_display_color'
         && field !== 'customer_display_info_message'
+        && field !== 'customer_display_settings'
 );
 
 const isMissingColumnError = (error, columnName) => {
@@ -141,6 +142,7 @@ export default function Parametres() {
                             || isMissingColumnError(error, 'customer_display_images')
                             || isMissingColumnError(error, 'customer_display_color')
                             || isMissingColumnError(error, 'customer_display_info_message')
+                            || isMissingColumnError(error, 'customer_display_settings')
                         ) {
                             return await appClient.entities.RestaurantProfile.filter(
                                 filterByTenant(),

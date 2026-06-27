@@ -27,6 +27,7 @@ alter table public.restaurant_profiles
   add column if not exists customer_display_images jsonb not null default '[]'::jsonb,
   add column if not exists customer_display_color text,
   add column if not exists customer_display_info_message text,
+  add column if not exists customer_display_settings jsonb not null default '{"mode":"auto","theme":"default","zoom":1}'::jsonb,
   add column if not exists manages_web_ordering boolean not null default false,
   add column if not exists web_ordering_closed boolean not null default false,
   add column if not exists web_frais_livraison_enabled boolean not null default false,

@@ -58,6 +58,11 @@ const defaultProfile = {
   manages_delivery_app: true,
   manages_web_ordering: true,
   customer_display_enabled: false,
+  customer_display_settings: {
+    mode: 'auto',
+    theme: 'default',
+    zoom: 1,
+  },
   web_ordering_closed: false,
   web_frais_livraison_enabled: true,
   web_frais_livraison: 2.5,

@@ -1,7 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ShoppingCart, Euro } from 'lucide-react';
+import { ShoppingCart, Euro, Monitor, Smartphone, Tv } from 'lucide-react';
 import { appClient } from '@/api/appClient';
 import { getSupabaseBrowserClient } from '@/api/supabase/client';
+import {
+  getCustomerDisplayChannelName,
+  getCustomerDisplayControlChannelName,
+  getCustomerDisplayHeartbeatKey,
+  getCustomerDisplayLiveControlKey,
+  getCustomerDisplayLiveCartKey,
+  CUSTOMER_DISPLAY_RUNTIME_VERSION,
+} from '@/lib/customerDisplayController';
+import {
+  DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
+  detectCustomerDisplayEnvironment,
+  normalizeCustomerDisplaySettings,
+  resolveCustomerDisplayMode,
+} from '@/lib/customerDisplayRuntime';
 
 const PROFILE_FIELDS = [
   'id',
@@ -14,7 +28,10 @@ const PROFILE_FIELDS = [
   'customer_display_images',
   'customer_display_color',
   'customer_display_info_message',
+  'customer_display_settings',
 ];
+
+const PROFILE_FALLBACK_FIELDS = PROFILE_FIELDS.filter((field) => field !== 'customer_display_settings');
 
 const CART_FIELDS = [
   'id',
@@ -25,23 +42,74 @@ const CART_FIELDS = [
 
 const DISPLAY_FALLBACK_MS = 60000;
 const DISPLAY_HEARTBEAT_MS = 30000;
-const DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
-const DISPLAY_LIVE_CART_PREFIX = 'customer_display_live_cart';
-
-const getDisplayHeartbeatKey = (tenantId) => `${DISPLAY_HEARTBEAT_PREFIX}:${tenantId || 'global'}`;
-const getDisplayLiveCartKey = (tenantId) => `${DISPLAY_LIVE_CART_PREFIX}:${tenantId || 'global'}`;
-
 const toDisplaySettings = (profile) => ({
   images: Array.isArray(profile?.customer_display_images) ? profile.customer_display_images : [],
   enabled: profile?.customer_display_enabled ?? true,
   primary_color: profile?.customer_display_color || '#f97316',
   info_message: profile?.customer_display_info_message || '',
+  config: normalizeCustomerDisplaySettings(profile?.customer_display_settings),
 });
+
+const isMissingCustomerDisplaySettingsColumn = (error) => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  return /customer_display_settings/i.test(message);
+};
+
+const getModeIcon = (mode) => {
+  if (mode === 'tv') return Tv;
+  if (mode === 'compact' || mode === 'portrait') return Smartphone;
+  return Monitor;
+};
+
+const getModeUi = (mode) => {
+  switch (mode) {
+    case 'tv':
+      return {
+        shell: 'bg-slate-100',
+        root: 'grid-cols-[1.05fr_0.95fr]',
+        title: 'text-4xl',
+        cartTitle: 'text-5xl',
+        itemTitle: 'text-3xl',
+        total: 'text-8xl',
+      };
+    case 'compact':
+      return {
+        shell: 'bg-slate-50',
+        root: 'grid-cols-1 lg:grid-cols-[0.9fr_1.1fr]',
+        title: 'text-2xl',
+        cartTitle: 'text-3xl',
+        itemTitle: 'text-xl',
+        total: 'text-5xl',
+      };
+    case 'portrait':
+      return {
+        shell: 'bg-slate-100',
+        root: 'grid-cols-1',
+        title: 'text-2xl',
+        cartTitle: 'text-3xl',
+        itemTitle: 'text-xl',
+        total: 'text-5xl',
+      };
+    default:
+      return {
+        shell: 'bg-white',
+        root: 'grid-cols-[1fr_1fr]',
+        title: 'text-3xl',
+        cartTitle: 'text-4xl',
+        itemTitle: 'text-2xl',
+        total: 'text-7xl',
+      };
+  }
+};
 
 export default function CustomerDisplay() {
   const tenantId = useMemo(() => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('tenant');
+  }, []);
+  const setupMode = useMemo(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('setup') === '1';
   }, []);
 
   const [cartData, setCartData] = useState(null);
@@ -52,14 +120,79 @@ export default function CustomerDisplay() {
     enabled: true,
     primary_color: '#f97316',
     info_message: '',
+    config: DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   });
   const [profile, setProfile] = useState(null);
+  const [runtimeInfo, setRuntimeInfo] = useState(() => detectCustomerDisplayEnvironment(window));
+  const [testOverlay, setTestOverlay] = useState(null);
   const fallbackIntervalRef = useRef(null);
+  const runtimeInfoRef = useRef(runtimeInfo);
+  const displayConfigRef = useRef(displaySettings.config);
 
   useEffect(() => {
+    runtimeInfoRef.current = runtimeInfo;
+  }, [runtimeInfo]);
+
+  useEffect(() => {
+    displayConfigRef.current = displaySettings.config;
+  }, [displaySettings.config]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const payload = {
+      type: 'runtime-status',
+      tenantId: tenantId || null,
+      emittedAt: new Date().toISOString(),
+      runtime: runtimeInfo,
+      setupMode,
+      effectiveMode: resolveCustomerDisplayMode(displaySettings.config, runtimeInfo),
+      version: CUSTOMER_DISPLAY_RUNTIME_VERSION,
+    };
+
+    if ('BroadcastChannel' in window) {
+      const statusChannel = new BroadcastChannel(getCustomerDisplayControlChannelName(tenantId));
+      statusChannel.postMessage(payload);
+      statusChannel.close();
+    }
+
+    window.localStorage.setItem(getCustomerDisplayLiveControlKey(tenantId), JSON.stringify(payload));
+  }, [tenantId, runtimeInfo, displaySettings.config, setupMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const publishRuntimeStatus = (runtimePayload = runtimeInfoRef.current) => {
+      const payload = {
+        type: 'runtime-status',
+        tenantId: tenantId || null,
+        emittedAt: new Date().toISOString(),
+        runtime: runtimePayload,
+        setupMode,
+        effectiveMode: resolveCustomerDisplayMode(displayConfigRef.current, runtimePayload),
+        version: CUSTOMER_DISPLAY_RUNTIME_VERSION,
+      };
+
+      if ('BroadcastChannel' in window) {
+        const statusChannel = new BroadcastChannel(getCustomerDisplayControlChannelName(tenantId));
+        statusChannel.postMessage(payload);
+        statusChannel.close();
+      }
+
+      window.localStorage.setItem(getCustomerDisplayLiveControlKey(tenantId), JSON.stringify(payload));
+    };
+
+    publishRuntimeStatus();
+    const intervalId = window.setInterval(() => publishRuntimeStatus(), DISPLAY_HEARTBEAT_MS);
+    return () => window.clearInterval(intervalId);
+  }, [tenantId, setupMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
     let isMounted = true;
     const supabase = getSupabaseBrowserClient();
-    const heartbeatKey = getDisplayHeartbeatKey(tenantId);
+    const heartbeatKey = getCustomerDisplayHeartbeatKey(tenantId);
 
     const writeHeartbeat = () => {
       if (typeof window === 'undefined') return;
@@ -89,15 +222,50 @@ export default function CustomerDisplay() {
       setCartData(payload.cartData || null);
     };
 
+    const handleControlMessage = async (payload) => {
+      if (!payload || payload.tenantId !== (tenantId || null)) return;
+
+      if (payload.type === 'request-fullscreen') {
+        try {
+          if (document.fullscreenElement) return;
+          await document.documentElement.requestFullscreen?.();
+        } catch (error) {
+          console.error('[CustomerDisplay] Fullscreen request failed:', error);
+        }
+        return;
+      }
+
+      if (payload.type === 'display-test') {
+        setTestOverlay({
+          title: payload.title || 'TEST ECRAN CLIENT',
+          subtitle: payload.subtitle || 'Verification visuelle en cours',
+          expiresAt: Date.now() + (payload.durationMs || 8000),
+        });
+      }
+    };
+
     const loadProfile = async () => {
-      const profiles = tenantId
-        ? await appClient.entities.RestaurantProfile.filter(
-            { tenant_id: tenantId },
-            null,
-            1,
-            { fields: PROFILE_FIELDS }
-          )
-        : await appClient.entities.RestaurantProfile.list(null, 1, { fields: PROFILE_FIELDS });
+      let profiles;
+      try {
+        profiles = tenantId
+          ? await appClient.entities.RestaurantProfile.filter(
+              { tenant_id: tenantId },
+              null,
+              1,
+              { fields: PROFILE_FIELDS }
+            )
+          : await appClient.entities.RestaurantProfile.list(null, 1, { fields: PROFILE_FIELDS });
+      } catch (error) {
+        if (!isMissingCustomerDisplaySettingsColumn(error)) throw error;
+        profiles = tenantId
+          ? await appClient.entities.RestaurantProfile.filter(
+              { tenant_id: tenantId },
+              null,
+              1,
+              { fields: PROFILE_FALLBACK_FIELDS }
+            )
+          : await appClient.entities.RestaurantProfile.list(null, 1, { fields: PROFILE_FALLBACK_FIELDS });
+      }
 
       applyProfile(profiles?.[0] || null);
       return profiles?.[0] || null;
@@ -159,7 +327,7 @@ export default function CustomerDisplay() {
     };
 
     const handleStorageLiveUpdate = (event) => {
-      if (event.key !== getDisplayLiveCartKey(tenantId)) return;
+      if (event.key !== getCustomerDisplayLiveCartKey(tenantId)) return;
       if (!event.newValue) {
         applyLiveCartPayload({ tenantId, cartData: null });
         return;
@@ -172,18 +340,36 @@ export default function CustomerDisplay() {
       }
     };
 
+    const handleStorageControlUpdate = (event) => {
+      if (event.key !== getCustomerDisplayLiveControlKey(tenantId) || !event.newValue) return;
+      try {
+        const payload = JSON.parse(event.newValue);
+        if (payload.type === 'runtime-status') return;
+        handleControlMessage(payload);
+      } catch (error) {
+        console.error('[CustomerDisplay] Invalid control payload:', error);
+      }
+    };
+
     loadInitialData();
     writeHeartbeat();
     const heartbeatIntervalId = window.setInterval(writeHeartbeat, DISPLAY_HEARTBEAT_MS);
     document.addEventListener('visibilitychange', handleVisibilityRefresh);
     window.addEventListener('storage', handleStorageLiveUpdate);
+    window.addEventListener('storage', handleStorageControlUpdate);
 
     let liveChannel = null;
+    let controlChannel = null;
     if ('BroadcastChannel' in window) {
-      liveChannel = new BroadcastChannel(`customer-display-live-${tenantId || 'global'}`);
+      liveChannel = new BroadcastChannel(getCustomerDisplayChannelName(tenantId));
       liveChannel.onmessage = (event) => applyLiveCartPayload(event.data);
-    }
 
+      controlChannel = new BroadcastChannel(getCustomerDisplayControlChannelName(tenantId));
+      controlChannel.onmessage = (event) => {
+        if (event.data?.type === 'runtime-status') return;
+        handleControlMessage(event.data);
+      };
+    }
     const profileChannel = supabase
       .channel(`customer-display-profile-${tenantId || 'global'}`)
       .on(
@@ -242,11 +428,26 @@ export default function CustomerDisplay() {
       clearHeartbeat();
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
       window.removeEventListener('storage', handleStorageLiveUpdate);
+      window.removeEventListener('storage', handleStorageControlUpdate);
       liveChannel?.close?.();
+      controlChannel?.close?.();
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(cartChannel);
     };
   }, [tenantId]);
+
+  useEffect(() => {
+    const updateRuntime = () => setRuntimeInfo(detectCustomerDisplayEnvironment(window));
+    updateRuntime();
+    window.addEventListener('resize', updateRuntime);
+    return () => window.removeEventListener('resize', updateRuntime);
+  }, []);
+
+  useEffect(() => {
+    if (!testOverlay?.expiresAt) return undefined;
+    const timeoutId = window.setTimeout(() => setTestOverlay(null), Math.max(0, testOverlay.expiresAt - Date.now()));
+    return () => window.clearTimeout(timeoutId);
+  }, [testOverlay]);
 
   useEffect(() => {
     if (!displaySettings.images || displaySettings.images.length <= 1) return undefined;
@@ -275,6 +476,10 @@ export default function CustomerDisplay() {
   };
 
   const { items: displayItems, total: totalAmount } = hasItems ? calculateTotals() : { items: [], total: 0 };
+  const effectiveMode = resolveCustomerDisplayMode(displaySettings.config, runtimeInfo);
+  const modeUi = getModeUi(effectiveMode);
+  const ModeIcon = getModeIcon(effectiveMode);
+  const displayScale = displaySettings.config?.zoom || 1;
 
   if (isLoading) {
     return (
@@ -288,7 +493,10 @@ export default function CustomerDisplay() {
   }
 
   return (
-    <div className="w-full h-screen bg-white flex flex-col overflow-hidden">
+    <div
+      className={`w-full h-screen overflow-hidden ${modeUi.shell}`}
+      style={{ transform: `scale(${displayScale})`, transformOrigin: 'top left', width: `${100 / displayScale}%`, height: `${100 / displayScale}%` }}
+    >
       <div
         className="w-full h-24 flex-shrink-0 flex items-center justify-between px-8 shadow-lg"
         style={{ backgroundColor: displaySettings.primary_color }}
@@ -302,7 +510,7 @@ export default function CustomerDisplay() {
             />
           )}
           <div className="text-white">
-            <h1 className="text-3xl font-bold">{profile?.nom_etablissement || 'Restaurant'}</h1>
+            <h1 className={`${modeUi.title} font-bold`}>{profile?.nom_etablissement || 'Restaurant'}</h1>
             {profile?.telephone && (
               <p className="text-lg opacity-90">Telephone: {profile.telephone}</p>
             )}
@@ -323,8 +531,27 @@ export default function CustomerDisplay() {
         </div>
       )}
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="w-1/2 relative bg-white flex items-center justify-center overflow-hidden">
+      {setupMode && (
+        <div className="border-b bg-slate-950 px-8 py-4 text-white">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-sm uppercase tracking-[0.2em] text-slate-300">Configuration ecran client</div>
+              <div className="mt-1 text-2xl font-bold">Detection automatique active</div>
+            </div>
+            <div className="grid gap-2 text-sm sm:grid-cols-3">
+              <div>Resolution: <span className="font-semibold">{runtimeInfo.width} x {runtimeInfo.height}</span></div>
+              <div>Ratio: <span className="font-semibold">{runtimeInfo.ratioLabel}</span></div>
+              <div>Orientation: <span className="font-semibold">{runtimeInfo.orientation}</span></div>
+              <div>Mode detecte: <span className="font-semibold">{runtimeInfo.detectedMode}</span></div>
+              <div>Mode applique: <span className="font-semibold">{effectiveMode}</span></div>
+              <div>Tactile: <span className="font-semibold">{runtimeInfo.touchCapable ? 'Oui' : 'Non'}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid flex-1 min-h-0 overflow-hidden ${modeUi.root}`}>
+        <div className="relative flex items-center justify-center overflow-hidden bg-white">
           {displaySettings.images && displaySettings.images.length > 0 ? (
             <div className="w-full h-full relative">
               {displaySettings.images.map((img, index) => (
@@ -358,7 +585,7 @@ export default function CustomerDisplay() {
             </div>
           ) : (
             <div className="text-center text-gray-300">
-              <ShoppingCart className="w-32 h-32 mx-auto mb-6 opacity-20" />
+              <ModeIcon className="w-32 h-32 mx-auto mb-6 opacity-20" />
               <p className="text-2xl font-semibold">Bienvenue</p>
               <p className="text-lg mt-2 opacity-60">En attente de commande...</p>
             </div>
@@ -366,7 +593,7 @@ export default function CustomerDisplay() {
         </div>
 
         <div
-          className="w-1/2 bg-white flex flex-col shadow-2xl border-l-4 min-h-0 overflow-hidden"
+          className="bg-white flex flex-col shadow-2xl border-l-4 min-h-0 overflow-hidden"
           style={{ borderLeftColor: displaySettings.primary_color }}
         >
           <div
@@ -375,7 +602,7 @@ export default function CustomerDisplay() {
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
             <ShoppingCart className="w-9 h-9 mr-4 relative z-10" />
-            <h2 className="text-4xl font-bold relative z-10">Votre commande</h2>
+            <h2 className={`${modeUi.cartTitle} font-bold relative z-10`}>Votre commande</h2>
           </div>
 
           {hasItems ? (
@@ -389,7 +616,7 @@ export default function CustomerDisplay() {
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
-                        <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                        <h3 className={`${modeUi.itemTitle} font-bold text-gray-900 mb-1`}>
                           {item.nom_produit}
                         </h3>
                         {item.notes && (
@@ -454,10 +681,10 @@ export default function CustomerDisplay() {
                       {displayItems.reduce((sum, item) => sum + item.quantite, 0)} article(s)
                     </div>
                   </div>
-                  <div className="text-7xl font-bold flex items-center drop-shadow-lg">
-                    {totalAmount.toFixed(2)}
-                    <Euro className="w-14 h-14 ml-3" />
-                  </div>
+                    <div className={`${modeUi.total} font-bold flex items-center drop-shadow-lg`}>
+                      {totalAmount.toFixed(2)}
+                      <Euro className="w-14 h-14 ml-3" />
+                    </div>
                 </div>
               </div>
             </div>
@@ -474,6 +701,22 @@ export default function CustomerDisplay() {
           )}
         </div>
       </div>
+
+      {testOverlay && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/95 text-white">
+          <div className="text-center px-8">
+            <div className="text-sm uppercase tracking-[0.35em] text-orange-300">Mode test</div>
+            <div className="mt-4 text-6xl font-black">{testOverlay.title}</div>
+            <div className="mt-4 text-2xl text-slate-200">{testOverlay.subtitle}</div>
+            <div className="mt-8 grid gap-2 text-lg text-slate-300 sm:grid-cols-2">
+              <div>Resolution: <span className="font-semibold text-white">{runtimeInfo.width} x {runtimeInfo.height}</span></div>
+              <div>Mode: <span className="font-semibold text-white">{effectiveMode}</span></div>
+              <div>Orientation: <span className="font-semibold text-white">{runtimeInfo.orientation}</span></div>
+              <div>Tactile: <span className="font-semibold text-white">{runtimeInfo.touchCapable ? 'Oui' : 'Non'}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

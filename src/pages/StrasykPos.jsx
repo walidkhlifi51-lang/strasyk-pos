@@ -10,6 +10,13 @@ import { createPageUrl } from "@/utils";
 import { appClient } from '@/api/appClient';
 import { useTenant } from "@/components/contexts/TenantContext";
 import { useOffline } from "@/components/contexts/OfflineContext";
+import {
+  getCustomerDisplayCartIdKey,
+  getCustomerDisplayChannelName,
+  getCustomerDisplayHeartbeatKey,
+  getCustomerDisplayLiveCartKey,
+  openCustomerDisplayWindow,
+} from '@/lib/customerDisplayController';
 
 import ProductGrid from "../components/caisse/ProductGrid";
 import OrderPanel from "../components/caisse/OrderPanel";
@@ -112,15 +119,8 @@ const POS_CLOTURE_FIELDS = [
 
 const POS_CLOTURE_GUARD_LOOKBACK_DAYS = 45;
 
-const CUSTOMER_DISPLAY_HEARTBEAT_PREFIX = 'customer_display_active';
-const CUSTOMER_DISPLAY_CART_ID_PREFIX = 'customer_display_cart_id';
-const CUSTOMER_DISPLAY_LIVE_CART_PREFIX = 'customer_display_live_cart';
 const CUSTOMER_DISPLAY_HEARTBEAT_TTL_MS = 90 * 1000;
 const CUSTOMER_DISPLAY_SYNC_DEBOUNCE_MS = 800;
-
-const getCustomerDisplayHeartbeatKey = (tenantId) => `${CUSTOMER_DISPLAY_HEARTBEAT_PREFIX}:${tenantId}`;
-const getCustomerDisplayCartIdKey = (tenantId) => `${CUSTOMER_DISPLAY_CART_ID_PREFIX}:${tenantId}`;
-const getCustomerDisplayLiveCartKey = (tenantId) => `${CUSTOMER_DISPLAY_LIVE_CART_PREFIX}:${tenantId}`;
 
 const isCustomerDisplayHeartbeatFresh = (tenantId) => {
   if (!tenantId || typeof window === 'undefined') return false;
@@ -190,7 +190,7 @@ export default function StrasykPos() {
     if (typeof window === 'undefined' || !currentTenant?.id || !profile?.customer_display_enabled) return undefined;
 
     if ('BroadcastChannel' in window) {
-      customerDisplayBroadcastRef.current = new BroadcastChannel(`customer-display-live-${currentTenant.id}`);
+      customerDisplayBroadcastRef.current = new BroadcastChannel(getCustomerDisplayChannelName(currentTenant.id));
     }
 
     return () => {
@@ -271,6 +271,11 @@ export default function StrasykPos() {
   const getCurrentOrderType = useCallback(() => {
     return currentOrder?.orderType || 'sur_place';
   }, [currentOrder]);
+
+  const handleOpenCustomerDisplay = useCallback(() => {
+    if (!currentTenant?.id) return;
+    openCustomerDisplayWindow({ tenantId: currentTenant.id });
+  }, [currentTenant?.id]);
 
   const { data: posData, isLoading: isLoadingPosData, isFetching: isFetchingPosData, error: loadingError, refetch: refreshData } = useQuery({
     queryKey: ['posData', currentTenant?.id, format(workingDate, 'yyyy-MM-dd', { locale: fr }), profile?.simulation_date || null],
@@ -1182,7 +1187,7 @@ export default function StrasykPos() {
               <div className="flex gap-2">
                 <OpenDrawerButton />
                 {profile?.customer_display_enabled && (
-                  <Button variant="outline" size="icon" onClick={() => window.open(`${createPageUrl('CustomerDisplay')}?tenant=${currentTenant?.id}`, '_blank', 'width=1920,height=1080')} className="bg-purple-600 text-white border-0 shadow-lg" title="Ouvrir l'écran client"><Menu className="w-5 h-5" /></Button>
+                  <Button variant="outline" size="icon" onClick={handleOpenCustomerDisplay} className="bg-purple-600 text-white border-0 shadow-lg" title="Ouvrir l'écran client"><Menu className="w-5 h-5" /></Button>
                 )}
               </div>
               <Button variant="outline" size="icon" className="bg-indigo-600 text-white border-0 shadow-lg" onClick={() => setIsOrdersListVisible(true)}><Menu className="w-5 h-5" /></Button>
@@ -1209,7 +1214,7 @@ export default function StrasykPos() {
           <div className="flex gap-2 mb-2">
             <OpenDrawerButton />
             {profile?.customer_display_enabled && (
-              <Button variant="outline" size="icon" onClick={() => window.open(`${createPageUrl('CustomerDisplay')}?tenant=${currentTenant?.id}`, '_blank', 'width=1920,height=1080')} className="bg-purple-600 text-white border-0 shadow-lg" title="Ouvrir l'écran client"><Menu className="w-5 h-5" /></Button>
+              <Button variant="outline" size="icon" onClick={handleOpenCustomerDisplay} className="bg-purple-600 text-white border-0 shadow-lg" title="Ouvrir l'écran client"><Menu className="w-5 h-5" /></Button>
             )}
           </div>
           <div className="flex gap-4 flex-1 min-h-0">
