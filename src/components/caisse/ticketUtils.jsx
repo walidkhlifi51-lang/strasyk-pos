@@ -615,6 +615,18 @@ export async function generateTicketHtml(order, customer, profile, tenant = null
 
     // Modes de paiement si payé
     if (order.payee && (order.mode_paiement && order.mode_paiement.length > 0 || order.cagnotte_spent && order.cagnotte_spent > 0)) {
+        const explicitCashChange = Array.isArray(order.mode_paiement)
+            ? (order.mode_paiement || []).reduce((sum, payment) => sum + (Number(payment?.monnaie_a_rendre) || 0), 0)
+            : 0;
+        const inferredCashChange = Array.isArray(order.mode_paiement)
+            ? Math.max(
+                0,
+                (order.mode_paiement || []).reduce((sum, payment) => sum + (Number(payment?.montant) || 0), 0)
+                + (Number(order.cagnotte_spent) || 0)
+                - (Number(totalTTC) || 0)
+            )
+            : 0;
+        const cashChangeToShow = explicitCashChange > 0 ? explicitCashChange : inferredCashChange;
         html += `
         <div class="separator"></div>
         <div class="bold" style="font-size: 15px; margin-bottom: 6px;">PAIEMENT :</div>
@@ -647,6 +659,15 @@ export async function generateTicketHtml(order, customer, profile, tenant = null
                 </div>
                 `;
             });
+        }
+
+        if (cashChangeToShow > 0.01) {
+            html += `
+            <div class="row" style="font-size: 14px;">
+                <span>Monnaie rendue</span>
+                <span><strong>${cashChangeToShow.toFixed(2)}â‚¬</strong></span>
+            </div>
+            `;
         }
     }
 

@@ -42,6 +42,8 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
 
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.montant) || 0), 0) + (Number(cagnotteSpent) || 0);
   const remainingAmount = totalAmount - totalPaid;
+  const hasCashPayment = payments.some((payment) => payment.methode === 'especes' && (Number(payment.montant) || 0) > 0);
+  const overpaymentAmount = Math.max(0, Number(safeToFixed(totalPaid - totalAmount)));
   const isCreditSwitchDisabled = profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter');
 
   useEffect(() => {
@@ -117,14 +119,32 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
         return;
       }
     }
-    if (!isCredit && Math.abs(remainingAmount) > 0.01) {
+    if (!isCredit && remainingAmount > 0.01) {
       toast({ title: "Montant incorrect", description: "Le montant payé ne couvre pas le total.", variant: "destructive" });
       return;
     }
+    if (!isCredit && overpaymentAmount > 0.01 && !hasCashPayment) {
+      toast({ title: "Montant incorrect", description: "La monnaie Ã  rendre n'est autorisÃ©e qu'avec un paiement en espÃ¨ces.", variant: "destructive" });
+      return;
+    }
     try {
+      const normalizedPayments = isCredit
+        ? []
+        : payments.map(({ id, isAutoAdded, ...rest }) => ({ ...rest }));
+
+      if (!isCredit && overpaymentAmount > 0.01) {
+        const lastCashPaymentIndex = [...normalizedPayments].map((payment) => payment.methode).lastIndexOf('especes');
+        if (lastCashPaymentIndex >= 0) {
+          normalizedPayments[lastCashPaymentIndex] = {
+            ...normalizedPayments[lastCashPaymentIndex],
+            monnaie_a_rendre: overpaymentAmount,
+          };
+        }
+      }
+
       const paymentData = {
         payee: !isCredit,
-        mode_paiement: isCredit ? [] : payments.map(({ id, isAutoAdded, ...rest }) => rest),
+        mode_paiement: normalizedPayments,
         cagnotte_spent: cagnotteSpent,
         plannedPaymentMethod: (isCredit && orderType === 'livraison') ? plannedPaymentMethod : null,
         numero_bipeur: showBipeurField ? (String(numeroBipeur || '').trim() || null) : null,
@@ -190,7 +210,10 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
     return '0';
   };
 
-  const isFullyPaid = !isCredit && Math.abs(remainingAmount) < 0.01 && (payments.length > 0 || cagnotteSpent >= totalAmount - 0.01);
+  const isFullyPaid = !isCredit
+    && remainingAmount <= 0.01
+    && (overpaymentAmount <= 0.01 || hasCashPayment)
+    && (payments.length > 0 || cagnotteSpent >= totalAmount - 0.01);
   const showChoiceScreen = !paymentChoice;
   const activatePayNow = () => {
     setPaymentChoice('pay_now');
@@ -483,7 +506,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
             disabled={
               showChoiceScreen
                 ? true
-                : (!isCredit && payments.length === 0 && cagnotteSpent < totalAmount - 0.01)
+                : (!isCredit && !isFullyPaid)
             }
             className={`flex-1 text-lg font-bold transition-colors ${
               showChoiceScreen ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
