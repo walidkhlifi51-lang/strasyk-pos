@@ -655,7 +655,7 @@ export async function generateTicketHtml(order, customer, profile, tenant = null
                 html += `
                 <div class="row" style="font-size: 14px;">
                     <span>${label}</span>
-                    <span><strong>${(payment.montant || 0).toFixed(2)}€</strong></span>
+                    <span><strong>${(payment.montant || 0).toFixed(2)}&euro;</strong></span>
                 </div>
                 `;
             });
@@ -665,7 +665,7 @@ export async function generateTicketHtml(order, customer, profile, tenant = null
             html += `
             <div class="row" style="font-size: 14px;">
                 <span>Monnaie rendue</span>
-                <span><strong>${cashChangeToShow.toFixed(2)}â‚¬</strong></span>
+                <span><strong>${cashChangeToShow.toFixed(2)}&euro;</strong></span>
             </div>
             `;
         }
@@ -1274,6 +1274,7 @@ export async function triggerPrint(html, onComplete, options = {}) {
         }
     });
 }
+
 
 
 
