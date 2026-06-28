@@ -1276,9 +1276,11 @@ export default function StrasykPos() {
               {!confirmedOrder.payee && <p className="text-lg font-semibold text-orange-600 bg-orange-100 px-4 py-2 rounded-lg">Commande créée en crédit !</p>}
               <p className="text-lg text-gray-500">Commande #{confirmedOrder.numero_caisse}</p>
               {!confirmedOrder.payee && <p className="text-sm text-gray-500 pt-2">À encaisser ultérieurement</p>}
-              <div className="flex w-full gap-4 pt-4">
-                <Button className="w-full h-12 text-lg bg-blue-600 hover:bg-blue-700" onClick={() => { setLastCompletedOrder(confirmedOrder); }}><Printer className="w-5 h-5 mr-2"/> Imprimer ticket</Button>
-                <OpenDrawerButton className="w-full h-12 text-lg gap-2" label="Ouvrir le tiroir" variant="outline" />
+              <div className="w-full space-y-3 pt-4">
+                <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Button className="w-full h-12 text-lg bg-blue-600 hover:bg-blue-700" onClick={() => { setLastCompletedOrder(confirmedOrder); }}><Printer className="w-5 h-5 mr-2"/> Imprimer ticket</Button>
+                  <OpenDrawerButton className="w-full h-12 text-lg gap-2 bg-amber-500 text-white hover:bg-amber-600 border-0" label="Ouvrir le tiroir" variant="outline" />
+                </div>
                 <Button className="w-full h-12 text-lg" variant="outline" onClick={() => setShowConfirmation(false)}>Fermer</Button>
               </div>
             </div>
