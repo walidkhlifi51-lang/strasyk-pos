@@ -84,7 +84,11 @@ const triggerDrawerKick = ({ reason, openedBy }) => {
   }, 150);
 };
 
-export default function OpenDrawerButton() {
+export default function OpenDrawerButton({
+  className = 'w-full gap-2',
+  label = 'Ouvrir le tiroir',
+  variant = 'outline',
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [isOpening, setIsOpening] = useState(false);
@@ -148,9 +152,9 @@ export default function OpenDrawerButton() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setIsModalOpen(true)} className="w-full gap-2">
+      <Button variant={variant} onClick={() => setIsModalOpen(true)} className={className}>
         <Archive className="h-4 w-4" />
-        Ouvrir le tiroir
+        {label}
       </Button>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
