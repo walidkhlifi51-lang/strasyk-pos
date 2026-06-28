@@ -119,7 +119,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
         return;
       }
     }
-    if (!isCredit && !lockPaidState && remainingAmount > 0.01) {
+    if (!isCredit && requiresPaymentCollection && remainingAmount > 0.01) {
       toast({ title: "Montant incorrect", description: "Le montant payé ne couvre pas le total.", variant: "destructive" });
       return;
     }
