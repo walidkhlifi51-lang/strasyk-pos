@@ -301,7 +301,9 @@ export function useOrderPayment({
 
         const taxSummary = computeTaxSummaryFromArticles(orderArticles, finalTotalTTC);
 
-        let newStatus = paymentInfo.payee ? 'payé' : 'en_attente_paiement';
+        const preservePaidState = currentOrder.editingInfo?.payee === true;
+        const effectivePayee = preservePaidState ? true : paymentInfo.payee;
+        const newStatus = effectivePayee ? 'payé' : 'en_attente_paiement';
         const numeroCaisse = currentOrder.editingInfo ? currentOrder.editingInfo.numero_caisse : actualNextNumeroCaisse;
         const formattedDate = format(workingDate, 'ddMMyy', { locale: fr });
         const numeroCommande = currentOrder.editingInfo ? currentOrder.editingInfo.numero_commande : `${actualNextNumeroCaisse}-${formattedDate}`;
@@ -322,12 +324,12 @@ export function useOrderPayment({
             : (paymentInfo.mode_paiement || []),
           mode_paiement_prevu: paymentInfo.plannedPaymentMethod || null,
           numero_bipeur: paymentInfo.numero_bipeur || null,
-          payee: paymentInfo.payee,
+          payee: effectivePayee,
           numero_caisse: numeroCaisse,
           notes: notes || '',
           cagnotte_spent: paymentInfo.cagnotte_spent || 0,
           scratch_reduction: scratchReductionInOrder,
-          print_at_counter: isRemoteCashier && paymentInfo.payee ? true : false,
+          print_at_counter: isRemoteCashier && effectivePayee ? true : false,
           from_kiosk: isRemoteCashier ? true : false,
         });
 

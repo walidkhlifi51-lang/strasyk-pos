@@ -1264,6 +1264,7 @@ export default function StrasykPos() {
           orderType={webOrderToSettle ? (webOrderToSettle.type_commande || 'emporter') : (currentOrder?.orderType || 'sur_place')}
           initialBipeurNumber={webOrderToSettle?.numero_bipeur || currentOrder?.editingInfo?.numero_bipeur || currentOrder?.numero_bipeur || ''}
           profile={profile}
+          lockPaidState={Boolean(webOrderToSettle?.payee || currentOrder?.editingInfo?.payee)}
         />
       )}
 

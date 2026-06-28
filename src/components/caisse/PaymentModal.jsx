@@ -25,7 +25,7 @@ const methodColors = {
   cheque: 'bg-purple-500 hover:bg-purple-600',
 };
 
-export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, totalAmount, customerCagnotte = 0, cagnotteRule, orderType, profile, initialBipeurNumber = '' }) {
+export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, totalAmount, customerCagnotte = 0, cagnotteRule, orderType, profile, initialBipeurNumber = '', lockPaidState = false }) {
   const [isCredit, setIsCredit] = useState(false);
   const [paymentChoice, setPaymentChoice] = useState(null);
   const [payments, setPayments] = useState([]);
@@ -44,7 +44,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   const remainingAmount = totalAmount - totalPaid;
   const hasCashPayment = payments.some((payment) => payment.methode === 'especes' && (Number(payment.montant) || 0) > 0);
   const overpaymentAmount = Math.max(0, Number(safeToFixed(totalPaid - totalAmount)));
-  const isCreditSwitchDisabled = profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter');
+  const isCreditSwitchDisabled = lockPaidState || (profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter'));
 
   useEffect(() => {
     if (isOpen) {
@@ -113,13 +113,13 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
   };
 
   const handleValidate = async () => {
-    if (profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter')) {
+    if (!lockPaidState && profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter')) {
       if (isCredit || payments.length === 0) {
         toast({ title: "Paiement obligatoire", description: "Le paiement immédiat est obligatoire.", variant: "destructive" });
         return;
       }
     }
-    if (!isCredit && remainingAmount > 0.01) {
+    if (!isCredit && !lockPaidState && remainingAmount > 0.01) {
       toast({ title: "Montant incorrect", description: "Le montant payé ne couvre pas le total.", variant: "destructive" });
       return;
     }
