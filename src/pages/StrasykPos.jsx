@@ -34,6 +34,7 @@ import TableSelectionModal from "../components/caisse/TableSelectionModal";
 import { useQueryClient } from '@tanstack/react-query';
 import OpenDrawerButton from '../components/caisse/OpenDrawerButton';
 import { calculateOrderTotal } from '../components/caisse/calculateOrderTotal';
+import { getOrderCollectedAmount } from '../components/caisse/orderPaymentUtils';
 import { useOrderPayment } from '../components/caisse/useOrderPayment';
 import { computeTaxSummaryFromArticles } from '../components/utils/taxUtils';
 import { getDateKey, parseSupabaseDate, toParisDate as toParisDateValue } from '@/lib/dateParsing';
@@ -575,7 +576,7 @@ export default function StrasykPos() {
         table: (posData?.tables || []).find(t => t.id === order.table_id) || null,
         notes: order.notes || "", payee: order.payee, numero_caisse: order.numero_caisse,
         scratch_reduction: order.scratch_reduction || 0, editingInfo: order,
-        original_total: order.payee ? (order.total_ttc || 0) : null, customer: customerWithAddr,
+        original_total: order.payee ? getOrderCollectedAmount(order) : null, customer: customerWithAddr,
       });
       if (order.customer_id && customers[order.customer_id]) setSelectedCustomer(customerWithAddr);
       else setSelectedCustomer(null);
@@ -631,7 +632,10 @@ export default function StrasykPos() {
         promoCode: null, orderType: orderToSettle.type_commande || 'sur_place',
         table: (posData?.tables || []).find(t => t.id === orderToSettle.table_id) || null,
         notes: orderToSettle.notes || "", payee: orderToSettle.payee, numero_caisse: orderToSettle.numero_caisse,
-        scratch_reduction: orderToSettle.scratch_reduction || 0, editingInfo: orderToSettle, customer: customerWithAddrSettle,
+        scratch_reduction: orderToSettle.scratch_reduction || 0,
+        editingInfo: orderToSettle,
+        original_total: orderToSettle.payee ? getOrderCollectedAmount(orderToSettle) : null,
+        customer: customerWithAddrSettle,
       });
       if (orderToSettle.customer_id && customers[orderToSettle.customer_id]) handleSelectCustomer(customerWithAddrSettle);
       else handleSelectCustomer(null);

@@ -42,14 +42,18 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
 
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.montant) || 0), 0) + (Number(cagnotteSpent) || 0);
   const remainingAmount = totalAmount - totalPaid;
+  const requiresPaymentCollection = totalAmount > 0.01;
+  const canDeferSupplement = lockPaidState && requiresPaymentCollection;
   const hasCashPayment = payments.some((payment) => payment.methode === 'especes' && (Number(payment.montant) || 0) > 0);
   const overpaymentAmount = Math.max(0, Number(safeToFixed(totalPaid - totalAmount)));
-  const isCreditSwitchDisabled = lockPaidState || (profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter'));
+  const isCreditSwitchDisabled = canDeferSupplement
+    ? false
+    : lockPaidState || (profile?.force_immediate_payment === true && (orderType === 'sur_place' || orderType === 'emporter'));
 
   useEffect(() => {
     if (isOpen) {
       setIsCredit(false);
-      setPaymentChoice(isCreditSwitchDisabled ? 'pay_now' : null);
+      setPaymentChoice(canDeferSupplement ? null : (isCreditSwitchDisabled ? 'pay_now' : null));
       setPayments([]);
       setCagnotteSpent(0);
       setPlannedPaymentMethod('especes');
@@ -59,7 +63,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
       setIsReadyForNewInput(false);
       setInputBuffer('');
     }
-  }, [isOpen, initialBipeurNumber, isCreditSwitchDisabled]);
+  }, [isOpen, initialBipeurNumber, isCreditSwitchDisabled, canDeferSupplement]);
 
   useEffect(() => {
     if (isCredit) {
@@ -268,11 +272,15 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
                   }`}
                 >
                   <div className="text-4xl mb-3">📋</div>
-                  <p className={`text-xl font-bold ${isCreditSwitchDisabled ? 'text-gray-400' : 'text-amber-800'}`}>Non payée / crédit</p>
+                  <p className={`text-xl font-bold ${isCreditSwitchDisabled ? 'text-gray-400' : 'text-amber-800'}`}>
+                    {canDeferSupplement ? 'Encaisser plus tard' : 'Non payée / crédit'}
+                  </p>
                   <p className={`mt-2 text-sm ${isCreditSwitchDisabled ? 'text-gray-400' : 'text-amber-700'}`}>
                     {isCreditSwitchDisabled
                       ? "Le paiement immédiat est obligatoire pour ce type de commande."
-                      : "Enregistrer la commande sans paiement immédiat et l'encaisser plus tard."}
+                      : canDeferSupplement
+                        ? "Enregistrer ce complement pour l'encaisser plus tard sans deproteger la commande."
+                        : "Enregistrer la commande sans paiement immédiat et l'encaisser plus tard."}
                   </p>
                 </button>
               </div>
@@ -287,7 +295,9 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
               <div>
                 <p className="text-xs font-semibold text-gray-500">Mode sélectionné</p>
                 <p className={`text-sm font-bold ${isCredit ? 'text-amber-700' : 'text-green-700'}`}>
-                  {isCredit ? 'Commande non payée / crédit' : 'Encaissement immédiat'}
+                  {isCredit
+                    ? (canDeferSupplement ? 'Complement a encaisser plus tard' : 'Commande non payée / crédit')
+                    : 'Encaissement immédiat'}
                 </p>
               </div>
               <Button
@@ -489,8 +499,12 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
             ) : (
               <div className="text-center text-gray-400 space-y-3 p-8">
                 <p className="text-6xl">📋</p>
-                <p className="font-semibold text-gray-500">Mode crédit activé</p>
-                <p className="text-sm">La commande sera enregistrée sans paiement immédiat.</p>
+                <p className="font-semibold text-gray-500">{canDeferSupplement ? 'Complement differe' : 'Mode crédit activé'}</p>
+                <p className="text-sm">
+                  {canDeferSupplement
+                    ? "La commande reste payee, avec un complement a encaisser plus tard."
+                    : "La commande sera enregistrée sans paiement immédiat."}
+                </p>
               </div>
             )}
           </div>
@@ -518,7 +532,7 @@ export default function PaymentModal({ isOpen, onClose, onPayment, onComplete, t
             {showChoiceScreen
               ? 'Choisissez un mode pour continuer'
               : isCredit
-                ? '📋 Enregistrer en crédit'
+                ? (canDeferSupplement ? '📋 Enregistrer le complement' : '📋 Enregistrer en crédit')
                 : isFullyPaid
                   ? '✅ Valider le paiement'
                   : `Reste ${safeToFixed(remainingAmount)}€ à saisir`}

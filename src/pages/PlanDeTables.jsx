@@ -20,6 +20,7 @@ import { Edit, Plus, Trash2, EllipsisVertical, DollarSign, CheckCircle2, Circle,
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { getOrderOutstandingAmount, hasOutstandingBalance } from '@/components/caisse/orderPaymentUtils';
 
 const TABLE_PLAN_TABLE_FIELDS = [
     'id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y',
@@ -107,6 +108,8 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
     const [showStatusMenu, setShowStatusMenu] = React.useState(false);
     const tableStatus = statusConfig[table.statut] || { label: table.statut, className: 'border-gray-400' };
     const shapeStyle = shapeStyles[table.forme] || shapeStyles.carree;
+    const hasRemainingBalance = hasOutstandingBalance(table.order);
+    const outstandingAmount = getOrderOutstandingAmount(table.order);
 
     const handleActionClick = (e) => {
         e.stopPropagation();
@@ -207,7 +210,7 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
             )}
              
              {/* Menu rapide d'encaissement */}
-             {!isEditing && table.order_id && table.order && !table.order.payee && (
+             {!isEditing && table.order_id && table.order && (!table.order.payee || hasRemainingBalance) && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -223,8 +226,8 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
                         <DropdownMenuItem onClick={(e) => handleNavigation(e, createPageUrl(`StrasykPos?order_to_settle=${table.order_id}`))}>
                             <DollarSign className="mr-2 h-4 w-4 text-green-600" />
                             <div className="flex flex-col">
-                                <span className="font-medium">Régler la note</span>
-                                <span className="text-xs text-gray-500">Encaisser</span>
+                                <span className="font-medium">{hasRemainingBalance ? 'Régler le complément' : 'Régler la note'}</span>
+                                <span className="text-xs text-gray-500">{hasRemainingBalance ? `${outstandingAmount.toFixed(2)}€ restant` : 'Encaisser'}</span>
                             </div>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -245,8 +248,8 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
                         <span className={`font-bold text-3xl ${table.order.payee ? 'text-green-600' : 'text-gray-900'}`}>
                             {table.order.total_ttc?.toFixed(2) || '0.00'}€
                         </span>
-                        <Badge className={table.order.payee ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}>
-                            {table.order.payee ? (
+                        <Badge className={table.order.payee && !hasRemainingBalance ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}>
+                            {table.order.payee && !hasRemainingBalance ? (
                                 <span className="flex items-center gap-1">
                                     <CheckCircle className="w-4 h-4" />
                                     Payée
@@ -254,18 +257,18 @@ const TableComponent = React.forwardRef(({ table, onMouseDown, onClick, isEditin
                             ) : (
                                 <span className="flex items-center gap-1">
                                     <DollarSign className="w-4 h-4" />
-                                    Non payée
+                                    {hasRemainingBalance ? 'Complément' : 'Non payée'}
                                 </span>
                             )}
                         </Badge>
-                        {!isEditing && !table.order.payee && (
+                        {!isEditing && (!table.order.payee || hasRemainingBalance) && (
                             <Button
                                 size="sm"
                                 className="bg-green-600 hover:bg-green-700 text-white shadow-md"
                                 onClick={(e) => handleNavigation(e, createPageUrl(`StrasykPos?order_to_settle=${table.order_id}`))}
                             >
                                 <DollarSign className="w-4 h-4 mr-1" />
-                                Encaisser
+                                {hasRemainingBalance ? 'Régler complément' : 'Encaisser'}
                             </Button>
                         )}
                     </div>

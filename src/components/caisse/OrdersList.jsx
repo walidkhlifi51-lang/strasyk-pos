@@ -11,6 +11,7 @@ import { createPageUrl } from '@/utils';
 // Removed: import { utcToZonedTime } from 'date-fns-tz';
 import { format } from 'date-fns';
 import { toParisDate } from '@/lib/dateParsing';
+import { getOrderOutstandingAmount, hasOutstandingBalance } from './orderPaymentUtils';
 
 const typeConfig = {
   sur_place: { label: 'Sur Place', color: 'bg-blue-100 text-blue-800', icon: <Receipt className="w-3 h-3" /> },
@@ -33,7 +34,11 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isTicketViewOpen, setIsTicketViewOpen] = useState(false);
-  const config = statusConfig[order.statut] || { label: order.statut, color: 'bg-gray-200', icon: null };
+  const outstandingAmount = getOrderOutstandingAmount(order);
+  const hasRemainingBalance = hasOutstandingBalance(order);
+  const config = hasRemainingBalance
+    ? { label: 'COMPLEMENT A ENCAISSER', color: 'bg-orange-100 text-orange-800', icon: <AlertTriangle className="w-3 h-3" /> }
+    : (statusConfig[order.statut] || { label: order.statut, color: 'bg-gray-200', icon: null });
   const type = typeConfig[order.type_commande] || { label: order.type_commande, color: 'bg-gray-200', icon: null };
   
   // Logique de date robuste pour le fuseau horaire de Paris
@@ -185,9 +190,9 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
               Modifier
             </Button>
           )}
-          {!order.payee && (
+          {(!order.payee || hasRemainingBalance) && (
             <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => onSettleOrder(order)}>
-              Régler
+              {hasRemainingBalance ? 'Regler complement' : 'Régler'}
             </Button>
           )}
           {profile?.impression_bouton_visible && (
@@ -201,6 +206,11 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
             </Button>
           )}
         </div>
+        {hasRemainingBalance && (
+          <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">
+            Reste a encaisser : {outstandingAmount.toFixed(2)} EUR
+          </div>
+        )}
       </div>
       <Dialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
         <DialogContent>
