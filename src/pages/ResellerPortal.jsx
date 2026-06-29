@@ -77,6 +77,14 @@ const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 const RESELLER_STATS_COLORS = ['#2563eb', '#f97316', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4'];
 const getInvoiceBrandingColor = (invoice) => invoice?.issuer_snapshot?.primary_color || '#f97316';
 const getInvoiceIssuerName = (invoice) => invoice?.issuer_snapshot?.display_name || invoice?.issuer_snapshot?.legal_name || '';
+const RESELLER_PORTAL_TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'slug', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_BRANDING_FIELDS = ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_TENANT_LINK_FIELDS = ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_PRICING_FIELDS = ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_COMMISSION_FIELDS = ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_PAYOUT_FIELDS = ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'];
+const RESELLER_PORTAL_INVOICE_FIELDS = ['id', 'tenant_id', 'reseller_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'issuer_type', 'issuer_id', 'recipient_type', 'recipient_id', 'issuer_snapshot', 'recipient_snapshot', 'created_date', 'updated_date'];
 
 const createInvoiceTotals = () => ({
   paid_ttc: 0,
@@ -156,14 +164,14 @@ export default function ResellerPortal() {
         pricingRules,
         invoices,
       ] = await Promise.all([
-        appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.Tenant.list('-created_date'),
-        appClient.entities.ResellerBranding.filter({ reseller_id: currentReseller.id }, '-created_date', 5),
-        appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.ResellerPayout.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.ResellerPricingRule.filter({ reseller_id: currentReseller.id }, '-created_date'),
-        appClient.entities.TenantInvoice.list('-date_facturation').catch(() => []),
+        appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_TENANT_LINK_FIELDS }),
+        appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PORTAL_TENANT_FIELDS }),
+        appClient.entities.ResellerBranding.filter({ reseller_id: currentReseller.id }, '-created_date', 5, { fields: RESELLER_PORTAL_BRANDING_FIELDS }),
+        appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_COMMISSION_FIELDS }),
+        appClient.entities.ResellerPayout.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_PAYOUT_FIELDS }),
+        appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_USER_FIELDS }),
+        appClient.entities.ResellerPricingRule.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_PRICING_FIELDS }),
+        appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS }).catch(() => []),
       ]);
 
       return {
@@ -501,84 +509,91 @@ export default function ResellerPortal() {
 
       const createdClientInvoice = await appClient.entities.TenantInvoice.create(invoiceData);
 
-      const pricingRule = pricingRuleMap[selectedType];
-      if (pricingRule?.active && !clientInvoiceForm.is_devis) {
-        const chargeMonthlyHT = getEffectiveResellerChargeHT({
-          rule: pricingRule,
-          saleAmountHT: montantHT,
-        });
-        const chargeMonthlyTVA = Number((chargeMonthlyHT * (tauxTVA / 100)).toFixed(2));
-        const chargeMonthlyTTC = Number((chargeMonthlyHT + chargeMonthlyTVA).toFixed(2));
-        const chargeTotalHT = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyHT * duree : chargeMonthlyHT;
-        const chargeTotalTVA = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTVA * duree : chargeMonthlyTVA;
-        const chargeTotalTTC = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTTC * duree : chargeMonthlyTTC;
+      try {
+        const pricingRule = pricingRuleMap[selectedType];
+        if (pricingRule?.active && !clientInvoiceForm.is_devis) {
+          const chargeMonthlyHT = getEffectiveResellerChargeHT({
+            rule: pricingRule,
+            saleAmountHT: montantHT,
+          });
+          const chargeMonthlyTVA = Number((chargeMonthlyHT * (tauxTVA / 100)).toFixed(2));
+          const chargeMonthlyTTC = Number((chargeMonthlyHT + chargeMonthlyTVA).toFixed(2));
+          const chargeTotalHT = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyHT * duree : chargeMonthlyHT;
+          const chargeTotalTVA = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTVA * duree : chargeMonthlyTVA;
+          const chargeTotalTTC = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTTC * duree : chargeMonthlyTTC;
 
-        const platformPaymentRequest = {
-          reseller_id: currentReseller.id,
-          numero_facture: `FAC-${Date.now() + 1}`,
-          montant: Number(chargeTotalTTC.toFixed(2)),
-          tva_taux: tauxTVA,
-          type: selectedType,
-          description: `Facturation plateforme auto - ${selectedClient.tenant.nom_commercial} - ${getInvoiceTypeLabel(selectedType)}`,
-          date_facturation: clientInvoiceForm.date_facturation,
-          statut: 'en_attente',
-          issuer_type: 'platform',
-          issuer_id: null,
-          recipient_type: 'reseller',
-          recipient_id: currentReseller.id,
-          issuer_snapshot: {
-            type: 'platform',
-            legal_name: 'Strasyk POS',
-            email: 'contact@strasyk.com',
-            phone: null,
-            address: null,
-          },
-          recipient_snapshot: {
-            type: 'reseller',
-            name: currentReseller.name,
-            contact_email: currentReseller.contact_email || null,
-            phone: currentReseller.contact_phone || null,
-          },
-          metadata: {
-            ...buildPaymentRequestMetadata({
-              amountHT: Number(chargeTotalHT.toFixed(2)),
-              amountTVA: Number(chargeTotalTVA.toFixed(2)),
-              amountTTC: Number(chargeTotalTTC.toFixed(2)),
-              monthlyAmountHT: Number(chargeMonthlyHT.toFixed(2)),
-              monthlyAmountTVA: Number(chargeMonthlyTVA.toFixed(2)),
-              monthlyAmountTTC: Number(chargeMonthlyTTC.toFixed(2)),
-            }),
-            source_reseller_invoice_id: createdClientInvoice.id,
-            source_tenant_id: selectedClient.tenant.id,
-            source_pricing_rule_id: pricingRule.id,
-            auto_generated_from_reseller_sale: true,
-          },
-        };
+          const platformPaymentRequest = {
+            reseller_id: currentReseller.id,
+            numero_facture: `FAC-${Date.now() + 1}`,
+            montant: Number(chargeTotalTTC.toFixed(2)),
+            tva_taux: tauxTVA,
+            type: selectedType,
+            description: `Facturation plateforme auto - ${selectedClient.tenant.nom_commercial} - ${getInvoiceTypeLabel(selectedType)}`,
+            date_facturation: clientInvoiceForm.date_facturation,
+            statut: 'en_attente',
+            issuer_type: 'platform',
+            issuer_id: null,
+            recipient_type: 'reseller',
+            recipient_id: currentReseller.id,
+            issuer_snapshot: {
+              type: 'platform',
+              legal_name: 'Strasyk POS',
+              email: 'contact@strasyk.com',
+              phone: null,
+              address: null,
+            },
+            recipient_snapshot: {
+              type: 'reseller',
+              name: currentReseller.name,
+              contact_email: currentReseller.contact_email || null,
+              phone: currentReseller.contact_phone || null,
+            },
+            metadata: {
+              ...buildPaymentRequestMetadata({
+                amountHT: Number(chargeTotalHT.toFixed(2)),
+                amountTVA: Number(chargeTotalTVA.toFixed(2)),
+                amountTTC: Number(chargeTotalTTC.toFixed(2)),
+                monthlyAmountHT: Number(chargeMonthlyHT.toFixed(2)),
+                monthlyAmountTVA: Number(chargeMonthlyTVA.toFixed(2)),
+                monthlyAmountTTC: Number(chargeMonthlyTTC.toFixed(2)),
+              }),
+              source_reseller_invoice_id: createdClientInvoice.id,
+              source_tenant_id: selectedClient.tenant.id,
+              source_pricing_rule_id: pricingRule.id,
+              auto_generated_from_reseller_sale: true,
+            },
+          };
 
-        if (isRecurring && clientInvoiceForm.periode_debut) {
-          const debut = new Date(clientInvoiceForm.periode_debut);
-          const monthlyPayments = {};
-          for (let i = 0; i < duree; i += 1) {
-            const moisDate = new Date(debut);
-            moisDate.setMonth(debut.getMonth() + i);
-            const moisKey = moisDate.toISOString().split('T')[0];
-            monthlyPayments[moisKey] = {
-              montant: chargeMonthlyTTC,
-              paye: false,
-              date_paiement: null,
-            };
+          if (isRecurring && clientInvoiceForm.periode_debut) {
+            const debut = new Date(clientInvoiceForm.periode_debut);
+            const monthlyPayments = {};
+            for (let i = 0; i < duree; i += 1) {
+              const moisDate = new Date(debut);
+              moisDate.setMonth(debut.getMonth() + i);
+              const moisKey = moisDate.toISOString().split('T')[0];
+              monthlyPayments[moisKey] = {
+                montant: chargeMonthlyTTC,
+                paye: false,
+                date_paiement: null,
+              };
+            }
+            const fin = new Date(debut);
+            fin.setMonth(debut.getMonth() + duree);
+            platformPaymentRequest.periode_debut = clientInvoiceForm.periode_debut;
+            platformPaymentRequest.periode_fin = fin.toISOString().split('T')[0];
+            platformPaymentRequest.monthly_payments = monthlyPayments;
           }
-          const fin = new Date(debut);
-          fin.setMonth(debut.getMonth() + duree);
-          platformPaymentRequest.periode_debut = clientInvoiceForm.periode_debut;
-          platformPaymentRequest.periode_fin = fin.toISOString().split('T')[0];
-          platformPaymentRequest.monthly_payments = monthlyPayments;
+
+          await appClient.entities.TenantInvoice.create(platformPaymentRequest);
         }
 
-        await appClient.entities.TenantInvoice.create(platformPaymentRequest);
+        return createdClientInvoice;
+      } catch (error) {
+        if (createdClientInvoice?.id) {
+          await appClient.entities.TenantInvoice.delete(createdClientInvoice.id).catch(() => null);
+        }
+        throw error;
       }
-
-      return createdClientInvoice;
     },
     onSuccess: async () => {
       toast({ title: '✅ Facture client creee' });
@@ -592,12 +607,30 @@ export default function ResellerPortal() {
 
   const markInvoicePaidMutation = useMutation({
     mutationFn: async (invoice) => {
-      const finalInvoice = buildFinalInvoiceFromPaymentRequest(invoice);
-      await appClient.entities.TenantInvoice.create(finalInvoice);
-      return appClient.entities.TenantInvoice.update(invoice.id, {
-        statut: 'payee',
-        date_paiement: finalInvoice.date_paiement,
-      });
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS });
+      const existingFinalInvoice = allInvoices.find((item) => (
+        isFinalInvoice(item)
+        && item.metadata?.linked_payment_request_id === invoice.id
+        && !item.metadata?.paid_month
+      ));
+      const finalInvoice = existingFinalInvoice || buildFinalInvoiceFromPaymentRequest(invoice);
+      let createdFinalInvoice = null;
+
+      try {
+        if (!existingFinalInvoice) {
+          createdFinalInvoice = await appClient.entities.TenantInvoice.create(finalInvoice);
+        }
+
+        return await appClient.entities.TenantInvoice.update(invoice.id, {
+          statut: 'payee',
+          date_paiement: finalInvoice.date_paiement,
+        });
+      } catch (error) {
+        if (!existingFinalInvoice && createdFinalInvoice?.id) {
+          await appClient.entities.TenantInvoice.delete(createdFinalInvoice.id).catch(() => null);
+        }
+        throw error;
+      }
     },
     onSuccess: async () => {
       toast({ title: '✅ Paiement valide' });
@@ -620,7 +653,7 @@ export default function ResellerPortal() {
       };
       const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
 
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS });
       const existingFinalInvoice = allInvoices.find((item) => (
         isFinalInvoice(item)
         && item.metadata?.linked_payment_request_id === invoice.id

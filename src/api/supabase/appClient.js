@@ -102,13 +102,13 @@ const LEGACY_ENTITY_FIELDS = {
   TenantInvoice: ['id', 'tenant_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'lignes_materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'created_date', 'updated_date'],
   UserAccess: ['id', 'tenant_id', 'user_email', 'role', 'is_active', 'created_date', 'updated_date'],
   PlatformAdminAccess: ['id', 'user_email', 'is_active', 'created_date', 'updated_date'],
-  Reseller: ['id', 'nom', 'email', 'telephone', 'status', 'created_date', 'updated_date'],
-  ResellerUser: ['id', 'reseller_id', 'user_email', 'role', 'is_active', 'created_date', 'updated_date'],
-  ResellerBranding: ['id', 'reseller_id', 'name', 'logo_url', 'created_date', 'updated_date'],
-  ResellerPricingRule: ['id', 'reseller_id', 'type', 'value', 'created_date', 'updated_date'],
-  ResellerTenant: ['id', 'reseller_id', 'tenant_id', 'status', 'created_date', 'updated_date'],
-  ResellerCommission: ['id', 'reseller_id', 'tenant_id', 'status', 'montant', 'created_date', 'updated_date'],
-  ResellerPayout: ['id', 'reseller_id', 'status', 'montant', 'created_date', 'updated_date'],
+  Reseller: ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'company_name', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'],
+  ResellerUser: ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'],
+  ResellerBranding: ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'],
+  ResellerPricingRule: ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'],
+  ResellerTenant: ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'],
+  ResellerCommission: ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'],
+  ResellerPayout: ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'],
 };
 
 const UNIQUE_SELECT_FIELDS = (fields = []) => [...new Set(fields.filter(Boolean))];

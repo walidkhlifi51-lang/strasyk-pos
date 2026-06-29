@@ -74,6 +74,15 @@ const isEmbeddedImageUrl = (value) => `${value || ''}`.startsWith('data:image/')
 const isEmbeddedFileUrl = (value) => `${value || ''}`.startsWith('data:');
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
+const RESELLER_PLATFORM_FIELDS = ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'company_name', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_BRANDING_FIELDS = ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_TENANT_LINK_FIELDS = ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_PRICING_FIELDS = ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_COMMISSION_FIELDS = ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_PAYOUT_FIELDS = ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'slug', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_INVOICE_FIELDS = ['id', 'tenant_id', 'reseller_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'issuer_type', 'issuer_id', 'recipient_type', 'recipient_id', 'issuer_snapshot', 'recipient_snapshot', 'created_date', 'updated_date'];
 
 const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
   const activeLinks = resellerTenants.filter((item) => item.status === 'active').length;
@@ -164,15 +173,15 @@ export default function ResellersPlatform() {
         tenants,
         invoices,
       ] = await Promise.all([
-        appClient.entities.Reseller.list('-created_date'),
-        appClient.entities.ResellerBranding.list('-created_date'),
-        appClient.entities.ResellerTenant.list('-created_date'),
-        appClient.entities.ResellerUser.list('-created_date'),
-        appClient.entities.ResellerPricingRule.list('-created_date'),
-        appClient.entities.ResellerCommission.list('-created_date'),
-        appClient.entities.ResellerPayout.list('-created_date'),
-        appClient.entities.Tenant.list('-created_date'),
-        appClient.entities.TenantInvoice.list('-date_facturation').catch(() => []),
+        appClient.entities.Reseller.list('-created_date', undefined, { fields: RESELLER_PLATFORM_FIELDS }),
+        appClient.entities.ResellerBranding.list('-created_date', undefined, { fields: RESELLER_PLATFORM_BRANDING_FIELDS }),
+        appClient.entities.ResellerTenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_LINK_FIELDS }),
+        appClient.entities.ResellerUser.list('-created_date', undefined, { fields: RESELLER_PLATFORM_USER_FIELDS }),
+        appClient.entities.ResellerPricingRule.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PRICING_FIELDS }),
+        appClient.entities.ResellerCommission.list('-created_date', undefined, { fields: RESELLER_PLATFORM_COMMISSION_FIELDS }),
+        appClient.entities.ResellerPayout.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PAYOUT_FIELDS }),
+        appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_FIELDS }),
+        appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS }).catch(() => []),
       ]);
 
       return {
@@ -785,12 +794,30 @@ A bientot.`;
 
   const markResellerInvoicePaidMutation = useMutation({
     mutationFn: async (invoice) => {
-      const finalInvoice = buildFinalInvoiceFromPaymentRequest(invoice);
-      await appClient.entities.TenantInvoice.create(finalInvoice);
-      return appClient.entities.TenantInvoice.update(invoice.id, {
-        statut: 'payee',
-        date_paiement: finalInvoice.date_paiement,
-      });
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS });
+      const existingFinalInvoice = allInvoices.find((item) => (
+        isFinalInvoice(item)
+        && item.metadata?.linked_payment_request_id === invoice.id
+        && !item.metadata?.paid_month
+      ));
+      const finalInvoice = existingFinalInvoice || buildFinalInvoiceFromPaymentRequest(invoice);
+      let createdFinalInvoice = null;
+
+      try {
+        if (!existingFinalInvoice) {
+          createdFinalInvoice = await appClient.entities.TenantInvoice.create(finalInvoice);
+        }
+
+        return await appClient.entities.TenantInvoice.update(invoice.id, {
+          statut: 'payee',
+          date_paiement: finalInvoice.date_paiement,
+        });
+      } catch (error) {
+        if (!existingFinalInvoice && createdFinalInvoice?.id) {
+          await appClient.entities.TenantInvoice.delete(createdFinalInvoice.id).catch(() => null);
+        }
+        throw error;
+      }
     },
     onSuccess: async () => {
       toast({ title: 'âœ… Paiement valide' });
@@ -813,7 +840,7 @@ A bientot.`;
       };
       const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
 
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS });
       const existingFinalInvoice = allInvoices.find((item) => (
         isFinalInvoice(item)
         && item.metadata?.linked_payment_request_id === invoice.id
@@ -854,7 +881,7 @@ A bientot.`;
         throw new Error('Facture revendeur introuvable.');
       }
 
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date');
+      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS });
       const paymentRequestId = isPaymentRequestInvoice(invoice)
         ? invoice.id
         : invoice.metadata?.linked_payment_request_id || null;
