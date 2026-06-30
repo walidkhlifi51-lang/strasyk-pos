@@ -31,6 +31,9 @@ const getRequestMode = () => {
   const params = new URLSearchParams(window.location.search);
   return params.get('kind') === 'reseller' ? 'reseller' : 'commerce';
 };
+const getRequestAccessUrl = (requestMode) => (
+  requestMode === 'reseller' ? `${createPageUrl('RequestAccess')}?kind=reseller` : createPageUrl('RequestAccess')
+);
 
 const buildRequestPayload = (formData, email, requestMode) => ({
   nom_commercial: formData.nom_commercial,
@@ -57,6 +60,7 @@ export default function RequestAccess() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeliveryPerson, setIsDeliveryPerson] = useState(false);
   const [screenState, setScreenState] = useState('form');
+  const [activeAccessType, setActiveAccessType] = useState(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -114,6 +118,7 @@ export default function RequestAccess() {
           applyState(() => {
             setUser(null);
             setIsDeliveryPerson(false);
+            setActiveAccessType(null);
             if (lastRequestEmail) {
               setFormData((prev) => ({
                 ...prev,
@@ -129,6 +134,7 @@ export default function RequestAccess() {
         if (!applyState(() => {
           setUser(currentUser);
           setIsDeliveryPerson(false);
+          setActiveAccessType(null);
         })) {
           return;
         }
@@ -171,9 +177,21 @@ export default function RequestAccess() {
           ? resellerUserResult.value.filter((entry) => normalizeEmail(entry.user_email) === userEmail && entry.status === 'active')
           : [];
 
-        const hasActiveAccess = ownedTenants.length > 0 || userAccesses.length > 0 || platformAdminEntries.length > 0 || resellerUserEntries.length > 0;
+        const hasCommerceAccess = ownedTenants.length > 0 || userAccesses.length > 0;
+        const hasPlatformAdminAccess = platformAdminEntries.length > 0;
+        const hasResellerAccess = resellerUserEntries.length > 0;
+        const hasActiveAccess = hasCommerceAccess || hasPlatformAdminAccess || hasResellerAccess;
         if (hasActiveAccess) {
           applyState(() => {
+            if (hasResellerAccess) {
+              setActiveAccessType('reseller');
+            } else if (hasCommerceAccess) {
+              setActiveAccessType('commerce');
+            } else if (hasPlatformAdminAccess) {
+              setActiveAccessType('platform_admin');
+            } else {
+              setActiveAccessType('existing');
+            }
             setScreenState('session_active');
           });
           return;
@@ -356,6 +374,15 @@ export default function RequestAccess() {
   }
 
   if (screenState === 'session_active') {
+    const isActiveReseller = activeAccessType === 'reseller';
+    const sessionTitle = isActiveReseller ? 'Compte revendeur deja actif' : 'Session deja active';
+    const sessionDescription = isActiveReseller
+      ? 'Ce compte dispose deja d un acces revendeur actif. Aucune nouvelle demande revendeur n est necessaire.'
+      : isResellerMode
+        ? 'Cette page sert a demander un acces revendeur. Le compte actuellement connecte a deja un acces existant.'
+        : 'Cette page sert a ouvrir un nouveau commerce. Le compte actuellement connecte a deja un acces existant.';
+    const openLabel = isActiveReseller ? 'Ouvrir mon espace revendeur' : 'Ouvrir le tableau de bord';
+
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 p-4">
         <Card className="max-w-md w-full">
@@ -363,21 +390,25 @@ export default function RequestAccess() {
             <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Store className="w-8 h-8 text-orange-700" />
             </div>
-            <CardTitle className="text-center text-2xl">Session deja active</CardTitle>
-            <CardDescription className="text-center">
-              {isResellerMode
-                ? 'Cette page sert a demander un acces revendeur. Le compte actuellement connecte a deja un acces existant.'
-                : 'Cette page sert a ouvrir un nouveau commerce. Le compte actuellement connecte a deja un acces existant.'}
-            </CardDescription>
+            <CardTitle className="text-center text-2xl">{sessionTitle}</CardTitle>
+            <CardDescription className="text-center">{sessionDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-lg border bg-orange-50 p-3 text-sm text-orange-900">
               Session detectee : <strong>{user?.email}</strong>
             </div>
+            {isActiveReseller ? (
+              <div className="rounded-lg border bg-blue-50 p-3 text-sm text-blue-900">
+                Ce compte est deja rattache a un revendeur actif. C est pour cela que vous ne voyez pas de nouvelle demande revendeur a valider dans l admin.
+              </div>
+            ) : null}
+            <Button onClick={() => { navigate('/', { replace: true }); }} className="w-full">
+              {openLabel}
+            </Button>
             <Button
               onClick={async () => {
                 await appClient.auth.logout();
-                navigate(createPageUrl('RequestAccess'), { replace: true });
+                navigate(getRequestAccessUrl(requestMode), { replace: true });
               }}
               className="w-full"
             >
