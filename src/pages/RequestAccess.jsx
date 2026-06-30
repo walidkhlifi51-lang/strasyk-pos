@@ -18,6 +18,7 @@ const REQUEST_ACCESS_FIELDS = ['id', 'email', 'statut', 'nom_commercial', 'nom_c
 const TENANT_ACCESS_FIELDS = ['id', 'owner_email'];
 const USER_ACCESS_FIELDS = ['id', 'user_email', 'is_active'];
 const PLATFORM_ADMIN_FIELDS = ['id', 'user_email', 'is_active'];
+const RESELLER_USER_ACCESS_FIELDS = ['id', 'user_email', 'status'];
 const isAlreadyRegisteredError = (error) => {
   const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
   return message.includes('already registered')
@@ -28,7 +29,12 @@ const goToDashboard = () => {
   window.location.href = '/';
 };
 
-const buildRequestPayload = (formData, email) => ({
+const getRequestMode = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('kind') === 'reseller' ? 'reseller' : 'commerce';
+};
+
+const buildRequestPayload = (formData, email, requestMode) => ({
   nom_commercial: formData.nom_commercial,
   nom_contact: formData.nom_contact,
   prenom_contact: formData.prenom_contact,
@@ -37,12 +43,14 @@ const buildRequestPayload = (formData, email) => ({
   type_commerce: formData.type_commerce,
   message: formData.message,
   email,
-  formule_choisie: 'abonnement',
+  formule_choisie: requestMode === 'reseller' ? 'revendeur' : 'abonnement',
   statut: 'en_attente',
 });
 
 export default function RequestAccess() {
   const { toast } = useToast();
+  const requestMode = getRequestMode();
+  const isResellerMode = requestMode === 'reseller';
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,7 +77,9 @@ export default function RequestAccess() {
       setScreenState('pending');
       toast({
         title: 'Demande envoyee',
-        description: "Votre demande d'ouverture a bien ete transmise et attend votre validation admin.",
+        description: isResellerMode
+          ? 'Votre demande revendeur a bien ete transmise et attend votre validation admin.'
+          : "Votre demande d'ouverture a bien ete transmise et attend votre validation admin.",
       });
     },
     onError: (error) => {
@@ -113,11 +123,12 @@ export default function RequestAccess() {
           return;
         }
 
-        const [requestsResult, ownedTenantsResult, userAccessResult, platformAdminResult] = await Promise.allSettled([
+        const [requestsResult, ownedTenantsResult, userAccessResult, platformAdminResult, resellerUserResult] = await Promise.allSettled([
           appClient.entities.InscriptionRequest.filter({ email: currentUser.email }, '-created_date', 20, { fields: REQUEST_ACCESS_FIELDS }),
           appClient.entities.Tenant.filter({ owner_email: currentUser.email }, '-created_date', 10, { fields: TENANT_ACCESS_FIELDS }),
           appClient.entities.UserAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 20, { fields: USER_ACCESS_FIELDS }),
           appClient.entities.PlatformAdminAccess.filter({ user_email: currentUser.email, is_active: true }, '-created_date', 10, { fields: PLATFORM_ADMIN_FIELDS }),
+          appClient.entities.ResellerUser.filter({ user_email: currentUser.email, status: 'active' }, '-created_date', 20, { fields: RESELLER_USER_ACCESS_FIELDS }),
         ]);
 
         const requests = requestsResult.status === 'fulfilled'
@@ -132,8 +143,11 @@ export default function RequestAccess() {
         const platformAdminEntries = platformAdminResult.status === 'fulfilled'
           ? platformAdminResult.value.filter((entry) => normalizeEmail(entry.user_email) === userEmail && entry.is_active === true)
           : [];
+        const resellerUserEntries = resellerUserResult.status === 'fulfilled'
+          ? resellerUserResult.value.filter((entry) => normalizeEmail(entry.user_email) === userEmail && entry.status === 'active')
+          : [];
 
-        const hasActiveAccess = ownedTenants.length > 0 || userAccesses.length > 0 || platformAdminEntries.length > 0;
+        const hasActiveAccess = ownedTenants.length > 0 || userAccesses.length > 0 || platformAdminEntries.length > 0 || resellerUserEntries.length > 0;
         if (hasActiveAccess) {
           goToDashboard();
           return;
@@ -254,7 +268,7 @@ export default function RequestAccess() {
         }
       }
 
-      await createRequestMutation.mutateAsync(buildRequestPayload(formData, requestEmail));
+      await createRequestMutation.mutateAsync(buildRequestPayload(formData, requestEmail, requestMode));
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -284,7 +298,9 @@ export default function RequestAccess() {
             </div>
             <CardTitle className="text-center text-2xl">Compte livreur detecte</CardTitle>
             <CardDescription className="text-center">
-              Cette page est reservee a l'ouverture d'un commerce. Votre compte est configure comme livreur.
+              {isResellerMode
+                ? "Cette page est reservee aux demandes revendeurs. Votre compte est configure comme livreur."
+                : "Cette page est reservee a l'ouverture d'un commerce. Votre compte est configure comme livreur."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -310,7 +326,9 @@ export default function RequestAccess() {
             </div>
             <CardTitle className="text-center text-2xl">Session deja active</CardTitle>
             <CardDescription className="text-center">
-              Cette page sert a ouvrir un nouveau commerce. Le compte actuellement connecte a deja un acces existant.
+              {isResellerMode
+                ? 'Cette page sert a demander un acces revendeur. Le compte actuellement connecte a deja un acces existant.'
+                : 'Cette page sert a ouvrir un nouveau commerce. Le compte actuellement connecte a deja un acces existant.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -345,7 +363,9 @@ export default function RequestAccess() {
             </div>
             <CardTitle className="text-center text-2xl">Demande en attente</CardTitle>
             <CardDescription className="text-center">
-              Votre demande a bien ete recue. Elle attend maintenant votre validation admin.
+              {isResellerMode
+                ? 'Votre demande revendeur a bien ete recue. Elle attend maintenant votre validation admin.'
+                : 'Votre demande a bien ete recue. Elle attend maintenant votre validation admin.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -374,7 +394,9 @@ export default function RequestAccess() {
             </div>
             <CardTitle className="text-center text-2xl">Demande validee</CardTitle>
             <CardDescription className="text-center">
-              Votre ouverture a ete acceptee. Reconnectez-vous si besoin pour entrer dans votre espace.
+              {isResellerMode
+                ? 'Votre demande revendeur a ete acceptee. Reconnectez-vous si besoin pour entrer dans votre espace.'
+                : 'Votre ouverture a ete acceptee. Reconnectez-vous si besoin pour entrer dans votre espace.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -405,7 +427,9 @@ export default function RequestAccess() {
               </div>
               <CardTitle className="text-center text-2xl">Demande a revoir</CardTitle>
               <CardDescription className="text-center">
-                Votre precedente demande n a pas ete retenue. Vous pouvez en envoyer une nouvelle.
+                {isResellerMode
+                  ? 'Votre precedente demande revendeur n a pas ete retenue. Vous pouvez en envoyer une nouvelle.'
+                  : 'Votre precedente demande n a pas ete retenue. Vous pouvez en envoyer une nouvelle.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -420,7 +444,8 @@ export default function RequestAccess() {
                 setFormData={setFormData}
                 onSubmit={handleSubmit}
                 loading={createRequestMutation.isPending || isSubmitting}
-                submitLabel="Renvoyer ma demande d ouverture"
+                submitLabel={isResellerMode ? 'Renvoyer ma demande revendeur' : 'Renvoyer ma demande d ouverture'}
+                requestMode={requestMode}
               />
             </CardContent>
           </Card>
@@ -438,9 +463,13 @@ export default function RequestAccess() {
             <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Store className="w-8 h-8 text-orange-600" />
             </div>
-            <CardTitle className="text-center text-2xl">Ouvrir mon commerce</CardTitle>
+            <CardTitle className="text-center text-2xl">
+              {isResellerMode ? 'Devenir revendeur' : 'Ouvrir mon commerce'}
+            </CardTitle>
             <CardDescription className="text-center">
-              Cette page est reservee aux nouveaux commercants. Remplissez ce formulaire pour demander l ouverture de votre commerce.
+              {isResellerMode
+                ? 'Cette page est reservee aux partenaires revendeurs. Remplissez ce formulaire pour demander votre acces revendeur.'
+                : 'Cette page est reservee aux nouveaux commercants. Remplissez ce formulaire pour demander l ouverture de votre commerce.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -451,7 +480,9 @@ export default function RequestAccess() {
             </div>
             <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
               <p className="text-sm font-medium text-orange-900">
-                Votre demande sera envoyee immediatement a l administration. La validation du commerce reste manuelle pour controler le dossier et les paiements.
+                {isResellerMode
+                  ? 'Votre demande revendeur sera envoyee immediatement a l administration. La validation reste manuelle pour controler le dossier.'
+                  : 'Votre demande sera envoyee immediatement a l administration. La validation du commerce reste manuelle pour controler le dossier et les paiements.'}
               </p>
             </div>
 
@@ -461,7 +492,8 @@ export default function RequestAccess() {
               setFormData={setFormData}
               onSubmit={handleSubmit}
               loading={createRequestMutation.isPending || isSubmitting}
-              submitLabel="Envoyer ma demande d ouverture"
+              submitLabel={isResellerMode ? 'Envoyer ma demande revendeur' : 'Envoyer ma demande d ouverture'}
+              requestMode={requestMode}
             />
           </CardContent>
         </Card>
@@ -470,7 +502,9 @@ export default function RequestAccess() {
   );
 }
 
-function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLabel }) {
+function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLabel, requestMode }) {
+  const isResellerMode = requestMode === 'reseller';
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="grid md:grid-cols-2 gap-4">
@@ -532,10 +566,10 @@ function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLab
       )}
 
       <div>
-        <Label>Nom du commerce *</Label>
+        <Label>{isResellerMode ? 'Nom du revendeur / societe *' : 'Nom du commerce *'}</Label>
         <Input
           required
-          placeholder="Pizza Roma, Boulangerie Martin..."
+          placeholder={isResellerMode ? 'Ex: Partner Paris Nord' : 'Pizza Roma, Boulangerie Martin...'}
           value={formData.nom_commercial}
           onChange={(e) => setFormData({ ...formData, nom_commercial: e.target.value })}
         />
@@ -553,9 +587,9 @@ function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLab
           />
         </div>
         <div>
-          <Label>Type de commerce</Label>
+          <Label>{isResellerMode ? "Type d'activite" : 'Type de commerce'}</Label>
           <Input
-            placeholder="Restaurant, Pizzeria..."
+            placeholder={isResellerMode ? 'Revendeur, white label, integrateur...' : 'Restaurant, Pizzeria...'}
             value={formData.type_commerce}
             onChange={(e) => setFormData({ ...formData, type_commerce: e.target.value })}
           />
@@ -563,7 +597,7 @@ function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLab
       </div>
 
       <div>
-        <Label>Adresse du commerce</Label>
+        <Label>{isResellerMode ? 'Adresse de la societe' : 'Adresse du commerce'}</Label>
         <Input
           placeholder="12 rue de la Paix, 75001 Paris"
           value={formData.adresse}
@@ -574,7 +608,7 @@ function RequestForm({ user, formData, setFormData, onSubmit, loading, submitLab
       <div>
         <Label>Message (optionnel)</Label>
         <Textarea
-          placeholder="Informations complementaires..."
+          placeholder={isResellerMode ? 'Zone d intervention, portefeuille clients, informations complementaires...' : 'Informations complementaires...'}
           value={formData.message}
           onChange={(e) => setFormData({ ...formData, message: e.target.value })}
           rows={3}

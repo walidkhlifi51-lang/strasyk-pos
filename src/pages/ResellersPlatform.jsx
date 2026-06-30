@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2, Loader2, Upload } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2, Loader2, Upload, Clock3 } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
@@ -83,6 +83,24 @@ const RESELLER_PLATFORM_COMMISSION_FIELDS = ['id', 'reseller_id', 'tenant_id', '
 const RESELLER_PLATFORM_PAYOUT_FIELDS = ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'slug', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_INVOICE_FIELDS = ['id', 'tenant_id', 'reseller_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'issuer_type', 'issuer_id', 'recipient_type', 'recipient_id', 'issuer_snapshot', 'recipient_snapshot', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_REQUEST_FIELDS = ['id', 'nom_commercial', 'prenom_contact', 'nom_contact', 'email', 'adresse', 'telephone', 'type_commerce', 'formule_choisie', 'statut', 'message', 'created_date', 'updated_date'];
+
+const normalizeEmail = (value) => `${value || ''}`.trim().toLowerCase();
+
+const classifyResellerRequest = (request) => {
+  const haystack = [
+    request?.formule_choisie,
+    request?.type_commerce,
+    request?.message,
+    request?.nom_commercial,
+  ].join(' ').toLowerCase();
+
+  if (request?.formule_choisie === 'revendeur') return 'revendeur';
+  if (haystack.includes('revendeur') || haystack.includes('reseller') || haystack.includes('white label') || haystack.includes('partenaire')) {
+    return 'revendeur';
+  }
+  return 'a_qualifier';
+};
 
 const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
   const activeLinks = resellerTenants.filter((item) => item.status === 'active').length;
@@ -172,6 +190,7 @@ export default function ResellersPlatform() {
         payouts,
         tenants,
         invoices,
+        accessRequests,
       ] = await Promise.all([
         appClient.entities.Reseller.list('-created_date', undefined, { fields: RESELLER_PLATFORM_FIELDS }),
         appClient.entities.ResellerBranding.list('-created_date', undefined, { fields: RESELLER_PLATFORM_BRANDING_FIELDS }),
@@ -182,6 +201,7 @@ export default function ResellersPlatform() {
         appClient.entities.ResellerPayout.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PAYOUT_FIELDS }),
         appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_FIELDS }),
         appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS }).catch(() => []),
+        appClient.entities.InscriptionRequest.list('-created_date', undefined, { fields: RESELLER_PLATFORM_REQUEST_FIELDS }).catch(() => []),
       ]);
 
       return {
@@ -194,6 +214,7 @@ export default function ResellersPlatform() {
         payouts,
         tenants,
         invoices,
+        accessRequests,
       };
     },
     enabled: isPlatformAdmin,
@@ -209,6 +230,15 @@ export default function ResellersPlatform() {
   const payouts = data?.payouts || [];
   const tenants = data?.tenants || [];
   const invoices = data?.invoices || [];
+  const accessRequests = data?.accessRequests || [];
+  const pendingAccessRequests = React.useMemo(
+    () => accessRequests.filter((request) => request.statut === 'en_attente'),
+    [accessRequests],
+  );
+  const pendingResellerRequestCount = React.useMemo(
+    () => pendingAccessRequests.filter((request) => classifyResellerRequest(request) === 'revendeur').length,
+    [pendingAccessRequests],
+  );
 
   const selectedReseller = resellers.find((item) => item.id === selectedResellerId) || null;
   const selectedBranding = resellerBranding.find((item) => item.reseller_id === selectedResellerId) || null;
@@ -500,6 +530,104 @@ A bientot.`;
     },
     onError: (error) => {
       toast({ title: 'âŒ Erreur', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const approveAccessRequestAsResellerMutation = useMutation({
+    mutationFn: async (request) => {
+      if (!request?.id) throw new Error('Demande introuvable.');
+      if (!request.nom_commercial?.trim()) throw new Error('Le nom du revendeur est obligatoire.');
+      if (!request.email?.trim()) throw new Error('L email de contact est obligatoire.');
+
+      const requestEmail = normalizeEmail(request.email);
+      const existingReseller = resellers.find((item) => (
+        normalizeEmail(item.contact_email) === requestEmail
+        || item.name?.trim().toLowerCase() === request.nom_commercial.trim().toLowerCase()
+      ));
+
+      if (existingReseller) {
+        await appClient.entities.InscriptionRequest.update(request.id, {
+          statut: 'accepte',
+          formule_choisie: 'revendeur',
+        });
+        return existingReseller;
+      }
+
+      const contactName = [request.prenom_contact, request.nom_contact].filter(Boolean).join(' ').trim();
+      let createdReseller = null;
+      let createdBranding = null;
+      let createdResellerUser = null;
+
+      try {
+        createdReseller = await appClient.entities.Reseller.create({
+          name: request.nom_commercial.trim(),
+          type: 'standard',
+          status: 'active',
+          contact_email: request.email.trim(),
+          contact_phone: request.telephone?.trim() || null,
+          company_name: request.nom_commercial.trim(),
+          address: request.adresse?.trim() || null,
+          notes: [
+            request.message?.trim(),
+            contactName ? `Contact demande: ${contactName}` : null,
+            request.type_commerce ? `Type declare: ${request.type_commerce}` : null,
+            `Source: inscription_request:${request.id}`,
+          ].filter(Boolean).join('\n'),
+        });
+
+        createdBranding = await appClient.entities.ResellerBranding.create({
+          reseller_id: createdReseller.id,
+          brand_name: createdReseller.name,
+          primary_color: '#f97316',
+          secondary_color: '#1d4ed8',
+        });
+
+        const existingUsers = await appClient.entities.ResellerUser.filter(
+          { user_email: request.email.trim() },
+          '-created_date',
+          10,
+          { fields: RESELLER_PLATFORM_USER_FIELDS },
+        ).catch(() => []);
+        const matchingUser = existingUsers.find((item) => normalizeEmail(item.user_email) === requestEmail);
+
+        if (!matchingUser) {
+          createdResellerUser = await appClient.entities.ResellerUser.create({
+            reseller_id: createdReseller.id,
+            user_email: request.email.trim(),
+            role: 'owner',
+            status: 'active',
+          });
+        }
+
+        await appClient.entities.InscriptionRequest.update(request.id, {
+          statut: 'accepte',
+          formule_choisie: 'revendeur',
+        });
+
+        return createdReseller;
+      } catch (error) {
+        if (createdResellerUser?.id) {
+          await appClient.entities.ResellerUser.delete(createdResellerUser.id).catch(() => null);
+        }
+        if (createdBranding?.id) {
+          await appClient.entities.ResellerBranding.delete(createdBranding.id).catch(() => null);
+        }
+        if (createdReseller?.id) {
+          await appClient.entities.Reseller.delete(createdReseller.id).catch(() => null);
+        }
+        throw error;
+      }
+    },
+    onSuccess: async (createdReseller) => {
+      toast({
+        title: '✅ Demande convertie',
+        description: `${createdReseller.name} est maintenant visible dans la liste des revendeurs.`,
+      });
+      setSelectedResellerId(createdReseller.id);
+      await invalidateResellers();
+    },
+    onError: (error) => {
+      toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -959,6 +1087,72 @@ A bientot.`;
 
       <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between gap-3">
+                <span>Demandes recues</span>
+                <Badge className="bg-amber-100 text-amber-700">
+                  {pendingAccessRequests.length} en attente
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border bg-amber-50 p-4 text-sm text-amber-900">
+                Cette section remonte les demandes publiques envoyees via <strong>RequestAccess</strong>. Les demandes marquees
+                <strong> revendeur</strong> sont detectees automatiquement. Les autres restent visibles ici pour eviter d en perdre.
+              </div>
+              {pendingAccessRequests.length === 0 ? (
+                <p className="text-sm text-gray-500">Aucune demande publique en attente.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pendingAccessRequests.map((request) => {
+                    const requestKind = classifyResellerRequest(request);
+                    const contactName = [request.prenom_contact, request.nom_contact].filter(Boolean).join(' ').trim();
+                    return (
+                      <div key={request.id} className="rounded-xl border p-4 space-y-3 bg-white">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-900">{request.nom_commercial || 'Demande sans nom'}</p>
+                            <p className="text-xs text-gray-500 mt-1">{request.email || 'Sans email'}{contactName ? ` • ${contactName}` : ''}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge className={requestKind === 'revendeur' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}>
+                              {requestKind === 'revendeur' ? 'Revendeur' : 'A qualifier'}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              <Clock3 className="w-3 h-3 mr-1" />
+                              {request.created_date ? new Date(request.created_date).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          {request.telephone ? <p>Telephone : {request.telephone}</p> : null}
+                          {request.adresse ? <p>Adresse : {request.adresse}</p> : null}
+                          {request.type_commerce ? <p>Type declare : {request.type_commerce}</p> : null}
+                          {request.message ? <p>Message : {request.message}</p> : null}
+                        </div>
+                        <Button
+                          type="button"
+                          className="w-full"
+                          onClick={() => approveAccessRequestAsResellerMutation.mutate(request)}
+                          disabled={approveAccessRequestAsResellerMutation.isPending}
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Creer comme revendeur
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {pendingResellerRequestCount > 0 ? (
+                <p className="text-xs text-gray-500">
+                  Detection automatique : {pendingResellerRequestCount} demande(s) deja identifiee(s) comme revendeur.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Nouveau revendeur</CardTitle>
