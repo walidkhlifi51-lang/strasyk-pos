@@ -38,10 +38,22 @@ const panels = [
   },
 ];
 
+const normalizeRedirectPath = (rawRedirect) => {
+  if (!rawRedirect) return '/';
+
+  try {
+    const url = new URL(rawRedirect, window.location.origin);
+    if (url.origin !== window.location.origin) return '/';
+    return `${url.pathname}${url.search}${url.hash}` || '/';
+  } catch {
+    return rawRedirect.startsWith('/') ? rawRedirect : '/';
+  }
+};
+
 export default function Auth() {
   const { toast } = useToast();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const redirectTo = params.get('redirect') || '/';
+  const redirectTo = useMemo(() => normalizeRedirectPath(params.get('redirect')), [params]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

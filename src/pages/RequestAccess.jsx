@@ -34,6 +34,7 @@ const getRequestMode = () => {
 const getRequestAccessUrl = (requestMode) => (
   requestMode === 'reseller' ? `${createPageUrl('RequestAccess')}?kind=reseller` : createPageUrl('RequestAccess')
 );
+const RESELLER_PORTAL_CLIENTS_URL = `${createPageUrl('ResellerPortal')}?tab=clients`;
 
 const buildRequestPayload = (formData, email, requestMode) => ({
   nom_commercial: formData.nom_commercial,
@@ -382,6 +383,7 @@ export default function RequestAccess() {
         ? 'Cette page sert a demander un acces revendeur. Le compte actuellement connecte a deja un acces existant.'
         : 'Cette page sert a ouvrir un nouveau commerce. Le compte actuellement connecte a deja un acces existant.';
     const openLabel = isActiveReseller ? 'Ouvrir mon espace revendeur' : 'Ouvrir le tableau de bord';
+    const openTarget = isActiveReseller ? RESELLER_PORTAL_CLIENTS_URL : '/';
 
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 p-4">
@@ -402,7 +404,7 @@ export default function RequestAccess() {
                 Ce compte est deja rattache a un revendeur actif. C est pour cela que vous ne voyez pas de nouvelle demande revendeur a valider dans l admin.
               </div>
             ) : null}
-            <Button onClick={() => { navigate('/', { replace: true }); }} className="w-full">
+            <Button onClick={() => { navigate(openTarget, { replace: true }); }} className="w-full">
               {openLabel}
             </Button>
             <Button
