@@ -14,6 +14,7 @@ import Kiosk from './pages/Kiosk';
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
+const BARE_PUBLIC_PAGE_KEYS = new Set(['RequestAccess', 'InviteSignup', 'CustomerDisplay', 'DeliveryAppPublic', 'OrderOnline', 'RestaurantSite', 'LandingPage']);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
@@ -54,9 +55,13 @@ const AuthenticatedApp = () => {
                 key={path}
                 path={`/${path}`}
                 element={
-                  <LayoutWrapper currentPageName={path}>
+                  BARE_PUBLIC_PAGE_KEYS.has(path) ? (
                     <Page />
-                  </LayoutWrapper>
+                  ) : (
+                    <LayoutWrapper currentPageName={path}>
+                      <Page />
+                    </LayoutWrapper>
+                  )
                 }
               />
             ))}
@@ -86,9 +91,13 @@ const AuthenticatedApp = () => {
           key={path}
           path={`/${path}`}
           element={
-            <LayoutWrapper currentPageName={path}>
+            BARE_PUBLIC_PAGE_KEYS.has(path) ? (
               <Page />
-            </LayoutWrapper>
+            ) : (
+              <LayoutWrapper currentPageName={path}>
+                <Page />
+              </LayoutWrapper>
+            )
           }
         />
       ))}
