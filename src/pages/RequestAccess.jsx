@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { appClient } from '@/api/appClient';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
+import { createPageUrl } from '@/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,10 +27,6 @@ const isAlreadyRegisteredError = (error) => {
     || message.includes('already been registered')
     || message.includes('user already registered');
 };
-const goToDashboard = () => {
-  window.location.href = '/';
-};
-
 const getRequestMode = () => {
   const params = new URLSearchParams(window.location.search);
   return params.get('kind') === 'reseller' ? 'reseller' : 'commerce';
@@ -49,8 +47,11 @@ const buildRequestPayload = (formData, email, requestMode) => ({
 
 export default function RequestAccess() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const requestMode = getRequestMode();
   const isResellerMode = requestMode === 'reseller';
+  const latestLoadIdRef = useRef(0);
+  const lastAppliedLoadIdRef = useRef(0);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,24 +93,45 @@ export default function RequestAccess() {
   });
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadState = async () => {
+      const loadId = latestLoadIdRef.current + 1;
+      latestLoadIdRef.current = loadId;
+
+      const applyState = (callback) => {
+        if (!isMounted || loadId < lastAppliedLoadIdRef.current) return false;
+        lastAppliedLoadIdRef.current = loadId;
+        callback();
+        return true;
+      };
+
       try {
         const currentUser = await appClient.auth.me();
         const lastRequestEmail = localStorage.getItem(LAST_REQUEST_EMAIL_KEY);
 
         if (!currentUser?.email) {
-          if (lastRequestEmail) {
-            setFormData((prev) => ({
-              ...prev,
-              email: lastRequestEmail,
-            }));
-          }
-          setScreenState('form');
+          applyState(() => {
+            setUser(null);
+            setIsDeliveryPerson(false);
+            if (lastRequestEmail) {
+              setFormData((prev) => ({
+                ...prev,
+                email: lastRequestEmail,
+              }));
+            }
+            setScreenState('form');
+          });
           return;
         }
 
         const userEmail = normalizeEmail(currentUser.email);
-        setUser(currentUser);
+        if (!applyState(() => {
+          setUser(currentUser);
+          setIsDeliveryPerson(false);
+        })) {
+          return;
+        }
 
         const deliveryPersons = await appClient.entities.DeliveryPerson.filter(
           { user_email: currentUser.email },
@@ -119,7 +141,9 @@ export default function RequestAccess() {
         );
 
         if (deliveryPersons.length > 0) {
-          setIsDeliveryPerson(true);
+          applyState(() => {
+            setIsDeliveryPerson(true);
+          });
           return;
         }
 
@@ -149,7 +173,9 @@ export default function RequestAccess() {
 
         const hasActiveAccess = ownedTenants.length > 0 || userAccesses.length > 0 || platformAdminEntries.length > 0 || resellerUserEntries.length > 0;
         if (hasActiveAccess) {
-          goToDashboard();
+          applyState(() => {
+            setScreenState('session_active');
+          });
           return;
         }
 
@@ -161,47 +187,59 @@ export default function RequestAccess() {
         const latestRequest = acceptedRequest || pendingRequest || refusedRequest || sortedRequests[0];
 
         if (latestRequest?.statut === 'en_attente') {
-          setFormData((prev) => ({
-            ...prev,
-            nom_commercial: latestRequest.nom_commercial || prev.nom_commercial,
-            nom_contact: latestRequest.nom_contact || prev.nom_contact,
-            prenom_contact: latestRequest.prenom_contact || prev.prenom_contact,
-            telephone: latestRequest.telephone || prev.telephone,
-            adresse: latestRequest.adresse || prev.adresse,
-            type_commerce: latestRequest.type_commerce || prev.type_commerce,
-            message: latestRequest.message || prev.message,
-            email: latestRequest.email || prev.email,
-          }));
-          setScreenState('pending');
+          applyState(() => {
+            setFormData((prev) => ({
+              ...prev,
+              nom_commercial: latestRequest.nom_commercial || prev.nom_commercial,
+              nom_contact: latestRequest.nom_contact || prev.nom_contact,
+              prenom_contact: latestRequest.prenom_contact || prev.prenom_contact,
+              telephone: latestRequest.telephone || prev.telephone,
+              adresse: latestRequest.adresse || prev.adresse,
+              type_commerce: latestRequest.type_commerce || prev.type_commerce,
+              message: latestRequest.message || prev.message,
+              email: latestRequest.email || prev.email,
+            }));
+            setScreenState('pending');
+          });
           return;
         }
 
         if (latestRequest?.statut === 'accepte') {
-          setScreenState('approved');
+          applyState(() => {
+            setScreenState('approved');
+          });
           return;
         }
 
         if (latestRequest?.statut === 'refuse') {
-          setFormData((prev) => ({
-            ...prev,
-            nom_commercial: latestRequest.nom_commercial || prev.nom_commercial,
-            nom_contact: latestRequest.nom_contact || prev.nom_contact,
-            prenom_contact: latestRequest.prenom_contact || prev.prenom_contact,
-            telephone: latestRequest.telephone || prev.telephone,
-            adresse: latestRequest.adresse || prev.adresse,
-            type_commerce: latestRequest.type_commerce || prev.type_commerce,
-            message: latestRequest.message || prev.message,
-            email: latestRequest.email || prev.email,
-          }));
-          setScreenState('refused');
+          applyState(() => {
+            setFormData((prev) => ({
+              ...prev,
+              nom_commercial: latestRequest.nom_commercial || prev.nom_commercial,
+              nom_contact: latestRequest.nom_contact || prev.nom_contact,
+              prenom_contact: latestRequest.prenom_contact || prev.prenom_contact,
+              telephone: latestRequest.telephone || prev.telephone,
+              adresse: latestRequest.adresse || prev.adresse,
+              type_commerce: latestRequest.type_commerce || prev.type_commerce,
+              message: latestRequest.message || prev.message,
+              email: latestRequest.email || prev.email,
+            }));
+            setScreenState('refused');
+          });
           return;
         }
 
-        setScreenState('form');
+        applyState(() => {
+          setScreenState('form');
+        });
       } catch (error) {
-        setScreenState('form');
+        applyState(() => {
+          setScreenState('form');
+        });
       } finally {
-        setIsLoading(false);
+        if (isMounted && loadId >= lastAppliedLoadIdRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -214,11 +252,12 @@ export default function RequestAccess() {
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
+      isMounted = false;
       window.clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -307,7 +346,7 @@ export default function RequestAccess() {
             <p className="text-sm text-gray-600 text-center mb-4">
               Utilisez l'application livreur ou contactez votre responsable si besoin.
             </p>
-            <Button onClick={() => { window.location.href = '/#/Dashboard'; }} className="w-full">
+            <Button onClick={() => { navigate('/Dashboard'); }} className="w-full">
               Ouvrir l'application
             </Button>
           </CardContent>
@@ -338,13 +377,13 @@ export default function RequestAccess() {
             <Button
               onClick={async () => {
                 await appClient.auth.logout();
-                window.location.reload();
+                navigate(createPageUrl('RequestAccess'), { replace: true });
               }}
               className="w-full"
             >
               Se deconnecter pour creer une nouvelle demande
             </Button>
-            <Button variant="ghost" onClick={() => { window.location.href = '/Auth'; }} className="w-full">
+            <Button variant="ghost" onClick={() => { navigate(createPageUrl('Auth')); }} className="w-full">
               Accueil
             </Button>
           </CardContent>
@@ -375,7 +414,7 @@ export default function RequestAccess() {
             <p className="text-sm text-gray-600 text-center">
               Vous serez valide manuellement apres verification et traitement de votre dossier.
             </p>
-            <Button variant="ghost" onClick={() => { window.location.href = '/Auth'; }} className="w-full">
+            <Button variant="ghost" onClick={() => { navigate(createPageUrl('Auth')); }} className="w-full">
               Accueil
             </Button>
           </CardContent>
@@ -400,13 +439,13 @@ export default function RequestAccess() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button onClick={goToDashboard} className="w-full">
+            <Button onClick={() => { navigate('/', { replace: true }); }} className="w-full">
               Ouvrir le tableau de bord
             </Button>
-            <Button variant="outline" onClick={() => { window.location.reload(); }} className="w-full">
+            <Button variant="outline" onClick={() => { navigate(0); }} className="w-full">
               Recharger
             </Button>
-            <Button variant="ghost" onClick={() => { window.location.href = '/Auth'; }} className="w-full">
+            <Button variant="ghost" onClick={() => { navigate(createPageUrl('Auth')); }} className="w-full">
               Accueil
             </Button>
           </CardContent>
@@ -434,7 +473,7 @@ export default function RequestAccess() {
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex justify-end">
-                <Button variant="ghost" type="button" onClick={() => { window.location.href = '/Auth'; }}>
+                <Button variant="ghost" type="button" onClick={() => { navigate(createPageUrl('Auth')); }}>
                   Accueil
                 </Button>
               </div>
@@ -474,7 +513,7 @@ export default function RequestAccess() {
           </CardHeader>
           <CardContent>
             <div className="mb-4 flex justify-end">
-              <Button variant="ghost" type="button" onClick={() => { window.location.href = '/Auth'; }}>
+              <Button variant="ghost" type="button" onClick={() => { navigate(createPageUrl('Auth')); }}>
                 Accueil
               </Button>
             </div>
