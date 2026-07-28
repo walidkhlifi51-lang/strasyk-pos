@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { appClient } from "@/api/appClient";
 import { useTenant } from "@/components/contexts/TenantContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -16,6 +15,8 @@ import CustomerHistory from "../components/clients/CustomerHistory";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/use-toast";
 import { subDays } from 'date-fns';
+import { analyticsService } from '@/services/analytics/analyticsService';
+import { customerService } from '@/services/customers/customerService';
 
 const CLIENT_LIST_FIELDS = [
   'id', 'tenant_id', 'nom', 'prenom', 'telephone', 'email', 'adresse', 'code_postal', 'ville',
@@ -63,7 +64,7 @@ export default function Clients() {
   const { data: customersRaw, isLoading: isLoadingCustomers, error: customersError, refetch: refetchCustomers } = useQuery({
     queryKey: ['customers', currentTenant?.id, loadLimit],
     queryFn: async () => {
-      const customers = await appClient.entities.Customer.filter(filterByTenant(), '-updated_date', loadLimit, { fields: CLIENT_LIST_FIELDS });
+      const customers = await customerService.listCustomers(filterByTenant(), '-updated_date', loadLimit, { fields: CLIENT_LIST_FIELDS });
       return customers;
     },
     staleTime: 5 * 60 * 1000,
@@ -75,7 +76,7 @@ export default function Clients() {
     queryKey: ['allOrdersForClientAnalysis', currentTenant?.id],
     queryFn: async () => {
       console.log('🔄 Chargement de toutes les commandes pour l\'analyse...');
-      const orders = await appClient.entities.Order.filter({
+      const orders = await analyticsService.listOrdersForCustomerAnalysis({
         ...filterByTenant(),
         created_date: { $gte: subDays(new Date(), 120).toISOString() },
       }, '-created_date', 1200, { fields: CLIENT_ORDER_ANALYSIS_FIELDS });
@@ -174,13 +175,13 @@ export default function Clients() {
   const handleFormSubmit = async (clientData) => {
     try {
       if (editingClient) {
-        await appClient.entities.Customer.update(editingClient.id, clientData);
+        await customerService.updateCustomer(editingClient.id, clientData);
         toast({
           title: "Succès",
           description: "Client mis à jour avec succès.",
         });
       } else {
-        await appClient.entities.Customer.create(withTenant(clientData));
+        await customerService.createCustomer(withTenant(clientData));
         toast({
           title: "Succès",
           description: "Client ajouté avec succès.",
@@ -201,7 +202,7 @@ export default function Clients() {
   const handleDelete = async (id) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer ce client ?")) {
       try {
-        await appClient.entities.Customer.delete(id);
+        await customerService.deleteCustomer(id);
         refreshData();
         queryClient.invalidateQueries({ queryKey: ['posData'] });
         toast({

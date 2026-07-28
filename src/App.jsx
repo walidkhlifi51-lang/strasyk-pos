@@ -10,6 +10,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CustomerCagnotte from './pages/CustomerCagnotte';
 import Auth from './pages/Auth';
 import Kiosk from './pages/Kiosk';
+import { canAccessTechnicalPages, TECHNICAL_PAGE_KEYS } from '@/services/auth/authService';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -21,9 +22,13 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const publicPaths = ['/Auth', '/RequestAccess', '/InviteSignup', '/DeliveryAppPublic', '/CustomerDisplay', '/Kiosk', '/KioskTerminal', '/OrderOnline', '/RestaurantSite', '/LandingPage'];
   const isPublicPath = publicPaths.some((path) => window.location.pathname === path);
+  const routeEntries = Object.entries(Pages).filter(([path]) => {
+    if (!TECHNICAL_PAGE_KEYS.has(path)) return true;
+    return canAccessTechnicalPages(user);
+  });
 
   // Show loading spinner while checking app public settings or auth
   if (!isPublicPath && (isLoadingPublicSettings || isLoadingAuth)) {
@@ -50,7 +55,7 @@ const AuthenticatedApp = () => {
               </LayoutWrapper>
             } />
             <Route path="/CustomerCagnotte" element={<CustomerCagnotte />} />
-            {Object.entries(Pages).map(([path, Page]) => (
+            {routeEntries.map(([path, Page]) => (
               <Route
                 key={path}
                 path={`/${path}`}
@@ -86,7 +91,7 @@ const AuthenticatedApp = () => {
         </LayoutWrapper>
       } />
       <Route path="/CustomerCagnotte" element={<CustomerCagnotte />} />
-      {Object.entries(Pages).map(([path, Page]) => (
+      {routeEntries.map(([path, Page]) => (
         <Route
           key={path}
           path={`/${path}`}

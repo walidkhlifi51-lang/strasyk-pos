@@ -507,7 +507,7 @@ const AppLayout = ({ children, currentPageName }) => {
 };
 
 export default function Layout({ children, currentPageName }) {
-  const publicPages = ["Auth", "LandingPage", "BorneCommande", "Kiosk", "InviteSignup", "CustomerDisplay", "DeliveryAppPublic", "RequestAccess", "OrderOnline", "RestaurantSite", "TenantFix", "TenantDebug"];
+  const publicPages = ["Auth", "LandingPage", "BorneCommande", "Kiosk", "InviteSignup", "CustomerDisplay", "DeliveryAppPublic", "RequestAccess", "OrderOnline", "RestaurantSite"];
 
   if (publicPages.includes(currentPageName)) {
     return (

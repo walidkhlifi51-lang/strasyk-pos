@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect } from 'react';
-import { appClient } from '@/api/appClient';
 import { useQuery } from '@tanstack/react-query';
 import { getDefaultAccessPermissions, hasUserPermission, normalizeUserAccess } from '@/lib/userAccess';
+import { authService } from '@/services/auth/authService';
+import { normalizeEmail, tenantService } from '@/services/tenant/tenantService';
 
 const TenantContext = createContext();
 const PLATFORM_ADMIN_ACCESS_FIELDS = ['id', 'user_email', 'is_active', 'created_date', 'updated_date'];
@@ -19,26 +20,6 @@ const USER_ACCESS_FIELDS = [
   'can_access_delivery_app', 'can_access_web_ordering', 'can_access_site_admin',
   'created_date', 'updated_date'
 ];
-const normalizeEmail = (value) => (value || '').trim().toLowerCase();
-const isSafeReadError = (error) => {
-  if (!error) return false;
-  const message = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`.toLowerCase();
-  return error.code === '42P01'
-    || error.code === '42501'
-    || message.includes('permission denied')
-    || message.includes('row-level security')
-    || message.includes('not exist');
-};
-
-const safeFilter = async (entityApi, query = {}, sort, limit, options = {}) => {
-  try {
-    return await entityApi.filter(query, sort, limit, options);
-  } catch (error) {
-    if (isSafeReadError(error)) return [];
-    throw error;
-  }
-};
-
 export const useTenant = () => {
   const context = useContext(TenantContext);
   if (!context) {
@@ -52,7 +33,7 @@ export const TenantProvider = ({ children }) => {
     queryKey: ['tenantAccess'],
     queryFn: async () => {
       try {
-        const isAuth = await appClient.auth.isAuthenticated();
+        const isAuth = await authService.isAuthenticated();
         
         if (!isAuth) {
           return {
@@ -64,21 +45,21 @@ export const TenantProvider = ({ children }) => {
           };
         }
 
-        const user = await appClient.auth.me();
+        const user = await authService.getCurrentUser();
         const userEmail = normalizeEmail(user?.email);
-        const platformAdmins = await safeFilter(appClient.entities.PlatformAdminAccess, {
+        const platformAdmins = await tenantService.listPlatformAdminAccess({
           user_email: user.email,
           is_active: true,
         }, '-created_date', 5, { fields: PLATFORM_ADMIN_ACCESS_FIELDS });
         const platformAdminAccess = platformAdmins[0] || null;
         const isPlatformAdmin = user.role === 'admin' || !!platformAdminAccess;
-        const resellerUsers = await safeFilter(appClient.entities.ResellerUser, {
+        const resellerUsers = await tenantService.listResellerUsers({
           user_email: user.email,
           status: 'active',
         }, '-created_date', 10, { fields: RESELLER_USER_FIELDS });
         const resellerUserAccess = resellerUsers.find((entry) => normalizeEmail(entry.user_email) === userEmail);
         const allResellers = resellerUserAccess
-          ? await safeFilter(appClient.entities.Reseller, { id: resellerUserAccess.reseller_id }, '-created_date', 5, { fields: RESELLER_FIELDS })
+          ? await tenantService.listResellers({ id: resellerUserAccess.reseller_id }, '-created_date', 5, { fields: RESELLER_FIELDS })
           : [];
         const currentReseller = resellerUserAccess
           ? allResellers.find((entry) => entry.id === resellerUserAccess.reseller_id) || null
@@ -92,13 +73,13 @@ export const TenantProvider = ({ children }) => {
 
           // STRICT: l'email doit correspondre exactement à l'invitation
           if (normalizeEmail(invite.expected_email) === userEmail) {
-            await appClient.auth.updateMe({ tenant_id: invite.tenant_id });
+            await authService.updateCurrentUserTenant(invite.tenant_id);
 
             if ((invite.role || '').toLowerCase() === 'owner') {
               localStorage.removeItem('pending_tenant_invite');
 
-              const updatedUser = await appClient.auth.me();
-              const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
+              const updatedUser = await authService.getCurrentUser();
+              const invitedTenants = await tenantService.listTenants({ id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
               const tenant = invitedTenants[0] || null;
 
               return {
@@ -113,7 +94,7 @@ export const TenantProvider = ({ children }) => {
             }
 
             // Créer l'accès utilisateur (car ce n'est pas l'owner)
-            await appClient.entities.UserAccess.create({
+            await tenantService.createUserAccess({
               tenant_id: invite.tenant_id,
               user_email: user.email,
               is_active: true,
@@ -123,8 +104,8 @@ export const TenantProvider = ({ children }) => {
 
             localStorage.removeItem('pending_tenant_invite');
 
-            const updatedUser = await appClient.auth.me();
-            const invitedTenants = await safeFilter(appClient.entities.Tenant, { id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
+            const updatedUser = await authService.getCurrentUser();
+            const invitedTenants = await tenantService.listTenants({ id: invite.tenant_id }, '-created_date', 5, { fields: TENANT_FIELDS });
             const tenant = invitedTenants[0] || null;
 
             return {
@@ -156,14 +137,14 @@ export const TenantProvider = ({ children }) => {
           }
         }
         
-        const ownedTenants = await safeFilter(appClient.entities.Tenant, {
+        const ownedTenants = await tenantService.listTenants({
           owner_email: user.email,
         }, '-created_date', 5, { fields: TENANT_FIELDS });
         const ownedTenant = ownedTenants.find((t) => normalizeEmail(t.owner_email) === userEmail);
         
         if (ownedTenant) {
           if (user.tenant_id !== ownedTenant.id) {
-            await appClient.auth.updateMe({ tenant_id: ownedTenant.id });
+            await authService.updateCurrentUserTenant(ownedTenant.id);
           }
 
           if (ownedTenant.active === false) {
@@ -177,7 +158,7 @@ export const TenantProvider = ({ children }) => {
           }
           
           return {
-            user: await appClient.auth.me(),
+            user: await authService.getCurrentUser(),
             tenant: ownedTenant,
             isOwner: true,
             role: 'owner',
@@ -188,20 +169,20 @@ export const TenantProvider = ({ children }) => {
         }
         
         // 🚚 Vérifier si l'utilisateur est un livreur AVANT de vérifier UserAccess
-        const allDeliveryPersons = await safeFilter(appClient.entities.DeliveryPerson, {
+        const allDeliveryPersons = await tenantService.listDeliveryPeople({
           user_email: user.email,
         }, '-created_date', 20, { fields: DELIVERY_PERSON_FIELDS });
         const deliveryPerson = allDeliveryPersons.find((dp) => normalizeEmail(dp.user_email) === userEmail);
         
         if (deliveryPerson) {
-          const deliveryTenants = await safeFilter(appClient.entities.Tenant, {
+          const deliveryTenants = await tenantService.listTenants({
             id: deliveryPerson.tenant_id,
           }, '-created_date', 5, { fields: TENANT_FIELDS });
           const deliveryTenant = deliveryTenants[0] || null;
           
           if (deliveryTenant) {
             if (user.tenant_id !== deliveryTenant.id) {
-              await appClient.auth.updateMe({ tenant_id: deliveryTenant.id });
+              await authService.updateCurrentUserTenant(deliveryTenant.id);
             }
             
             // Rediriger immédiatement vers DeliveryApp si on n'y est pas déjà
@@ -210,7 +191,7 @@ export const TenantProvider = ({ children }) => {
             }
             
             return {
-              user: await appClient.auth.me(),
+              user: await authService.getCurrentUser(),
               tenant: deliveryTenant,
               isOwner: false,
               role: 'delivery',
@@ -237,7 +218,7 @@ export const TenantProvider = ({ children }) => {
         }
         
         // Sinon vérifier les accès normaux
-        const allAccess = await safeFilter(appClient.entities.UserAccess, {
+        const allAccess = await tenantService.listUserAccess({
           user_email: user.email,
           is_active: true,
         }, '-created_date', 20, { fields: USER_ACCESS_FIELDS });
@@ -264,7 +245,7 @@ export const TenantProvider = ({ children }) => {
           };
         }
         
-        const accessTenants = await safeFilter(appClient.entities.Tenant, {
+        const accessTenants = await tenantService.listTenants({
           id: userAccess.tenant_id,
         }, '-created_date', 5, { fields: TENANT_FIELDS });
         const accessTenant = accessTenants[0] || null;
@@ -280,11 +261,11 @@ export const TenantProvider = ({ children }) => {
         }
         
         if (user.tenant_id !== accessTenant.id) {
-          await appClient.auth.updateMe({ tenant_id: accessTenant.id });
+          await authService.updateCurrentUserTenant(accessTenant.id);
         }
         
         return {
-          user: await appClient.auth.me(),
+          user: await authService.getCurrentUser(),
           tenant: accessTenant,
           isOwner: false,
           role: userAccess.role,
@@ -326,7 +307,7 @@ export const TenantProvider = ({ children }) => {
     queryKey: ['deliveryPerson', tenantData?.user?.email],
     queryFn: async () => {
       if (!tenantData?.user?.email) return null;
-      const deliveryPersons = await appClient.entities.DeliveryPerson.filter({
+      const deliveryPersons = await tenantService.listDeliveryPeople({
         user_email: tenantData.user.email
       }, '-created_date', 5, { fields: DELIVERY_PERSON_FIELDS });
       return deliveryPersons.length > 0 ? deliveryPersons[0] : null;

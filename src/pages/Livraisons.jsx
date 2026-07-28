@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { appClient } from '@/api/appClient';
 import { useTenant } from '@/components/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,7 +14,9 @@ import { Truck, MapPin, User, Phone, Clock, Package, Calendar as CalendarIcon, R
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import DeliveryPersonStatus from '../components/livraisons/DeliveryPersonStatus';
-import QRCode from 'qrcode';
+import { customerService } from '@/services/customers/customerService';
+import { orderService } from '@/services/orders/orderService';
+import { tenantService } from '@/services/tenant/tenantService';
 
 const OrderCard = ({ order, customer, deliveryPeople, onAssignDelivery, showAssignButton = false }) => {
   const customerDisplayName = customer ? `${customer.prenom || ''} ${customer.nom || ''}`.trim() : (order.customer_name || 'Client');
@@ -181,9 +182,9 @@ export default function Livraisons() {
     };
     
     const [ordersData, deliveryPeopleData, customersData] = await Promise.all([
-      appClient.entities.Order.filter(filterByTenant(), '-created_date'),
-      appClient.entities.DeliveryPerson.filter(filterByTenant()),
-      appClient.entities.Customer.filter(filterByTenant())
+      orderService.listOrders(filterByTenant(), '-created_date'),
+      tenantService.listDeliveryPeople(filterByTenant()),
+      customerService.listCustomers(filterByTenant())
     ]);
 
     const dayDeliveryOrders = ordersData.filter(order => {
@@ -243,7 +244,7 @@ export default function Livraisons() {
     if (!assignmentModal.order || !deliveryPersonId) return;
 
     try {
-      await appClient.entities.Order.update(assignmentModal.order.id, withTenant({
+      await orderService.updateOrder(assignmentModal.order.id, withTenant({
         delivery_person_id: deliveryPersonId,
         statut: assignmentModal.order.delivery_person_id ? assignmentModal.order.statut : 'en_cours_de_livraison' 
       }));
@@ -257,7 +258,7 @@ export default function Livraisons() {
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
-      await appClient.entities.Order.update(orderId, withTenant({ statut: newStatus }));
+      await orderService.updateOrder(orderId, withTenant({ statut: newStatus }));
       queryClient.invalidateQueries({ queryKey: ['livraisons', format(selectedDate, 'yyyy-MM-dd'), currentTenant?.id] });
     } catch (error) {
       console.error('Erreur lors du changement de statut:', error);

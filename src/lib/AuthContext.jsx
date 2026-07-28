@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { appClient } from '@/api/appClient';
+import { authService } from '@/services/auth/authService';
 
 const AuthContext = createContext();
 
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
-      const currentUser = await appClient.auth.me();
+      const currentUser = await authService.getCurrentUser();
       if (!currentUser) {
         setUser(null);
         setIsAuthenticated(false);
@@ -71,16 +71,16 @@ export const AuthProvider = ({ children }) => {
     
     if (shouldRedirect) {
       // Use the SDK's logout method which handles token cleanup and redirect
-      appClient.auth.logout(window.location.href);
+      authService.logout(window.location.href);
     } else {
       // Just remove the token without redirect
-      appClient.auth.logout();
+      authService.logout();
     }
   };
 
   const navigateToLogin = () => {
     // Use the SDK's redirectToLogin method
-    appClient.auth.redirectToLogin(window.location.href);
+    authService.redirectToLogin(window.location.href);
   };
 
   return (
