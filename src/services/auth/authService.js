@@ -1,7 +1,9 @@
 import { appClient } from '@/api/appClient';
 import { ENABLE_TECHNICAL_ROUTES } from '@/config/env';
+import { normalizeEmail, tenantService } from '@/services/tenant/tenantService';
 
 const importMetaEnv = /** @type {any} */ (import.meta);
+const PLATFORM_ADMIN_ACCESS_FIELDS = ['id', 'user_email', 'is_active'];
 
 export const TECHNICAL_PAGE_KEYS = new Set([
   'AuditTenant',
@@ -21,7 +23,7 @@ export const isTechnicalRoutesEnabled = () => {
 
 export const canAccessTechnicalPages = (user = null) => {
   if (isTechnicalRoutesEnabled()) return true;
-  return user?.role === 'admin';
+  return user?.isPlatformAdmin === true;
 };
 
 export const authService = {
@@ -66,5 +68,19 @@ export const authService = {
   },
   onAuthStateChange(callback) {
     return appClient.auth.onAuthStateChange?.(callback);
+  },
+  async getTechnicalPageAccess(user = null) {
+    if (isTechnicalRoutesEnabled()) return true;
+    if (!user?.email) return false;
+
+    if (user?.role === 'admin') {
+      const platformAdmins = await tenantService.listPlatformAdminAccess({
+        user_email: user.email,
+        is_active: true,
+      }, '-created_date', 5, { fields: PLATFORM_ADMIN_ACCESS_FIELDS });
+      return platformAdmins.some((entry) => normalizeEmail(entry.user_email) === normalizeEmail(user.email));
+    }
+
+    return false;
   },
 };

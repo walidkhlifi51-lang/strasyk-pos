@@ -81,7 +81,13 @@ Regle d'acces:
 
 - autorisees en developpement;
 - ou si `VITE_ENABLE_TECH_ROUTES=true`;
-- ou si l'utilisateur authentifie porte le role auth `admin`.
+- ou si l'utilisateur authentifie est un vrai administrateur plateforme STRASYK confirme par `platform_admin_access`.
+
+Precision:
+
+- le role tenant (`owner`, `manager`, `employee`, `delivery`) ne donne jamais acces a ces pages;
+- le simple champ auth `role=admin` ne suffit pas a lui seul en production commerciale;
+- l'acces doit passer par le controle plateforme dedie.
 
 Verification production:
 

@@ -5,6 +5,7 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [canAccessTechnicalRoutes, setCanAccessTechnicalRoutes] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
@@ -39,6 +40,7 @@ export const AuthProvider = ({ children }) => {
       const currentUser = await authService.getCurrentUser();
       if (!currentUser) {
         setUser(null);
+        setCanAccessTechnicalRoutes(false);
         setIsAuthenticated(false);
         setIsLoadingAuth(false);
         setAuthError({
@@ -47,12 +49,15 @@ export const AuthProvider = ({ children }) => {
         });
         return;
       }
+      const hasTechnicalAccess = await authService.getTechnicalPageAccess(currentUser);
       setUser(currentUser);
+      setCanAccessTechnicalRoutes(hasTechnicalAccess);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
     } catch (error) {
       console.error('User auth check failed:', error);
       setIsLoadingAuth(false);
+      setCanAccessTechnicalRoutes(false);
       setIsAuthenticated(false);
       
       // If user auth fails, it might be an expired token
@@ -67,6 +72,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = (shouldRedirect = true) => {
     setUser(null);
+    setCanAccessTechnicalRoutes(false);
     setIsAuthenticated(false);
     
     if (shouldRedirect) {
@@ -86,6 +92,7 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={{ 
       user, 
+      canAccessTechnicalRoutes,
       isAuthenticated, 
       isLoadingAuth,
       isLoadingPublicSettings,

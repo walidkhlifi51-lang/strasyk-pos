@@ -22,12 +22,12 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { user, canAccessTechnicalRoutes, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const publicPaths = ['/Auth', '/RequestAccess', '/InviteSignup', '/DeliveryAppPublic', '/CustomerDisplay', '/Kiosk', '/KioskTerminal', '/OrderOnline', '/RestaurantSite', '/LandingPage'];
   const isPublicPath = publicPaths.some((path) => window.location.pathname === path);
   const routeEntries = Object.entries(Pages).filter(([path]) => {
     if (!TECHNICAL_PAGE_KEYS.has(path)) return true;
-    return canAccessTechnicalPages(user);
+    return canAccessTechnicalPages({ ...user, isPlatformAdmin: canAccessTechnicalRoutes });
   });
 
   // Show loading spinner while checking app public settings or auth
