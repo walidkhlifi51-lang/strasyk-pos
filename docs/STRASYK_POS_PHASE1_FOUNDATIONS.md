@@ -79,21 +79,39 @@ Pages concernees:
 
 Regle d'acces:
 
-- autorisees en developpement;
-- ou si `VITE_ENABLE_TECH_ROUTES=true`;
-- ou si l'utilisateur authentifie est un vrai administrateur plateforme STRASYK confirme par `platform_admin_access`.
+- en developpement local, elles peuvent rester accessibles selon la convention technique locale;
+- en production, elles exigent un utilisateur authentifie confirme dans `platform_admin_access`;
+- `VITE_ENABLE_TECH_ROUTES=true` n'accorde jamais l'autorisation a lui seul: il permet seulement d'exposer/enregistrer les routes techniques.
 
 Precision:
 
 - le role tenant (`owner`, `manager`, `employee`, `delivery`) ne donne jamais acces a ces pages;
 - le simple champ auth `role=admin` ne suffit pas a lui seul en production commerciale;
-- l'acces doit passer par le controle plateforme dedie.
+- une session non authentifiee ne peut pas obtenir l'acces a ces pages, meme si `VITE_ENABLE_TECH_ROUTES=true`;
+- le controle `platform_admin_access` est `fail-closed`: absence de ligne, erreur RLS, table indisponible ou erreur reseau donnent `false` sans bloquer l'authentification normale.
 
 Verification production:
 
 1. construire l'application sans `VITE_ENABLE_TECH_ROUTES=true`;
 2. verifier qu'une URL comme `/AuditTenant` ou `/TenantDebug` tombe sur la page de repli;
 3. verifier que ces routes ne sont plus dans le routage commercial.
+
+## Note de securite serveur
+
+Le garde React ne constitue pas une frontiere de securite.
+
+Les pages techniques historiques (`CleanupTenant`, `TenantFix`, `TenantSetup`, `AuditTenant`, `DiagnosticTenant`) continuent d'appeler `appClient.entities` directement. Leur protection effective contre un administrateur de restaurant repose donc sur les controles serveur/RLS deja en place:
+
+- `products`: `docs/SUPABASE_PRODUCT_RLS.sql` limite select/insert/update/delete au `tenant_id = public.app_current_tenant_id()`;
+- `orders`: `docs/SUPABASE_POS_CORE_RLS.sql` limite select/insert/update/delete au `tenant_id = public.app_current_tenant_id()`;
+- `customers`: `docs/SUPABASE_CUSTOMERS_RLS.sql` limite select/insert/update/delete au `tenant_id = public.app_current_tenant_id()`;
+- `platform_admin_access`: `docs/SUPABASE_RESELLER_RLS.sql` reserve l'administration de cette table aux administrateurs plateforme.
+
+Consequence:
+
+- un administrateur de restaurant ne doit pas pouvoir lister, modifier ou supprimer les donnees d'un autre tenant via ces pages;
+- `CleanupTenant` peut rester dangereuse pour les donnees du tenant courant si elle est ouverte a tort, mais ne doit pas pouvoir franchir les RLS inter-tenant;
+- `TenantSetup` et `TenantFix` restent des outils techniques a migrer vers une logique serveur dediee dans une phase ulterieure.
 
 ## Contrats serveur critiques prepares
 

@@ -21,8 +21,10 @@ export const isTechnicalRoutesEnabled = () => {
   return ENABLE_TECHNICAL_ROUTES;
 };
 
+export const isTechnicalRoutesExposed = () => isTechnicalRoutesEnabled();
+
 export const canAccessTechnicalPages = (user = null) => {
-  if (isTechnicalRoutesEnabled()) return true;
+  if (typeof import.meta !== 'undefined' && importMetaEnv.env?.DEV) return true;
   return user?.isPlatformAdmin === true;
 };
 
@@ -39,8 +41,8 @@ export const authService = {
   updateCurrentUserTenant(tenantId) {
     return appClient.auth.updateMe({ tenant_id: tenantId });
   },
-  logout() {
-    return appClient.auth.logout();
+  logout(...args) {
+    return appClient.auth.logout(...args);
   },
   redirectToLogin(redirectTo) {
     return appClient.auth.redirectToLogin(redirectTo);
@@ -70,17 +72,21 @@ export const authService = {
     return appClient.auth.onAuthStateChange?.(callback);
   },
   async getTechnicalPageAccess(user = null) {
-    if (isTechnicalRoutesEnabled()) return true;
+    if (typeof import.meta !== 'undefined' && importMetaEnv.env?.DEV) return true;
     if (!user?.email) return false;
 
-    if (user?.role === 'admin') {
+    try {
       const platformAdmins = await tenantService.listPlatformAdminAccess({
         user_email: user.email,
         is_active: true,
       }, '-created_date', 5, { fields: PLATFORM_ADMIN_ACCESS_FIELDS });
       return platformAdmins.some((entry) => normalizeEmail(entry.user_email) === normalizeEmail(user.email));
+    } catch (error) {
+      console.warn('[authService] Technical page access check failed.', {
+        code: error?.code || null,
+        status: error?.status || null,
+      });
+      return false;
     }
-
-    return false;
   },
 };

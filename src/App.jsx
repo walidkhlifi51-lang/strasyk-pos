@@ -10,7 +10,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CustomerCagnotte from './pages/CustomerCagnotte';
 import Auth from './pages/Auth';
 import Kiosk from './pages/Kiosk';
-import { canAccessTechnicalPages, TECHNICAL_PAGE_KEYS } from '@/services/auth/authService';
+import { canAccessTechnicalPages, isTechnicalRoutesExposed, TECHNICAL_PAGE_KEYS } from '@/services/auth/authService';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -25,9 +25,13 @@ const AuthenticatedApp = () => {
   const { user, canAccessTechnicalRoutes, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const publicPaths = ['/Auth', '/RequestAccess', '/InviteSignup', '/DeliveryAppPublic', '/CustomerDisplay', '/Kiosk', '/KioskTerminal', '/OrderOnline', '/RestaurantSite', '/LandingPage'];
   const isPublicPath = publicPaths.some((path) => window.location.pathname === path);
-  const routeEntries = Object.entries(Pages).filter(([path]) => {
+  const publicRouteEntries = Object.entries(Pages).filter(([path]) => {
     if (!TECHNICAL_PAGE_KEYS.has(path)) return true;
-    return canAccessTechnicalPages({ ...user, isPlatformAdmin: canAccessTechnicalRoutes });
+    return false;
+  });
+  const authenticatedRouteEntries = Object.entries(Pages).filter(([path]) => {
+    if (!TECHNICAL_PAGE_KEYS.has(path)) return true;
+    return isTechnicalRoutesExposed() || canAccessTechnicalPages({ ...user, isPlatformAdmin: canAccessTechnicalRoutes });
   });
 
   // Show loading spinner while checking app public settings or auth
@@ -55,7 +59,7 @@ const AuthenticatedApp = () => {
               </LayoutWrapper>
             } />
             <Route path="/CustomerCagnotte" element={<CustomerCagnotte />} />
-            {routeEntries.map(([path, Page]) => (
+            {publicRouteEntries.map(([path, Page]) => (
               <Route
                 key={path}
                 path={`/${path}`}
@@ -91,12 +95,14 @@ const AuthenticatedApp = () => {
         </LayoutWrapper>
       } />
       <Route path="/CustomerCagnotte" element={<CustomerCagnotte />} />
-      {routeEntries.map(([path, Page]) => (
+      {authenticatedRouteEntries.map(([path, Page]) => (
         <Route
           key={path}
           path={`/${path}`}
           element={
-            BARE_PUBLIC_PAGE_KEYS.has(path) ? (
+            TECHNICAL_PAGE_KEYS.has(path) && !canAccessTechnicalPages({ ...user, isPlatformAdmin: canAccessTechnicalRoutes }) ? (
+              <PageNotFound />
+            ) : BARE_PUBLIC_PAGE_KEYS.has(path) ? (
               <Page />
             ) : (
               <LayoutWrapper currentPageName={path}>
