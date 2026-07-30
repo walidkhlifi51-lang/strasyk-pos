@@ -10,7 +10,12 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
-    "set-auth-password": "node ./scripts/set-auth-password.mjs"
+    "set-auth-password": "node ./scripts/set-auth-password.mjs",
+    "test:status": "node --input-type=module -e \"const { runCli } = await import('./scripts/test-provisioning/index.mjs'); const result = await runCli({ argv: ['status', '--json'] }); process.exit(result.exitCode);\"",
+    "test:provision:dry-run": "node --input-type=module -e \"const { runCli } = await import('./scripts/test-provisioning/index.mjs'); const result = await runCli({ argv: ['dry-run', '--json'] }); process.exit(result.exitCode);\"",
+    "test:provision": "node --input-type=module -e \"const { runCli } = await import('./scripts/test-provisioning/index.mjs'); const result = await runCli({ argv: ['provision', '--json'] }); process.exit(result.exitCode);\"",
+    "test:reset": "node ./scripts/test-provisioning/disabledCommand.mjs test:reset",
+    "test:test-provisioning": "node --input-type=module -e \"const { runProvisioningTests } = await import('./scripts/test-provisioning/__tests__/provisioning.test.mjs'); const summary = await runProvisioningTests(); console.log(JSON.stringify(summary, null, 2));\""
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
