@@ -13,6 +13,7 @@ import { appClient } from "@/api/appClient";
 import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTenant } from "../contexts/TenantContext";
+import { saveCategoryAndRefresh } from "./categoryPersistence";
 
 const CategoryForm = ({ category, categories, onSave, onCancel, aiImageEnabled }) => {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -77,30 +78,30 @@ const CategoryForm = ({ category, categories, onSave, onCancel, aiImageEnabled }
   const handleGenerateAiImage = async () => {
     setIsGeneratingImage(true);
     try {
-      // Étape 1 : Demander à l'IA un prompt photo précis pour cette catégorie
+      // Ã‰tape 1 : Demander Ã  l'IA un prompt photo prÃ©cis pour cette catÃ©gorie
       const llmResponse = await appClient.integrations.Core.InvokeLLM({
         prompt: `Tu es un expert en photographie culinaire professionnelle et en design de menu de restaurant.
-Génère un prompt de génération d'image (en anglais) ultra-précis pour illustrer la catégorie de menu restaurant suivante, avec FOND BLANC PUR.
+GÃ©nÃ¨re un prompt de gÃ©nÃ©ration d'image (en anglais) ultra-prÃ©cis pour illustrer la catÃ©gorie de menu restaurant suivante, avec FOND BLANC PUR.
 
-Catégorie : "${formState.nom}"
+CatÃ©gorie : "${formState.nom}"
 
-Le prompt DOIT impérativement :
-- Identifier précisément ce que représente cette catégorie (ex: "Pizzas" → une belle pizza entière vue de dessus, "Boissons" → verres et bouteilles variés, "Desserts" → desserts appétissants)
-- Décrire une présentation visuelle typique et appétissante
+Le prompt DOIT impÃ©rativement :
+- Identifier prÃ©cisÃ©ment ce que reprÃ©sente cette catÃ©gorie (ex: "Pizzas" â†’ une belle pizza entiÃ¨re vue de dessus, "Boissons" â†’ verres et bouteilles variÃ©s, "Desserts" â†’ desserts appÃ©tissants)
+- DÃ©crire une prÃ©sentation visuelle typique et appÃ©tissante
 - TOUJOURS terminer par : "isolated on a pure white background, product cutout, no shadows, no table, no scenery, white background only, clean product shot, transparent-ready, PNG style, highly detailed, photorealistic"
 - Ne pas inclure de texte ou logo
 
-Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
+RÃ©ponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
         model: "claude_sonnet_4_6"
       });
 
       const imagePrompt = typeof llmResponse === 'string' ? llmResponse : llmResponse?.text || llmResponse?.content || '';
 
-      // Étape 2 : Générer l'image
+      // Ã‰tape 2 : GÃ©nÃ©rer l'image
       const result = await appClient.integrations.Core.GenerateImage({ prompt: imagePrompt });
       setFormState(prev => ({ ...prev, image_url: result.url }));
     } catch (error) {
-      console.error('Erreur génération IA:', error);
+      console.error('Erreur gÃ©nÃ©ration IA:', error);
     } finally {
       setIsGeneratingImage(false);
     }
@@ -130,9 +131,10 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
         <div className="sm:col-span-2 space-y-2">
-          <Label htmlFor="cat-nom">Nom de la catégorie *</Label>
+          <Label htmlFor="cat-nom">Nom de la catÃ©gorie *</Label>
           <Input
             id="cat-nom"
+            data-testid="category-name-input"
             value={formState.nom}
             onChange={(e) => setFormState({ ...formState, nom: e.target.value })}
             required
@@ -158,13 +160,13 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
         <Label htmlFor="cat-disponible">Disponible</Label>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cat-parent">Catégorie parente (optionnel)</Label>
+        <Label htmlFor="cat-parent">CatÃ©gorie parente (optionnel)</Label>
         <Select value={formState.parent_id} onValueChange={(value) => setFormState({ ...formState, parent_id: value })}>
           <SelectTrigger>
             <SelectValue placeholder="Aucune" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={null}>Aucune (catégorie principale)</SelectItem>
+            <SelectItem value={null}>Aucune (catÃ©gorie principale)</SelectItem>
             {categories.filter(c => c.id !== category?.id).map(cat => (
               <SelectItem key={cat.id} value={cat.id}>{cat.nom}</SelectItem>
             ))}
@@ -175,13 +177,13 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
       <div className="space-y-4">
         <div className="p-4 border rounded-lg space-y-4 bg-gray-50">
           <div className="space-y-1">
-            <Label>Image de la catégorie (optionnel)</Label>
-            <p className="text-xs text-blue-600 font-medium">📐 Taille recommandée : 400x400 pixels (carré)</p>
-            <p className="text-xs text-gray-500">💡 Astuce : L'image doit remplir tout l'espace sans fond blanc autour</p>
+            <Label>Image de la catÃ©gorie (optionnel)</Label>
+            <p className="text-xs text-blue-600 font-medium">ðŸ“ Taille recommandÃ©e : 400x400 pixels (carrÃ©)</p>
+            <p className="text-xs text-gray-500">ðŸ’¡ Astuce : L'image doit remplir tout l'espace sans fond blanc autour</p>
           </div>
           {formState.image_url && (
             <div className="relative w-32 h-32">
-              <img src={formState.image_url} alt="Catégorie" className="w-full h-full object-cover rounded-lg border" />
+              <img src={formState.image_url} alt="CatÃ©gorie" className="w-full h-full object-cover rounded-lg border" />
               <Button
                 type="button"
                 variant="destructive"
@@ -212,7 +214,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                 {isUploadingImage ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Chargement...</>
                 ) : (
-                  <><Upload className="w-4 h-4 mr-2" />Télécharger une image</>
+                  <><Upload className="w-4 h-4 mr-2" />TÃ©lÃ©charger une image</>
                 )}
               </Button>
               {aiImageEnabled && (
@@ -225,9 +227,9 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                   className="border-purple-300 text-purple-700 hover:bg-purple-50"
                 >
                   {isGeneratingImage ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Génération IA...</>
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />GÃ©nÃ©ration IA...</>
                   ) : (
-                    <><Wand2 className="w-4 h-4 mr-2" />Générer avec IA</>
+                    <><Wand2 className="w-4 h-4 mr-2" />GÃ©nÃ©rer avec IA</>
                   )}
                 </Button>
               )}
@@ -267,9 +269,10 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
           <div className="flex items-center justify-between">
             <div>
               <Label>Gestion des tailles</Label>
-              <p className="text-xs text-gray-500">Activer pour définir des tailles pour cette catégorie (ex: Pizzas).</p>
+              <p className="text-xs text-gray-500">Activer pour dÃ©finir des tailles pour cette catÃ©gorie (ex: Pizzas).</p>
             </div>
             <Switch
+              data-testid="category-manages-sizes-switch"
               checked={formState.manages_sizes}
               onCheckedChange={(checked) => setFormState({ ...formState, manages_sizes: checked })}
             />
@@ -281,6 +284,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
               {formState.size_template.map((sizeName, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <Input
+                    data-testid={`category-size-template-${index}`}
                     value={sizeName}
                     onChange={(e) => handleSizeTemplateChange(index, e.target.value)}
                     placeholder={`Taille ${index + 1} (ex: Junior)`}
@@ -290,7 +294,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                   </Button>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={addSizeToTemplate}>
+              <Button type="button" variant="outline" size="sm" onClick={addSizeToTemplate} data-testid="category-add-size-button">
                 <Plus className="w-4 h-4 mr-2" />
                 Ajouter une taille
               </Button>
@@ -301,7 +305,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
 
       <div className="flex justify-end gap-3 pt-4">
         <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>
-        <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "..." : "Enregistrer"}</Button>
+        <Button type="submit" disabled={isSubmitting} data-testid="category-save-button">{isSubmitting ? "..." : "Enregistrer"}</Button>
       </div>
     </form>
   );
@@ -376,7 +380,7 @@ export default function CategoryManager({ data, onDataChange }) {
     const [moved] = reordered.splice(source.index, 1);
     reordered.splice(destination.index, 0, moved);
 
-    // Mettre à jour les sort_order en batch
+    // Mettre Ã  jour les sort_order en batch
     const updates = reordered.map((cat, index) =>
       appClient.entities.Category.update(cat.id, { sort_order: index })
     );
@@ -415,55 +419,45 @@ export default function CategoryManager({ data, onDataChange }) {
 
   const handleSave = async (formData) => {
     try {
-      const dataWithTenant = withTenant(formData);
-      const fullPayload = buildCategoryPayload(dataWithTenant, 'full');
-
-      try {
-        if (editingCategory) {
-          await appClient.entities.Category.update(editingCategory.id, fullPayload);
-        } else {
-          await appClient.entities.Category.create(fullPayload);
-        }
-      } catch (error) {
-        const fallbackPayload = buildCategoryPayload(dataWithTenant, 'basic');
-
-        if (editingCategory) {
-          await appClient.entities.Category.update(editingCategory.id, fallbackPayload);
-        } else {
-          await appClient.entities.Category.create(fallbackPayload);
-        }
-      }
-
-      await onUpdate();
+      await saveCategoryAndRefresh({
+        editingCategory,
+        formData,
+        withTenant,
+        buildCategoryPayload,
+        categoryEntity: appClient.entities.Category,
+        onUpdate,
+      });
       setShowDialog(false);
       toast({
-        title: "Catégorie enregistrée",
-        description: `La catégorie "${formData.nom}" a été enregistrée.`,
+        title: "CatÃƒÂ©gorie enregistrÃƒÂ©e",
+        description: `La catÃƒÂ©gorie "${formData.nom}" a ÃƒÂ©tÃƒÂ© enregistrÃƒÂ©e.`,
       });
+      return;
+
     } catch (error) {
       console.error("Error saving category:", error);
       toast({
         title: "Erreur",
-        description: "Échec de l'enregistrement de la catégorie. " + (error.message || ""),
+        description: "Ã‰chec de l'enregistrement de la catÃ©gorie. " + (error.message || ""),
         variant: "destructive",
       });
     }
   };
 
   const handleDelete = async (categoryId) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer cette catégorie ? Les sous-catégories deviendront des catégories principales.")) {
+    if (confirm("ÃŠtes-vous sÃ»r de vouloir supprimer cette catÃ©gorie ? Les sous-catÃ©gories deviendront des catÃ©gories principales.")) {
       try {
         await appClient.entities.Category.delete(categoryId);
         await onUpdate();
         toast({
-          title: "Catégorie supprimée",
-          description: "La catégorie a été supprimée avec succès.",
+          title: "CatÃ©gorie supprimÃ©e",
+          description: "La catÃ©gorie a Ã©tÃ© supprimÃ©e avec succÃ¨s.",
         });
       } catch (error) {
         console.error("Error deleting category:", error);
         toast({
           title: "Erreur",
-          description: "Échec de la suppression de la catégorie. Assurez-vous qu'aucun produit ne l'utilise.",
+          description: "Ã‰chec de la suppression de la catÃ©gorie. Assurez-vous qu'aucun produit ne l'utilise.",
           variant: "destructive",
         });
       }
@@ -471,7 +465,7 @@ export default function CategoryManager({ data, onDataChange }) {
   };
 
   const CategoryItem = ({ category, level = 0 }) => (
-    <div key={category.id} style={{ marginLeft: `${level * 20}px` }} className="py-2">
+    <div key={category.id} style={{ marginLeft: `${level * 20}px` }} className="py-2" data-testid={`category-row-${category.id}`}>
       <Card className="hover:shadow-sm transition-shadow">
         <CardContent className="p-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -481,8 +475,8 @@ export default function CategoryManager({ data, onDataChange }) {
             {category.disponible === false && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Indisponible</span>}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleEdit(category)}><Pencil className="w-4 h-4" /></Button>
-            <Button variant="outline" size="sm" onClick={() => handleDelete(category.id)} className="text-red-600 hover:text-red-700"><Trash2 className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleEdit(category)} data-testid={`category-edit-${category.id}`}><Pencil className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleDelete(category.id)} data-testid={`category-delete-${category.id}`} className="text-red-600 hover:text-red-700"><Trash2 className="w-4 h-4" /></Button>
           </div>
         </CardContent>
       </Card>
@@ -500,25 +494,26 @@ export default function CategoryManager({ data, onDataChange }) {
         <div>
           <h3 className="text-xl font-semibold flex items-center gap-2">
             <List className="w-5 h-5 text-purple-500" />
-            Gestion des Catégories
+            Gestion des CatÃ©gories
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            {categories.length} catégories
+            {categories.length} catÃ©gories
           </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Rechercher une catégorie..."
+              placeholder="Rechercher une catÃ©gorie..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
+              data-testid="category-search-input"
             />
           </div>
-          <Button onClick={handleAdd} className="bg-purple-500 hover:bg-purple-600 gap-2">
+          <Button onClick={handleAdd} className="bg-purple-500 hover:bg-purple-600 gap-2" data-testid="category-create-button">
             <Plus className="w-4 h-4" />
-            Nouvelle Catégorie
+            Nouvelle CatÃ©gorie
           </Button>
         </div>
       </div>
@@ -551,8 +546,8 @@ export default function CategoryManager({ data, onDataChange }) {
                                     {category.disponible === false && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Indisponible</span>}
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => handleEdit(category)}><Pencil className="w-4 h-4" /></Button>
-                                    <Button variant="outline" size="sm" onClick={() => handleDelete(category.id)} className="text-red-600 hover:text-red-700"><Trash2 className="w-4 h-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => handleEdit(category)} data-testid={`category-edit-${category.id}`}><Pencil className="w-4 h-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => handleDelete(category.id)} data-testid={`category-delete-${category.id}`} className="text-red-600 hover:text-red-700"><Trash2 className="w-4 h-4" /></Button>
                                   </div>
                                 </CardContent>
                               </Card>
@@ -577,8 +572,8 @@ export default function CategoryManager({ data, onDataChange }) {
             <List className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p>
               {searchTerm
-                ? `Aucune catégorie trouvée pour "${searchTerm}"`
-                : "Aucune catégorie configurée"
+                ? `Aucune catÃ©gorie trouvÃ©e pour "${searchTerm}"`
+                : "Aucune catÃ©gorie configurÃ©e"
               }
             </p>
           </div>
@@ -586,9 +581,9 @@ export default function CategoryManager({ data, onDataChange }) {
       </div>
 
       <Dialog open={showDialog} onOpenChange={(isOpen) => { if (!isOpen) { setEditingCategory(null); } setShowDialog(isOpen); }}>
-        <DialogContent>
+        <DialogContent data-testid="category-dialog">
           <DialogHeader>
-            <DialogTitle>{editingCategory ? "Modifier la catégorie" : "Nouvelle catégorie"}</DialogTitle>
+            <DialogTitle>{editingCategory ? "Modifier la catÃ©gorie" : "Nouvelle catÃ©gorie"}</DialogTitle>
           </DialogHeader>
           <CategoryForm
             category={editingCategory}

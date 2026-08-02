@@ -11,6 +11,7 @@ import { appClient } from "@/api/appClient";
 import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useTenant } from '../contexts/TenantContext';
+import { requireWithTenant } from './productOptionsManagerGuards';
 
 const OPTION_IMPORT_INGREDIENT_FIELDS = [
   'id',
@@ -47,6 +48,7 @@ const normalizeSizeSurcharges = (sizes = [], source = {}, fallback = 0) => {
 };
 
 const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
+  const safeWithTenant = requireWithTenant(withTenant, 'GroupForm');
   const [name, setName] = useState(group?.nom || "");
   const [selectionType, setSelectionType] = useState(group?.selection_type || "single");
   const [minSelections, setMinSelections] = useState(group?.min_selections?.toString() || "");
@@ -66,9 +68,9 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
       size_template: managesSizes ? sizeTemplate.filter(s => s.trim() !== '') : [],
     };
     if (group?.id) {
-      await appClient.entities.OptionGroup.update(group.id, withTenant(data));
+      await appClient.entities.OptionGroup.update(group.id, safeWithTenant(data));
     } else {
-      await appClient.entities.OptionGroup.create(withTenant({ ...data, product_id: null, is_template: true }));
+      await appClient.entities.OptionGroup.create(safeWithTenant({ ...data, product_id: null, is_template: true }));
     }
     onSave();
   };
@@ -92,12 +94,12 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
           <Label htmlFor="group-name" className="text-xs">Nom du groupe</Label>
-          <Input id="group-name" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Suppléments Pizzas" className="h-8" />
+          <Input id="group-name" data-testid="option-group-name-input" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Suppléments Pizzas" className="h-8" />
         </div>
         <div className="w-32 space-y-1">
           <Label htmlFor="selection-type" className="text-xs">Type de sélection</Label>
           <Select value={selectionType} onValueChange={setSelectionType}>
-            <SelectTrigger id="selection-type" className="h-8 text-xs">
+            <SelectTrigger id="selection-type" data-testid="option-group-selection-type-trigger" className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -111,6 +113,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
             <Label htmlFor="min-selections" className="text-xs">Min choix</Label>
             <Input
               id="min-selections"
+              data-testid="option-group-min-selections-input"
               type="number"
               min="0"
               value={minSelections}
@@ -128,6 +131,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
             <Label htmlFor="max-selections" className="text-xs">Max choix</Label>
             <Input 
               id="max-selections" 
+              data-testid="option-group-max-selections-input"
               type="number" 
               min="1" 
               value={maxSelections} 
@@ -146,6 +150,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
             <p className="text-xs text-gray-500">Activer pour définir des prix différents par taille (ex: suppléments pizzas)</p>
           </div>
           <Switch
+            data-testid="option-group-manages-sizes-switch"
             checked={managesSizes}
             onCheckedChange={(checked) => {
               setManagesSizes(checked);
@@ -162,6 +167,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
             {sizeTemplate.map((size, index) => (
               <div key={index} className="flex items-center gap-2">
                 <Input
+                  data-testid={`option-group-size-template-${index}`}
                   value={size}
                   onChange={(e) => handleSizeChange(index, e.target.value)}
                   placeholder={`Taille ${index + 1}`}
@@ -184,6 +190,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
         <div className="flex items-center space-x-2">
           <Switch
             id="group-required"
+            data-testid="option-group-required-switch"
             checked={required}
             onCheckedChange={(checked) => {
               setRequired(checked);
@@ -197,7 +204,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
           </Label>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleSave} size="sm" className="h-8 bg-green-600 hover:bg-green-700">Enregistrer</Button>
+          <Button onClick={handleSave} size="sm" className="h-8 bg-green-600 hover:bg-green-700" data-testid="option-group-save-button">Enregistrer</Button>
           <Button variant="outline" size="sm" onClick={onCancel} className="h-8">Annuler</Button>
         </div>
       </div>
@@ -206,6 +213,7 @@ const GroupForm = ({ group, onSave, onCancel, withTenant }) => {
 };
 
 const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, productId, withTenant }) => {
+  const safeWithTenant = requireWithTenant(withTenant, 'ItemForm');
   const categoryData = categories?.find(c => c.id === productCategory);
   const managesSizes = group?.manages_sizes || (categoryData?.manages_sizes && categoryData?.size_template?.length > 0);
   const sizesArray = group?.size_template && group.size_template.length > 0 ? group.size_template : categoryData?.size_template || [];
@@ -232,7 +240,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
 
   useEffect(() => {
     if (!item) {
-      appClient.entities.Ingredient.filter(withTenant(), null, null, { fields: OPTION_IMPORT_INGREDIENT_FIELDS })
+      appClient.entities.Ingredient.filter(safeWithTenant(), null, null, { fields: OPTION_IMPORT_INGREDIENT_FIELDS })
         .then((ingredients) => {
           setAllIngredients(ingredients);
         })
@@ -315,7 +323,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
           data.size_surcharges = null;
         }
         
-        await appClient.entities.OptionItem.create(withTenant(data));
+        await appClient.entities.OptionItem.create(safeWithTenant(data));
       }
       
       setShowIngredientImport(false);
@@ -344,9 +352,9 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
     }
     
     if (item?.id) {
-      await appClient.entities.OptionItem.update(item.id, withTenant(data));
+      await appClient.entities.OptionItem.update(item.id, safeWithTenant(data));
     } else {
-      await appClient.entities.OptionItem.create(withTenant(data));
+      await appClient.entities.OptionItem.create(safeWithTenant(data));
     }
     onSave();
   };
@@ -510,7 +518,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
           </div>
         )}
         
-        <Input id="item-name" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Supplément Fromage" className="h-8 bg-white" />
+        <Input id="item-name" data-testid="option-item-name-input" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Supplément Fromage" className="h-8 bg-white" />
       </div>
       
       {managesSizes && sizesArray.length > 0 ? (
@@ -522,6 +530,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
                 <span className="text-xs font-medium w-16">{size}</span>
                 <div className="relative flex-1">
                   <Input
+                    data-testid={`option-item-size-price-${size}`}
                     type="number"
                     step="0.01"
                     value={sizeSurcharges[size] || 0}
@@ -539,6 +548,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
           <Label htmlFor="item-surcharge" className="text-xs">Surcoût (€)</Label>
           <Input 
             id="item-surcharge" 
+            data-testid="option-item-surcharge-input"
             type="number" 
             step="0.01" 
             value={surcharge} 
@@ -549,7 +559,7 @@ const ItemForm = ({ group, item, onSave, onCancel, productCategory, categories, 
       )}
 
       <div className="flex justify-end gap-2">
-        <Button onClick={handleSave} size="sm" className="h-8 bg-green-600 hover:bg-green-700">OK</Button>
+        <Button onClick={handleSave} size="sm" className="h-8 bg-green-600 hover:bg-green-700" data-testid="option-item-save-button">OK</Button>
         <Button variant="outline" size="sm" onClick={onCancel} className="h-8 bg-white">X</Button>
       </div>
     </div>
@@ -637,6 +647,7 @@ const BulkPriceApplier = ({ group, onApply }) => {
 };
 
 const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
+  const safeWithTenant = requireWithTenant(withTenant, 'ProductGroupChoiceRulesForm');
   const [selectionType, setSelectionType] = useState(group?.selection_type || "single");
   const [required, setRequired] = useState(!!group?.required);
   const [minSelections, setMinSelections] = useState(group?.min_selections?.toString() || "");
@@ -656,7 +667,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
       const min = required ? (parseInt(minSelections || "1", 10) || 1) : (parseInt(minSelections || "0", 10) || null);
       const max = selectionType === "single" ? 1 : (parseInt(maxSelections || "0", 10) || null);
 
-      await appClient.entities.OptionGroup.update(group.id, withTenant({
+      await appClient.entities.OptionGroup.update(group.id, safeWithTenant({
         selection_type: selectionType,
         required: required || !!min,
         min_selections: min,
@@ -692,7 +703,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
               }
             }}
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs" data-testid={`product-group-rules-selection-type-${group?.id ?? 'unknown'}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -705,6 +716,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
         <div className="space-y-1">
           <Label className="text-xs">Min choix</Label>
           <Input
+            data-testid={`product-group-rules-min-${group?.id ?? 'unknown'}`}
             type="number"
             min="0"
             value={minSelections}
@@ -720,6 +732,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
         <div className="space-y-1">
           <Label className="text-xs">Max choix</Label>
           <Input
+            data-testid={`product-group-rules-max-${group?.id ?? 'unknown'}`}
             type="number"
             min="1"
             value={selectionType === "single" ? "1" : maxSelections}
@@ -733,6 +746,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Switch
+              data-testid={`product-group-rules-required-${group?.id ?? 'unknown'}`}
               checked={required}
               onCheckedChange={(checked) => {
                 setRequired(checked);
@@ -747,6 +761,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
             size="sm"
             onClick={handleSave}
             disabled={isSaving}
+            data-testid={`product-group-rules-save-${group?.id ?? 'unknown'}`}
             className="h-8 bg-green-600 hover:bg-green-700"
           >
             {isSaving ? "..." : "OK"}
@@ -760,6 +775,7 @@ const ProductGroupChoiceRulesForm = ({ group, withTenant, onSaved }) => {
 export default function ProductOptionsManager({ productId, withTenant }) {
   const { toast } = useToast();
   const { filterByTenant } = useTenant();
+  const safeWithTenant = requireWithTenant(withTenant);
 
   const [product, setProduct] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -887,7 +903,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
           (templateItems || []).map(async (templateItem) => {
             if (copyItemsByName.has(templateItem.nom)) return;
 
-            await appClient.entities.OptionItem.create(withTenant({
+            await appClient.entities.OptionItem.create(safeWithTenant({
               option_group_id: copy.id,
               nom: templateItem.nom,
               price_surcharge: templateItem.price_surcharge || 0,
@@ -924,8 +940,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
           size_template: templateGroup.size_template
         };
         
-        console.log('[AssignGroup] Création du groupe:', groupData);
-        const newGroup = await appClient.entities.OptionGroup.create(withTenant(groupData));
+        const newGroup = await appClient.entities.OptionGroup.create(safeWithTenant(groupData));
         
         // Copier TOUS les items avec leurs prix
         await Promise.all(
@@ -938,9 +953,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
               is_default: item.is_default
             };
             
-            console.log(`[AssignGroup] Copie de l'item "${item.nom}":`, itemData);
-            
-            return appClient.entities.OptionItem.create(withTenant(itemData));
+            return appClient.entities.OptionItem.create(safeWithTenant(itemData));
           })
         );
         toast({
@@ -979,7 +992,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
         : { price_surcharge: payload.surcharge, size_surcharges: null };
 
       await Promise.all(
-        (group.items || []).map(item => appClient.entities.OptionItem.update(item.id, withTenant(updateData)))
+        (group.items || []).map(item => appClient.entities.OptionItem.update(item.id, safeWithTenant(updateData)))
       );
 
       if (group.is_template) {
@@ -990,7 +1003,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
           return Promise.all(
             copyItems
               .filter(item => templateItemNames.has(item.nom))
-              .map(item => appClient.entities.OptionItem.update(item.id, withTenant(updateData)))
+              .map(item => appClient.entities.OptionItem.update(item.id, safeWithTenant(updateData)))
           );
         }));
       }
@@ -1138,7 +1151,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
                   ({filteredTemplateGroups.length} template{filteredTemplateGroups.length > 1 ? 's' : ''})
                 </span>
               </CardTitle>
-              <Button onClick={() => setEditingGroup({ is_template: true })} size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700">
+              <Button onClick={() => setEditingGroup({ is_template: true })} size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700" data-testid="option-template-create-button">
                 <Plus className="w-4 h-4" />
                 Nouveau template
               </Button>
@@ -1160,7 +1173,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
               filteredTemplateGroups.map(template => {
                 
                 return (
-                  <Card key={template.id} className="bg-white shadow-sm">
+                  <Card key={template.id} className="bg-white shadow-sm" data-testid={`option-template-card-${template.id}`}>
                     <CardContent className="p-3">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -1184,10 +1197,10 @@ export default function ProductOptionsManager({ productId, withTenant }) {
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => setEditingGroup(template)} className="hover:bg-blue-100">
+                          <Button variant="ghost" size="sm" onClick={() => setEditingGroup(template)} className="hover:bg-blue-100" data-testid={`option-template-edit-${template.id}`}>
                             <Pencil className="w-3 h-3"/>
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-100" onClick={() => handleDeleteTemplate(template.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-100" onClick={() => handleDeleteTemplate(template.id)} data-testid={`option-template-delete-${template.id}`}>
                             <Trash2 className="w-3 h-3"/>
                           </Button>
                         </div>
@@ -1218,10 +1231,10 @@ export default function ProductOptionsManager({ productId, withTenant }) {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingItem({ group: template, item: item })}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingItem({ group: template, item: item })} data-testid={`option-item-edit-${item.id}`}>
                                     <Pencil className="w-3 h-3 text-gray-600" />
                                   </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteItem(item.id)}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteItem(item.id)} data-testid={`option-item-delete-${item.id}`}>
                                     <Trash2 className="w-3 h-3 text-red-500" />
                                   </Button>
                                 </div>
@@ -1247,7 +1260,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
                             withTenant={withTenant}
                           />
                         ) : (
-                          <Button variant="link" size="sm" className="text-xs p-0 h-auto text-blue-600 mt-2" onClick={() => setEditingItem({ group: template, item: null })}>
+                          <Button variant="link" size="sm" className="text-xs p-0 h-auto text-blue-600 mt-2" onClick={() => setEditingItem({ group: template, item: null })} data-testid={`option-item-add-${template.id}`}>
                             + Ajouter une option
                           </Button>
                         )}
@@ -1285,6 +1298,7 @@ export default function ProductOptionsManager({ productId, withTenant }) {
             <div key={template.id} className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50">
               <Checkbox
                 id={`assign-${template.id}`}
+                data-testid={`option-template-assign-${template.id}`}
                 checked={assignedGroupIds.has(template.id)}
                 onCheckedChange={(checked) => handleAssignGroup(template, checked)}
               />

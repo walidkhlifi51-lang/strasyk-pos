@@ -11,7 +11,7 @@ import ProductForm from "./ProductForm";
 import ProductOptionsManager from "./ProductOptionsManager";
 import { useToast } from "@/components/ui/use-toast";
 
-export default function ProductManager({ data, onDataChange }) {
+export default function ProductManager({ data, onDataChange, withTenant }) {
   const { toast } = useToast();
   
   // Utiliser les données passées en props avec des valeurs par défaut
@@ -224,9 +224,10 @@ export default function ProductManager({ data, onDataChange }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
+              data-testid="product-search-input"
             />
           </div>
-          <Button onClick={handleAddProduct} className="bg-orange-500 hover:bg-orange-600 gap-2">
+          <Button onClick={handleAddProduct} className="bg-orange-500 hover:bg-orange-600 gap-2" data-testid="product-create-button">
             <Plus className="w-4 h-4" />
             Nouveau Produit
           </Button>
@@ -237,7 +238,7 @@ export default function ProductManager({ data, onDataChange }) {
       {filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProducts.map((product) => (
-            <Card key={product.id} className="hover:shadow-md transition-shadow border-l-4" style={{ borderLeftColor: product.color || '#eeeeee' }}>
+            <Card key={product.id} className="hover:shadow-md transition-shadow border-l-4" style={{ borderLeftColor: product.color || '#eeeeee' }} data-testid={`product-card-${product.id}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -265,6 +266,7 @@ export default function ProductManager({ data, onDataChange }) {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Switch
+                      data-testid={`product-availability-${product.id}`}
                       checked={product.disponible !== false}
                       onCheckedChange={() => toggleAvailability(product)}
                       size="sm"
@@ -276,10 +278,10 @@ export default function ProductManager({ data, onDataChange }) {
                 </div>
                 <div className="flex flex-col gap-1">
                   <div className="flex gap-1">
-                    <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)} className="flex-1">
+                    <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)} className="flex-1" data-testid={`product-edit-${product.id}`}>
                       <Pencil className="w-4 h-4 mr-1" />Modifier
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleManageOptions(product)} className="flex-1">
+                    <Button variant="outline" size="sm" onClick={() => handleManageOptions(product)} className="flex-1" data-testid={`product-options-${product.id}`}>
                       <Layers className="w-4 h-4 mr-1" />Options
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(product.id)} className="text-red-600 hover:text-red-700">
@@ -331,7 +333,7 @@ export default function ProductManager({ data, onDataChange }) {
             setEditingProduct(null);
           }
         }}>
-          <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto" data-testid="product-dialog">
               <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                   {editingProduct ? "Modifier le produit" : "Nouveau produit"}
@@ -362,11 +364,11 @@ export default function ProductManager({ data, onDataChange }) {
             setProductForOptions(null);
           }
         }}>
-          <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto" data-testid="product-options-dialog">
             <DialogHeader>
               <DialogTitle>Options - {productForOptions.nom}</DialogTitle>
             </DialogHeader>
-            <ProductOptionsManager productId={productForOptions.id} onSave={() => onDataChange()} />
+            <ProductOptionsManager productId={productForOptions.id} withTenant={withTenant} onSave={() => onDataChange()} />
           </DialogContent>
         </Dialog>
       )}

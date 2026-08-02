@@ -51,7 +51,7 @@ const PARAM_PROFILE_FIELDS = [
     'siret', 'tva_intracommunautaire', 'frais_livraison', 'montant_minimum_livraison', 'zone_livraison_km',
     'impression_auto', 'impression_bouton_visible', 'impression_double', 'tva_rates',
     'manages_kiosk', 'manages_web_ordering', 'manages_deliveries', 'customer_display_enabled',
-    'customer_display_images', 'customer_display_color', 'customer_display_info_message', 'customer_display_settings',
+    'customer_display_images', 'customer_display_color', 'customer_display_info_message',
     'delivery_app_allowed', 'manages_delivery_app', 'table_plan_allowed', 'manages_table_plan',
     'bipeur_enabled', 'scratch_tickets_enabled', 'ai_image_generation_enabled',
     'force_immediate_payment', 'prix_differencies_par_mode', 'allow_price_edit', 'allow_item_edit',
@@ -62,21 +62,6 @@ const PARAM_PROFILE_FIELDS = [
     'kiosk_primary_color', 'kiosk_secondary_color', 'kiosk_card_payment_enabled',
     'updated_date', 'created_date'
 ];
-
-const PARAM_PROFILE_FALLBACK_FIELDS = PARAM_PROFILE_FIELDS.filter(
-    (field) => field !== 'prenom_gerant'
-        && field !== 'nom_gerant'
-        && field !== 'customer_display_images'
-        && field !== 'customer_display_color'
-        && field !== 'customer_display_info_message'
-        && field !== 'customer_display_settings'
-);
-
-const isMissingColumnError = (error, columnName) => {
-    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
-    return message.includes(`Could not find the '${columnName}' column`)
-        || new RegExp(`column\\s+(?:[\\w]+\\.)?${columnName}\\s+does not exist`, 'i').test(message);
-};
 
 const tabs = [
     { name: 'restaurant', label: 'Établissement', icon: Store, component: RestaurantSettings, requiredData: ['profile'] },
@@ -127,33 +112,12 @@ export default function Parametres() {
                 appClient.entities.Category.filter(filterByTenant(), null, null, { fields: PARAM_CATEGORIES_FIELDS }).catch(() => []),
                 appClient.entities.Ingredient.filter(filterByTenant(), null, null, { fields: PARAM_INGREDIENTS_FIELDS }).catch(() => []),
                 appClient.entities.DeliveryPerson.filter(filterByTenant(), null, null, { fields: PARAM_DELIVERY_PEOPLE_FIELDS }).catch(() => []),
-                (async () => {
-                    try {
-                        return await appClient.entities.RestaurantProfile.filter(
-                            filterByTenant(),
-                            '-updated_date',
-                            5,
-                            { fields: PARAM_PROFILE_FIELDS }
-                        );
-                    } catch (error) {
-                        if (
-                            isMissingColumnError(error, 'prenom_gerant')
-                            || isMissingColumnError(error, 'nom_gerant')
-                            || isMissingColumnError(error, 'customer_display_images')
-                            || isMissingColumnError(error, 'customer_display_color')
-                            || isMissingColumnError(error, 'customer_display_info_message')
-                            || isMissingColumnError(error, 'customer_display_settings')
-                        ) {
-                            return await appClient.entities.RestaurantProfile.filter(
-                                filterByTenant(),
-                                '-updated_date',
-                                5,
-                                { fields: PARAM_PROFILE_FALLBACK_FIELDS }
-                            );
-                        }
-                        throw error;
-                    }
-                })().catch(() => [])
+                appClient.entities.RestaurantProfile.filter(
+                    filterByTenant(),
+                    '-updated_date',
+                    5,
+                    { fields: PARAM_PROFILE_FIELDS }
+                ).catch(() => [])
             ]);
             
             const profile = profileList?.[0] || null;
@@ -276,6 +240,7 @@ export default function Parametres() {
                         <button
                             key={tab.name}
                             onClick={() => setActiveTab(tab.name)}
+                            data-testid={`settings-tab-${tab.name}`}
                             className={`flex-shrink-0 w-full md:w-auto flex items-center justify-center p-3 px-4 rounded-lg text-sm font-medium transition-colors duration-200 ${
                                 activeTab === tab.name
                                     ? "bg-white text-gray-900 shadow-sm"
@@ -289,7 +254,7 @@ export default function Parametres() {
                 </div>
             </div>
 
-            <div>
+            <div data-testid={`settings-panel-${activeTab}`}>
                 {isLoading ? (
                     <div className="text-center py-10 flex justify-center items-center gap-3">
                         <Loader2 className="w-6 h-6 animate-spin text-gray-500" />

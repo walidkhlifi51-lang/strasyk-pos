@@ -265,7 +265,6 @@ export default function ProductForm({ product, categories, ingredients, profile,
           const productIngredients = await appClient.entities.ProductIngredient.filter({
             product_id: product.id
           });
-          
           const enrichedIngredients = productIngredients
             .map(pi => {
               const ingredientData = ingredients.find(ing => ing.id === pi.ingredient_id);
@@ -280,7 +279,6 @@ export default function ProductForm({ product, categories, ingredients, profile,
               return null; 
             })
             .filter(Boolean);
-          
           setSelectedIngredients(enrichedIngredients);
         } catch (error) {
           console.error("Erreur chargement ingrédients:", error);
@@ -597,8 +595,8 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Tabs defaultValue="infos" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="infos">Informations</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3" data-testid="product-form-tabs">
+          <TabsTrigger value="infos" data-testid="product-form-tab-infos">Informations</TabsTrigger>
           <TabsTrigger value="ingredients">Ingrédients</TabsTrigger>
           <TabsTrigger value="options">Options</TabsTrigger>
         </TabsList>
@@ -615,6 +613,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                   <Label htmlFor="nom">Nom du produit *</Label>
                   <Input
                     id="nom"
+                    data-testid="product-form-name-input"
                     value={productData.nom}
                     onChange={(e) => handleInputChange('nom', e.target.value)}
                     required
@@ -623,7 +622,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                 <div className="space-y-2">
                   <Label htmlFor="category">Catégorie *</Label>
                   <Select value={productData.category_id} onValueChange={(value) => handleInputChange('category_id', value)}>
-                    <SelectTrigger>
+                    <SelectTrigger data-testid="product-form-category-trigger">
                       <SelectValue placeholder="Choisir une catégorie..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -735,6 +734,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                             <span className="font-medium">{sizePrice.size}</span>
                             <div className="relative">
                               <Input
+                                data-testid={`product-size-price-${sizePrice.size}-sur-place`}
                                 type="number"
                                 step="0.01"
                                 value={modePrice.sur_place || ''}
@@ -746,6 +746,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                             </div>
                             <div className="relative">
                               <Input
+                                data-testid={`product-size-price-${sizePrice.size}-emporter`}
                                 type="number"
                                 step="0.01"
                                 value={modePrice.emporter || ''}
@@ -757,6 +758,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                             </div>
                             <div className="relative">
                               <Input
+                                data-testid={`product-size-price-${sizePrice.size}-livraison`}
                                 type="number"
                                 step="0.01"
                                 value={modePrice.livraison || ''}
@@ -778,6 +780,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                           <span className="w-24 font-medium">{sizePrice.size}</span>
                           <div className="flex-1 relative">
                             <Input
+                              data-testid={`product-size-price-${sizePrice.size}`}
                               type="number"
                               step="0.01"
                               value={sizePrice.price ?? ''}
@@ -1073,7 +1076,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                         value={ingredient.ingredient_id}
                         onValueChange={(value) => handleIngredientChange(index, 'ingredient_id', value)}
                       >
-                        <SelectTrigger className="flex-1">
+                        <SelectTrigger className="flex-1" data-testid={`product-ingredient-select-${index}`}>
                           <SelectValue placeholder="Choisir un ingrédient..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -1087,6 +1090,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
 
                       <div className="w-32">
                         <Input
+                          data-testid={`product-ingredient-quantity-${index}`}
                           type="number"
                           step="0.01"
                           value={ingredient.quantite}
@@ -1124,7 +1128,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
                 </div>
               )}
 
-              <Button type="button" variant="outline" onClick={addIngredient} className="w-full">
+              <Button type="button" variant="outline" onClick={addIngredient} className="w-full" data-testid="product-add-ingredient-button">
                 <Plus className="w-4 h-4 mr-2" />
                 Ajouter un ingrédient
               </Button>
@@ -1152,7 +1156,7 @@ Réponds UNIQUEMENT avec le prompt en anglais, sans aucune explication.`,
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Annuler
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting} data-testid="product-form-submit">
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -33,7 +33,7 @@ export default function GlobalPrintListener() {
     'created_date',
     'numero_commande',
     'payee',
-    'payment_method',
+    'mode_paiement',
     'table_id',
     'updated_date',
   ];

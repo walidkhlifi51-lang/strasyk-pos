@@ -104,13 +104,13 @@ const IngredientForm = ({ ingredient, onSave, onCancel }) => {
     <form onSubmit={handleSubmit} className="space-y-4 py-4">
       <div className="space-y-2">
         <Label htmlFor="nom">Nom</Label>
-        <Input id="nom" value={formData.nom} onChange={e => setFormData({ ...formData, nom: e.target.value })} required />
+        <Input id="nom" data-testid="ingredient-name-input" value={formData.nom} onChange={e => setFormData({ ...formData, nom: e.target.value })} required />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="unite">Unite</Label>
           <Select value={formData.unite} onValueChange={value => setFormData({ ...formData, unite: value })}>
-            <SelectTrigger>
+            <SelectTrigger data-testid="ingredient-unit-trigger">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -120,9 +120,10 @@ const IngredientForm = ({ ingredient, onSave, onCancel }) => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="quantite_stock">Quantite en stock</Label>
-          <Input
-            id="quantite_stock"
-            type="number"
+            <Input
+              id="quantite_stock"
+              data-testid="ingredient-stock-input"
+              type="number"
             step="0.01"
             value={formData.quantite_stock}
             onChange={e => setFormData({ ...formData, quantite_stock: e.target.value })}
@@ -135,6 +136,7 @@ const IngredientForm = ({ ingredient, onSave, onCancel }) => {
         <div className="relative">
           <Input
             id="cout_unitaire"
+            data-testid="ingredient-cost-input"
             type="number"
             step="0.01"
             value={formData.cout_unitaire}
@@ -147,7 +149,7 @@ const IngredientForm = ({ ingredient, onSave, onCancel }) => {
       </div>
       <DialogFooter className="pt-4">
         <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting} data-testid="ingredient-save-button">
           {isSubmitting ? "Enregistrement..." : "Enregistrer"}
         </Button>
       </DialogFooter>
@@ -351,6 +353,7 @@ export default function IngredientManager({ data, onDataChange }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
+              data-testid="ingredient-search-input"
             />
           </div>
           <div className="flex gap-2">
@@ -379,7 +382,7 @@ export default function IngredientManager({ data, onDataChange }) {
               <Download className="w-4 h-4" />
               Exporter
             </Button>
-            <Button onClick={() => { setEditingIngredient(null); setShowDialog(true); }} className="bg-yellow-500 hover:bg-yellow-600 gap-2">
+            <Button onClick={() => { setEditingIngredient(null); setShowDialog(true); }} className="bg-yellow-500 hover:bg-yellow-600 gap-2" data-testid="ingredient-create-button">
               <Plus className="w-4 h-4" />
               Nouvel Ingredient
             </Button>
@@ -400,15 +403,15 @@ export default function IngredientManager({ data, onDataChange }) {
             </TableHeader>
             <TableBody>
               {filteredIngredients.map((ing) => (
-                <TableRow key={ing.id}>
+                <TableRow key={ing.id} data-testid={`ingredient-row-${ing.id}`}>
                   <TableCell className="font-medium">{ing.nom}</TableCell>
                   <TableCell>{ing.quantite_stock} {formatUnit(ing.unite)}</TableCell>
                   <TableCell>{ing.cout_unitaire ? `${ing.cout_unitaire.toFixed(2)} EUR / ${formatUnit(ing.unite)}` : 'N/A'}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingIngredient(ing); setShowDialog(true); }}>
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingIngredient(ing); setShowDialog(true); }} data-testid={`ingredient-edit-${ing.id}`}>
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(ing.id)} className="text-red-500 hover:text-red-600">
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(ing.id)} data-testid={`ingredient-delete-${ing.id}`} className="text-red-500 hover:text-red-600">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </TableCell>
@@ -425,7 +428,7 @@ export default function IngredientManager({ data, onDataChange }) {
       )}
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
+        <DialogContent data-testid="ingredient-dialog">
           <DialogHeader>
             <DialogTitle>{editingIngredient ? "Modifier l'ingredient" : "Nouvel ingredient"}</DialogTitle>
           </DialogHeader>
