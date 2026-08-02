@@ -40,14 +40,14 @@ const assertDemoTenantSession = async (page) => expect.poll(async () => {
   message: 'Expected the authenticated session to target the demo tenant.',
 }).toBe(e2eConfig.expectedTenantId);
 
-const expectSingleVisibleTestId = async (page, testId, timeout = 15_000) => {
-  const locator = page.locator(`[data-testid="${testId}"]:visible`);
+const expectSingleVisibleTestId = async (scope, testId, timeout = 15_000) => {
+  const locator = scope.locator(`[data-testid="${testId}"]:visible`);
   await expect(locator).toHaveCount(1, { timeout });
   await expect(locator.first()).toBeVisible({ timeout });
   return locator.first();
 };
 
-const visibleOrderLineLocator = (page) => page.locator('[data-testid^="pos-order-line-"]:visible');
+const visibleOrderLineLocator = (scope) => scope.locator('[data-testid^="pos-order-line-"]:visible');
 
 test.describe('lot 2 - POS orders and payments scaffold', () => {
   test('LOT2-000 smoke - open POS and observe the real read model without writes', async ({ page, baseURL }, testInfo) => {
@@ -76,24 +76,26 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
     await page.goto('/StrasykPos', { waitUntil: 'networkidle' });
     await waitForPosReadModel({ page, responses: collectors.responses });
     await expect(page).toHaveURL(/\/StrasykPos/);
-    await expect(page.getByRole('tab', { name: /Sur place/i })).toBeVisible({ timeout: 30_000 });
+    const desktopLayout = page.getByTestId('pos-layout-desktop');
+    await expect(desktopLayout).toBeVisible({ timeout: 30_000 });
+    await expect(desktopLayout.getByRole('tab', { name: /Sur place/i })).toBeVisible({ timeout: 30_000 });
 
-    const productSearch = await expectSingleVisibleTestId(page, 'pos-product-search-visible');
-    const selectTableButton = await expectSingleVisibleTestId(page, 'pos-select-table-button');
-    await expect(page.getByTestId('pos-waiting-orders-list').locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId(`pos-product-card-${simpleProduct.id}`).locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId(`pos-product-card-${pizzaProduct.id}`).locator(':visible')).toHaveCount(1);
+    const productSearch = await expectSingleVisibleTestId(desktopLayout, 'pos-product-search-visible');
+    const selectTableButton = await expectSingleVisibleTestId(desktopLayout, 'pos-select-table-button');
+    await expect(desktopLayout.getByTestId('pos-waiting-orders-list')).toBeVisible();
+    await expectSingleVisibleTestId(desktopLayout, `pos-product-card-${simpleProduct.id}`);
+    await expectSingleVisibleTestId(desktopLayout, `pos-product-card-${pizzaProduct.id}`);
 
     await selectTableButton.click();
-    await expect(page.getByTestId(`pos-table-option-${table.id}`).locator(':visible')).toHaveCount(1);
-    await page.getByTestId(`pos-table-option-${table.id}`).click();
-    await expect(page.getByTestId(`pos-selected-table-${table.id}`).locator(':visible')).toHaveCount(1);
+    await expectSingleVisibleTestId(desktopLayout, `pos-table-option-${table.id}`);
+    await desktopLayout.getByTestId(`pos-table-option-${table.id}`).click();
+    await expectSingleVisibleTestId(desktopLayout, `pos-selected-table-${table.id}`);
 
-    await page.getByTestId(`pos-product-card-${pizzaProduct.id}`).click();
-    await expect(page.getByTestId('pos-size-option-Petite').locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId('pos-size-option-Grande').locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId('pos-customization-quantity-value').locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId('pos-customization-confirm').locator(':visible')).toHaveCount(1);
+    await desktopLayout.getByTestId(`pos-product-card-${pizzaProduct.id}`).click();
+    await expectSingleVisibleTestId(page, 'pos-size-option-Petite');
+    await expectSingleVisibleTestId(page, 'pos-size-option-Grande');
+    await expectSingleVisibleTestId(page, 'pos-customization-quantity-value');
+    await expectSingleVisibleTestId(page, 'pos-customization-confirm');
     await page.getByRole('button', { name: 'Annuler' }).click();
 
     const after = await fetchLot2ReadonlySnapshot();
@@ -129,6 +131,39 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
         cleanupProtection,
       }, null, 2)),
     });
+  });
+
+  test('LOT2-001 structure - desktop layout is the active scoped layout on Preview', async ({ page, baseURL }) => {
+    assertLot2SafeTarget({ baseURL: baseURL || e2eConfig.baseURL, expectedTenantId: e2eConfig.expectedTenantId, branch: e2eConfig.branch });
+    await page.setViewportSize({ width: 1600, height: 1200 });
+
+    await page.goto('/Auth', { waitUntil: 'networkidle' });
+    await page.locator('#email').fill(e2eConfig.email);
+    await page.locator('#password').fill(e2eConfig.password);
+    await page.getByRole('button', { name: 'Se connecter' }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith('/Auth'), { timeout: 30_000 });
+    await assertDemoTenantSession(page);
+
+    await page.goto('/StrasykPos', { waitUntil: 'networkidle' });
+    await expect(page).toHaveURL(/\/StrasykPos/);
+
+    const desktopLayout = page.getByTestId('pos-layout-desktop');
+    const mobileLayout = page.getByTestId('pos-layout-mobile');
+
+    await expect(desktopLayout).toBeVisible({ timeout: 30_000 });
+    await expect(mobileLayout).not.toBeVisible();
+
+    await expect(page.getByTestId('pos-desktop-orders-panel')).toBeVisible();
+    await expect(page.getByTestId('pos-desktop-products-panel')).toBeVisible();
+    await expect(page.getByTestId('pos-desktop-order-panel')).toBeVisible();
+
+    await expect(desktopLayout.locator('[data-testid="pos-waiting-orders-list"]:visible')).toHaveCount(1);
+    await expect(desktopLayout.locator('[data-testid="pos-product-search-visible"]:visible')).toHaveCount(1);
+    await expect(desktopLayout.locator('[data-testid="pos-select-table-button"]:visible')).toHaveCount(1);
+
+    await expect(page.getByTestId('pos-desktop-orders-panel').locator('[data-testid="pos-waiting-orders-list"]:visible')).toHaveCount(1);
+    await expect(page.getByTestId('pos-desktop-products-panel').locator('[data-testid="pos-product-search-visible"]:visible')).toHaveCount(1);
+    await expect(page.getByTestId('pos-desktop-order-panel').locator('[data-testid="pos-select-table-button"]:visible')).toHaveCount(1);
   });
 
   test('LOT2-A commande sur place mise en attente', async ({ page, baseURL }, testInfo) => {
@@ -199,32 +234,34 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
     await page.goto('/StrasykPos', { waitUntil: 'networkidle' });
     await waitForPosReadModel({ page, responses: collectors.responses });
     await expect(page).toHaveURL(/\/StrasykPos/);
+    const desktopLayout = page.getByTestId('pos-layout-desktop');
+    await expect(desktopLayout).toBeVisible({ timeout: 30_000 });
     record('pos-opened');
 
-    const productSearch = await expectSingleVisibleTestId(page, 'pos-product-search-visible');
-    const selectTableButton = await expectSingleVisibleTestId(page, 'pos-select-table-button');
-    await expect(page.getByTestId('pos-waiting-orders-list').locator(':visible')).toHaveCount(1);
+    const productSearch = await expectSingleVisibleTestId(desktopLayout, 'pos-product-search-visible');
+    const selectTableButton = await expectSingleVisibleTestId(desktopLayout, 'pos-select-table-button');
+    await expect(desktopLayout.getByTestId('pos-waiting-orders-list')).toBeVisible();
     await selectTableButton.click();
-    await expect(page.getByTestId(`pos-table-option-${tableBefore.id}`).locator(':visible')).toHaveCount(1);
-    await page.getByTestId(`pos-table-option-${tableBefore.id}`).click();
-    await expect(page.getByTestId(`pos-selected-table-${tableBefore.id}`).locator(':visible')).toHaveCount(1);
+    await expectSingleVisibleTestId(desktopLayout, `pos-table-option-${tableBefore.id}`);
+    await desktopLayout.getByTestId(`pos-table-option-${tableBefore.id}`).click();
+    await expectSingleVisibleTestId(desktopLayout, `pos-selected-table-${tableBefore.id}`);
     record('table-selected', { tableId: tableBefore.id, tableName: tableBefore.nom });
 
     await productSearch.fill('Coca-Cola');
-    await page.getByTestId(`pos-product-card-${simpleProduct.id}`).click();
-    await expect(visibleOrderLineLocator(page)).toHaveCount(1, { timeout: 15_000 });
+    await desktopLayout.getByTestId(`pos-product-card-${simpleProduct.id}`).click();
+    await expect(visibleOrderLineLocator(desktopLayout)).toHaveCount(1, { timeout: 15_000 });
     record('simple-product-added', { productId: simpleProduct.id, productName: 'Coca-Cola' });
 
     await productSearch.fill('Pizza Margherita');
-    await page.getByTestId(`pos-product-card-${pizzaProduct.id}`).click();
+    await desktopLayout.getByTestId(`pos-product-card-${pizzaProduct.id}`).click();
     await expect(page.getByText('Personnaliser: Pizza Margherita', { exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('pos-size-option-Petite').locator(':visible')).toHaveCount(1);
-    await expect(page.getByTestId('pos-size-option-Grande').locator(':visible')).toHaveCount(1);
+    await expectSingleVisibleTestId(page, 'pos-size-option-Petite');
+    await expectSingleVisibleTestId(page, 'pos-size-option-Grande');
     await page.getByTestId(`pos-size-option-${pizzaSize}`).click();
     await page.getByTestId('pos-customization-quantity-increase').click();
     await expect(page.getByTestId('pos-customization-quantity-value')).toHaveText('2');
     await page.getByTestId('pos-customization-confirm').click();
-    await expect(visibleOrderLineLocator(page)).toHaveCount(2, { timeout: 15_000 });
+    await expect(visibleOrderLineLocator(desktopLayout)).toHaveCount(2, { timeout: 15_000 });
     record('pizza-added-with-size', { productId: pizzaProduct.id, productName: 'Pizza Margherita', availableSizes: ['Petite', 'Grande'], size: pizzaSize });
     record('pizza-quantity-updated', { size: pizzaSize, quantity: 2, mechanism: 'customization-modal' });
 
@@ -289,16 +326,17 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
 
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPosReadModel({ page, responses: collectors.responses });
-    await expect(page.getByTestId('pos-waiting-orders-list').locator(':visible')).toHaveCount(1, { timeout: 15_000 });
+    await expect(desktopLayout).toBeVisible({ timeout: 30_000 });
+    await expect(desktopLayout.getByTestId('pos-waiting-orders-list')).toBeVisible({ timeout: 15_000 });
     record('page-refreshed');
 
-    const orderCard = page.getByTestId(`pos-order-card-${createdOrderId}`);
-    await expect(orderCard.locator(':visible')).toHaveCount(1, { timeout: 15_000 });
-    await page.getByTestId(`pos-order-resume-${createdOrderId}`).click();
+    const orderCard = desktopLayout.getByTestId(`pos-order-card-${createdOrderId}`);
+    await expect(orderCard).toBeVisible({ timeout: 15_000 });
+    await desktopLayout.getByTestId(`pos-order-resume-${createdOrderId}`).click();
     resumedOrderNumber = heldOrder.numero_commande || String(heldOrder.numero_caisse);
-    await expect(page.getByTestId(`pos-selected-table-${tableBefore.id}`).locator(':visible')).toHaveCount(1, { timeout: 15_000 });
-    await expect(visibleOrderLineLocator(page)).toHaveCount(2, { timeout: 15_000 });
-    await expect(page.getByTestId('pos-order-note-input')).toHaveValue(runId);
+    await expectSingleVisibleTestId(desktopLayout, `pos-selected-table-${tableBefore.id}`, 15_000);
+    await expect(visibleOrderLineLocator(desktopLayout)).toHaveCount(2, { timeout: 15_000 });
+    await expect(desktopLayout.getByTestId('pos-order-note-input')).toHaveValue(runId);
     record('order-resumed-after-refresh', { resumedOrderNumber });
 
     const resumedTable = await fetchTableById(tableBefore.id);

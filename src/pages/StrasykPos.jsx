@@ -1179,11 +1179,11 @@ export default function StrasykPos() {
     <div className="h-screen w-full bg-gray-300 overflow-hidden relative">
       <div className="h-full w-full">
         {/* Mobile layout */}
-        <div className="xl:hidden w-full h-full flex flex-col overflow-hidden">
+        <div data-testid="pos-layout-mobile" className="xl:hidden w-full h-full flex flex-col overflow-hidden">
           {(isOrdersListVisible || isCartVisible) && (
             <div className="absolute inset-0 bg-black/50 z-10 transition-opacity duration-300" onClick={() => { setIsOrdersListVisible(false); setIsCartVisible(false); }} />
           )}
-          <div className={`flex flex-col bg-white shadow-2xl h-full z-20 transition-all duration-300 ease-out overflow-hidden ${isOrdersListVisible ? 'translate-x-0' : '-translate-x-full'} absolute inset-y-0 left-0 w-80`}>
+          <div data-testid="pos-mobile-orders-panel" className={`flex flex-col bg-white shadow-2xl h-full z-20 transition-all duration-300 ease-out overflow-hidden ${isOrdersListVisible ? 'translate-x-0' : '-translate-x-full'} absolute inset-y-0 left-0 w-80`}>
             <div className="flex justify-end p-4 border-b bg-indigo-600 rounded-tr-2xl">
               <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsOrdersListVisible(false)}><X className="w-5 h-5" /></Button>
             </div>
@@ -1204,11 +1204,11 @@ export default function StrasykPos() {
                 {itemCount > 0 && <Badge className="absolute -top-2 -right-2 h-6 w-6 justify-center p-0 bg-red-500 text-white shadow-lg animate-pulse border-2 border-white">{itemCount}</Badge>}
               </Button>
             </header>
-            <div className="flex-1 bg-gray-50 shadow-inner min-h-0">
+            <div data-testid="pos-mobile-products-panel" className="flex-1 bg-gray-50 shadow-inner min-h-0">
               <ProductGrid products={products} categories={categories} menuFormulas={menuFormulas} menuItems={menuItems} onAddToCart={handleAddToCart} onAddMenuToCart={handleAddMenuToCart} isDateClosed={isDateClosed} isOrdersVisible={isDesktopOrdersVisible} onShowOrders={() => setIsDesktopOrdersVisible(true)} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} onRefresh={refreshData} isRefreshing={isFetchingPosData} />
             </div>
           </main>
-          <div className={`flex flex-col bg-white shadow-2xl h-full z-20 transition-all duration-300 ease-out overflow-hidden ${isCartVisible ? 'translate-x-0' : 'translate-x-full'} absolute inset-y-0 right-0 w-96 max-w-full`}>
+          <div data-testid="pos-mobile-order-panel" className={`flex flex-col bg-white shadow-2xl h-full z-20 transition-all duration-300 ease-out overflow-hidden ${isCartVisible ? 'translate-x-0' : 'translate-x-full'} absolute inset-y-0 right-0 w-96 max-w-full`}>
             <div className="flex justify-start p-4 border-b bg-orange-500 rounded-tl-2xl">
               <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsCartVisible(false)}><X className="w-5 h-5" /></Button>
             </div>
@@ -1217,7 +1217,7 @@ export default function StrasykPos() {
         </div>
 
         {/* Desktop layout */}
-        <div className="hidden xl:flex w-full h-full flex-col p-4 gap-4 relative overflow-hidden">
+        <div data-testid="pos-layout-desktop" className="hidden xl:flex w-full h-full flex-col p-4 gap-4 relative overflow-hidden">
           <div className="flex gap-2 mb-2">
             <OpenDrawerButton />
             {profile?.customer_display_enabled && (
@@ -1226,14 +1226,14 @@ export default function StrasykPos() {
           </div>
           <div className="flex gap-4 flex-1 min-h-0">
             {isDesktopOrdersVisible && (
-              <div className="w-[340px] flex-shrink-0 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden">
+              <div data-testid="pos-desktop-orders-panel" className="w-[340px] flex-shrink-0 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden">
                 <OrdersList orders={orders} onEditOrder={handleEditOrderWrapper} customers={customers} onRefresh={refreshData} isLoading={isFetchingPosData} workingDate={workingDate} onSettleOrder={handleSettleOrder} onCancelOrder={handleCancelOrder} profile={profile} tenant={currentTenant} onManualPrint={setLastCompletedOrder} onHide={() => setIsDesktopOrdersVisible(false)} />
               </div>
             )}
-            <div className="flex-1 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden min-w-[400px]">
+            <div data-testid="pos-desktop-products-panel" className="flex-1 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden min-w-[400px]">
               <ProductGrid products={products} categories={categories} menuFormulas={menuFormulas} menuItems={menuItems} onAddToCart={handleAddToCart} onAddMenuToCart={handleAddMenuToCart} isDateClosed={isDateClosed} isOrdersVisible={isDesktopOrdersVisible} onShowOrders={() => setIsDesktopOrdersVisible(!isDesktopOrdersVisible)} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} onRefresh={refreshData} isRefreshing={isFetchingPosData} />
             </div>
-            <div className="w-[420px] flex-shrink-0 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden">
+            <div data-testid="pos-desktop-order-panel" className="w-[420px] flex-shrink-0 flex flex-col bg-white shadow-2xl rounded-2xl overflow-hidden">
               <OrderPanel currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} isCheckingLoyalty={isCheckingLoyalty} onSelectTableClick={() => setTableModalOpen(true)} onFinalize={handleFinalize} onHoldOrder={handleHoldOrder} onClearOrder={clearOrder} onCancelOrder={handleCancelOrder} onSettleOrder={handleSettleOrder} isDateClosed={isDateClosed} onViewCustomerHistory={setViewingCustomerId} profile={profile} onApplyPromoCode={handleApplyPromoCode} onRemovePromoCode={handleRemovePromoCode} getCurrentOrderType={getCurrentOrderType} onEditItem={profile?.allow_item_edit ? setEditingCartItem : null} />
             </div>
           </div>
