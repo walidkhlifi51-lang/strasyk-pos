@@ -927,6 +927,7 @@ export default function OrderPanel({
         {/* NOUVEAU: Afficheur d'informations de table */}
         {managesTablePlan && currentOrderType === 'sur_place' && currentOrder?.table && tableStatus && (
             <div 
+                data-testid={`pos-selected-table-${currentOrder.table.id}`}
                 className={`mt-3 p-3 rounded-lg border flex justify-between items-center transition-all hover:shadow-md ${tableStatus.color} ${tableStatus.borderColor}`}
             >
                 <div className="flex items-center gap-3">
@@ -961,7 +962,7 @@ export default function OrderPanel({
           
           {managesTablePlan && currentOrderType === 'sur_place' && !isDateClosed && !currentOrder?.table && !currentOrder?.id && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <Button className="w-full" onClick={onSelectTableClick}>
+                <Button data-testid="pos-select-table-button" className="w-full" onClick={onSelectTableClick}>
                     <LayoutGrid className="w-4 h-4 mr-2"/>
                     Choisir une table
                 </Button>
@@ -1005,7 +1006,7 @@ export default function OrderPanel({
           ) : (
             <div className="space-y-3">
               {(currentOrder?.articles || []).map((item) => (
-                <div key={item.cart_id} className="bg-gray-50 p-3 rounded-lg flex items-start gap-3 shadow-sm">
+                <div key={item.cart_id} data-testid={`pos-order-line-${item.cart_id}`} className="bg-gray-50 p-3 rounded-lg flex items-start gap-3 shadow-sm">
                   <div className="flex-1">
                     <p className="font-semibold text-gray-800">{item.nom_produit}</p>
 
@@ -1106,6 +1107,7 @@ export default function OrderPanel({
                   <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-1">
                       <Button
+                        data-testid={`pos-line-decrease-${item.cart_id}`}
                         type="button"
                         variant="outline"
                         size="icon"
@@ -1116,8 +1118,9 @@ export default function OrderPanel({
                       >
                         <Minus className="w-3 h-3" />
                       </Button>
-                      <span className="font-bold text-md w-6 text-center">{item.quantite}</span>
+                      <span data-testid={`pos-line-quantity-${item.cart_id}`} className="font-bold text-md w-6 text-center">{item.quantite}</span>
                       <Button
+                        data-testid={`pos-line-increase-${item.cart_id}`}
                         type="button"
                         variant="outline"
                         size="icon"
@@ -1141,6 +1144,7 @@ export default function OrderPanel({
             <div className="mt-4 space-y-2">
                 <Label htmlFor="order-notes">Notes sur la commande</Label>
                 <Input 
+                    data-testid="pos-order-note-input"
                     id="order-notes"
                     value={currentOrder?.notes || ''} 
                     onChange={(e) => setCurrentOrder(prev => ({ ...prev, notes: e.target.value }))} 
@@ -1268,6 +1272,7 @@ export default function OrderPanel({
                 Supprimer
               </Button>
               <Button
+                data-testid="pos-hold-order-button"
                 type="button"
                 onClick={handleHoldOrder}
                 className="col-span-1 bg-blue-600 hover:bg-blue-700 gap-2 shadow-lg"

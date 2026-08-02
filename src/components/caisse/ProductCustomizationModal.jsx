@@ -419,7 +419,7 @@ export default function ProductCustomizationModal({
                     }
                     
                     return (
-                      <div key={size} className="flex items-center space-x-2 border-2 border-blue-300 bg-white rounded-lg p-3 cursor-pointer hover:bg-blue-100 transition-colors"
+                      <div key={size} data-testid={`pos-size-option-${size}`} className="flex items-center space-x-2 border-2 border-blue-300 bg-white rounded-lg p-3 cursor-pointer hover:bg-blue-100 transition-colors"
                            onClick={() => setSelectedSize(size)}>
                         <RadioGroupItem value={size} id={`size-${size}`} />
                         <Label htmlFor={`size-${size}`} className="cursor-pointer flex-1">
@@ -671,6 +671,7 @@ export default function ProductCustomizationModal({
             <Label className="text-base font-semibold text-indigo-900">🔢 Quantité</Label>
             <div className="flex items-center gap-3">
               <Button
+                data-testid="pos-customization-quantity-decrease"
                 type="button"
                 variant="outline"
                 size="icon"
@@ -679,8 +680,9 @@ export default function ProductCustomizationModal({
               >
                 <Minus className="w-4 h-4" />
               </Button>
-              <span className="text-xl font-bold w-12 text-center text-indigo-900">{quantity}</span>
+              <span data-testid="pos-customization-quantity-value" className="text-xl font-bold w-12 text-center text-indigo-900">{quantity}</span>
               <Button
+                data-testid="pos-customization-quantity-increase"
                 type="button"
                 variant="outline"
                 size="icon"
@@ -697,7 +699,7 @@ export default function ProductCustomizationModal({
           <Button variant="outline" onClick={onCancel} className="border-2">
             Annuler
           </Button>
-          <Button onClick={handleConfirm} className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg">
+          <Button data-testid="pos-customization-confirm" onClick={handleConfirm} className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg">
             Ajouter pour {(calculatePrice).toFixed(2)}€
           </Button>
         </DialogFooter>

@@ -88,6 +88,7 @@ const ProductCard = ({ product, categories, onAddToCart }) => {
 
   return (
     <Card 
+      data-testid={`pos-product-card-${product.id}`}
       className="overflow-hidden hover:shadow-xl transition-all cursor-pointer group border-2 hover:border-orange-400 h-full flex flex-col"
       onClick={() => onAddToCart(product, 1)}
       style={{ borderLeftColor: product.color || category?.color || '#eeeeee', borderLeftWidth: '4px' }}
@@ -319,6 +320,7 @@ export default function ProductGrid({
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
+              data-testid="pos-product-search-visible"
               type="text"
               placeholder="Rechercher un produit ou menu..."
               value={searchTerm}

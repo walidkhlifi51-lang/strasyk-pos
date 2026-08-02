@@ -89,6 +89,7 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
   return (
     <>
       <div 
+        data-testid={`pos-order-card-${order.id}`}
         className="p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
       >
         {/* En-tête avec numéro de commande et prix */}
@@ -181,12 +182,12 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
         {/* Boutons d'action */}
         <div className="flex gap-2">
           {order.from_web ? (
-            <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={() => setIsTicketViewOpen(true)}>
+            <Button data-testid={`pos-order-view-ticket-${order.id}`} size="sm" variant="outline" className="flex-1 gap-1" onClick={() => setIsTicketViewOpen(true)}>
               <Eye className="w-4 h-4" />
               Voir ticket
             </Button>
           ) : (
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => onEditOrder(order)}>
+            <Button data-testid={`pos-order-resume-${order.id}`} size="sm" variant="outline" className="flex-1" onClick={() => onEditOrder(order)}>
               Modifier
             </Button>
           )}
@@ -498,7 +499,7 @@ export default function OrdersList({
         </div>
         */}
       </header>
-      <ScrollArea className="flex-1">
+      <ScrollArea data-testid="pos-waiting-orders-list" className="flex-1">
         {filteredOrders.length > 0 ? (
           filteredOrders.map(order => (
             <OrderItem

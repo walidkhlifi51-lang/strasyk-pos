@@ -25,6 +25,7 @@ export default function TableSelectionModal({ isOpen, onClose, tables, onSelectT
                             availableTables.map(table => (
                                 <div
                                     key={table.id}
+                                    data-testid={`pos-table-option-${table.id}`}
                                     onClick={() => onSelectTable(table)}
                                     className="p-4 border-2 border-green-300 bg-green-50 rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-green-100 hover:shadow-lg transition-all text-green-800"
                                 >
