@@ -242,8 +242,10 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
     const selectTableButton = await expectSingleVisibleTestId(desktopLayout, 'pos-select-table-button');
     await expect(desktopLayout.getByTestId('pos-waiting-orders-list')).toBeVisible();
     await selectTableButton.click();
-    await expectSingleVisibleTestId(desktopLayout, `pos-table-option-${tableBefore.id}`);
-    await desktopLayout.getByTestId(`pos-table-option-${tableBefore.id}`).click();
+    const tableDialog = page.getByRole('dialog').filter({ hasText: /Sélectionner une table|SÃ©lectionner une table/i });
+    await expect(tableDialog).toBeVisible({ timeout: 15_000 });
+    await expectSingleVisibleTestId(page, `pos-table-option-${tableBefore.id}`);
+    await page.getByTestId(`pos-table-option-${tableBefore.id}`).click();
     await expectSingleVisibleTestId(desktopLayout, `pos-selected-table-${tableBefore.id}`);
     record('table-selected', { tableId: tableBefore.id, tableName: tableBefore.nom });
 
@@ -254,18 +256,40 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
 
     await productSearch.fill('Pizza Margherita');
     await desktopLayout.getByTestId(`pos-product-card-${pizzaProduct.id}`).click();
-    await expect(page.getByText('Personnaliser: Pizza Margherita', { exact: true })).toBeVisible({ timeout: 15_000 });
-    await expectSingleVisibleTestId(page, 'pos-size-option-Petite');
-    await expectSingleVisibleTestId(page, 'pos-size-option-Grande');
-    await page.getByTestId(`pos-size-option-${pizzaSize}`).click();
-    await page.getByTestId('pos-customization-quantity-increase').click();
-    await expect(page.getByTestId('pos-customization-quantity-value')).toHaveText('2');
-    await page.getByTestId('pos-customization-confirm').click();
-    await expect(visibleOrderLineLocator(desktopLayout)).toHaveCount(2, { timeout: 15_000 });
-    record('pizza-added-with-size', { productId: pizzaProduct.id, productName: 'Pizza Margherita', availableSizes: ['Petite', 'Grande'], size: pizzaSize });
-    record('pizza-quantity-updated', { size: pizzaSize, quantity: 2, mechanism: 'customization-modal' });
+    const customizationDialog = page.getByRole('dialog').filter({ has: page.getByTestId('pos-customization-confirm') });
+    await expect(customizationDialog).toBeVisible({ timeout: 15_000 });
+    await expect(customizationDialog.getByText('Personnaliser: Pizza Margherita', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expectSingleVisibleTestId(customizationDialog, 'pos-size-option-Petite');
+    await expectSingleVisibleTestId(customizationDialog, 'pos-size-option-Grande');
+    await customizationDialog.getByTestId(`pos-size-option-${pizzaSize}`).click();
+    await customizationDialog.getByTestId('pos-customization-quantity-increase').click();
+    await expect(customizationDialog.getByTestId('pos-customization-quantity-value')).toHaveText('2');
 
-    const notesInput = page.locator('#order-notes');
+    const requiredSizeGroup = customizationDialog.getByRole('button', { name: /🍕\s*Tailles\*.*Min 1/i });
+    await expect(requiredSizeGroup).toBeVisible({ timeout: 10_000 });
+    const compatibleRequiredOption = customizationDialog.getByRole('button', { name: new RegExp(`^${pizzaSize}$`, 'i') });
+    await expect(compatibleRequiredOption).toBeVisible({ timeout: 10_000 });
+    await compatibleRequiredOption.click();
+
+    const noValidationDialogPromise = page.waitForEvent('dialog', { timeout: 1500 }).catch(() => null);
+    await customizationDialog.getByTestId('pos-customization-confirm').click();
+    const validationDialog = await noValidationDialogPromise;
+    if (validationDialog) {
+      const message = validationDialog.message();
+      await validationDialog.dismiss();
+      throw new Error(`Unexpected customization validation dialog: ${message}`);
+    }
+    await expect(customizationDialog).not.toBeVisible({ timeout: 15_000 });
+    await expect(visibleOrderLineLocator(desktopLayout)).toHaveCount(2, { timeout: 15_000 });
+    const pizzaLine = visibleOrderLineLocator(desktopLayout).filter({ hasText: `Pizza Margherita (${pizzaSize})` });
+    await expect(pizzaLine).toHaveCount(1, { timeout: 15_000 });
+    await expect(pizzaLine).toContainText('Petite');
+    await expect(pizzaLine).toContainText('2');
+    await expect(pizzaLine).toContainText('23.80€');
+    record('pizza-added-with-size', { productId: pizzaProduct.id, productName: 'Pizza Margherita', availableSizes: ['Petite', 'Grande'], size: pizzaSize });
+    record('pizza-quantity-updated', { size: pizzaSize, quantity: 2, mechanism: 'customization-modal', requiredOptionGroupSatisfied: true });
+
+    const notesInput = desktopLayout.getByTestId('pos-order-note-input');
     await notesInput.fill(runId);
     record('note-set', { note: runId });
 
@@ -278,13 +302,16 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
       return request.method() === 'PATCH' && response.url().includes('/rest/v1/tables');
     }, { timeout: 30_000 });
 
-    await page.getByRole('button', { name: 'Mettre en attente' }).click();
+    await desktopLayout.getByRole('button', { name: 'Mettre en attente' }).click();
 
     const orderCreateResponse = await orderCreateResponsePromise;
     const tablePatchResponse = await tablePatchResponsePromise;
     const orderCreatePayload = orderCreateResponse.request().postDataJSON();
     const createdOrderRows = await orderCreateResponse.json();
-    createdOrderId = createdOrderRows?.[0]?.id || null;
+    const createdOrderRecord = Array.isArray(createdOrderRows)
+      ? createdOrderRows[0]
+      : (createdOrderRows && typeof createdOrderRows === 'object' ? createdOrderRows : null);
+    createdOrderId = createdOrderRecord?.id || null;
     record('order-held', {
       createdOrderId,
       orderResponseStatus: orderCreateResponse.status(),
@@ -292,7 +319,24 @@ test.describe('lot 2 - POS orders and payments scaffold', () => {
     });
 
     if (!createdOrderId) {
-      throw new Error('LOT2-A did not receive a created order id from the hold response.');
+      const holdReadbackSnapshot = await fetchLot2ReadonlySnapshot();
+      const heldOrderFromReadback = (holdReadbackSnapshot.orders || []).find((order) => (
+        order?.tenant_id === e2eConfig.expectedTenantId
+        && order?.table_id === tableBefore.id
+        && order?.notes === runId
+        && order?.statut === 'en_attente'
+        && order?.payee === false
+      ));
+
+      createdOrderId = heldOrderFromReadback?.id || null;
+      record('order-held-readback-fallback', {
+        createdOrderId,
+        matchedBy: createdOrderId ? 'notes+table_id+status' : null,
+      });
+    }
+
+    if (!createdOrderId) {
+      throw new Error('LOT2-A did not receive a created order id from the hold response or the immediate readback.');
     }
 
     const heldOrder = await fetchOrderById(createdOrderId);
