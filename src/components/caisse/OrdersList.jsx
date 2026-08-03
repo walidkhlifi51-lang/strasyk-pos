@@ -125,7 +125,9 @@ const OrderItem = ({ order, customer, onEditOrder, onSettleOrder, onCancelOrder,
               ) : (
                 <>
                   {type && <Badge className={`flex items-center gap-1 ${type.color}`}>{type.icon}{type.label}</Badge>}
-                  <Badge className={`flex items-center gap-1.5 ${config.color}`}>{config.icon}{config.label}</Badge>
+                  {!hasRemainingBalance && (
+                    <Badge className={`flex items-center gap-1.5 ${config.color}`}>{config.icon}{config.label}</Badge>
+                  )}
                 </>
               )}
             </div>
