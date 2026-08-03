@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { appClient } from '@/api/appClient';
+import { ENTITY_SELECT_FIELDS } from '@/api/supabase/appClient';
 import { useTenant } from "@/components/contexts/TenantContext";
 import { useOffline } from "@/components/contexts/OfflineContext";
 import {
@@ -88,28 +89,17 @@ const POS_PRODUCT_INGREDIENT_FIELDS = [
   'id', 'tenant_id', 'product_id', 'ingredient_id', 'quantite', 'retirable', 'created_date', 'updated_date'
 ];
 
-const POS_MENU_FIELDS = [
-  'id', 'tenant_id', 'category_id', 'nom', 'description', 'prix', 'tva', 'disponible', 'created_date', 'updated_date'
-];
+const POS_MENU_FIELDS = ENTITY_SELECT_FIELDS.MenuFormula;
 
 const POS_MENU_ITEM_FIELDS = [
   'id', 'tenant_id', 'menu_formula_id', 'nom_affichage', 'quantite', 'taille_fixe', 'produits_inclus', 'created_date', 'updated_date'
 ];
 
-const POS_OFFER_FIELDS = [
-  'id', 'tenant_id', 'nom', 'type', 'active', 'condition_type', 'condition_product_ids', 'condition_category_ids',
-  'condition_quantity', 'condition_sizes', 'reward_type', 'reward_product_ids', 'reward_category_ids',
-  'reward_quantity', 'reward_sizes', 'reduction_value', 'canaux', 'created_date', 'updated_date'
-];
+const POS_OFFER_FIELDS = ENTITY_SELECT_FIELDS.Offer;
 
-const POS_LOYALTY_FIELDS = [
-  'id', 'tenant_id', 'nom', 'active', 'type', 'points_required', 'discount_amount', 'discount_percent',
-  'product_ids', 'category_ids', 'canaux', 'created_date', 'updated_date'
-];
+const POS_LOYALTY_FIELDS = ENTITY_SELECT_FIELDS.LoyaltyRule;
 
-const POS_CAGNOTTE_FIELDS = [
-  'id', 'tenant_id', 'nom', 'active', 'type', 'value', 'min_order_total', 'canaux', 'created_date', 'updated_date'
-];
+const POS_CAGNOTTE_FIELDS = ENTITY_SELECT_FIELDS.CagnotteRule;
 
 const POS_TABLE_FIELDS = [
   'id', 'tenant_id', 'nom', 'capacite', 'forme', 'statut', 'order_id', 'position_x', 'position_y',

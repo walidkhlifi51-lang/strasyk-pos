@@ -60,7 +60,7 @@ const missingColumnWarnings = new Set();
 const prunedLegacyFieldsByEntity = new Map();
 const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
 
-const LEGACY_ENTITY_FIELDS = {
+export const ENTITY_SELECT_FIELDS = {
   Tenant: ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'pos_suspended', 'slug', 'created_date', 'updated_date'],
   RestaurantProfile: [
     'id', 'tenant_id', 'nom_etablissement', 'prenom_gerant', 'nom_gerant', 'adresse', 'ville', 'telephone', 'logo_url', 'horaires',
@@ -111,6 +111,8 @@ const LEGACY_ENTITY_FIELDS = {
   ResellerCommission: ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'],
   ResellerPayout: ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'],
 };
+
+const LEGACY_ENTITY_FIELDS = ENTITY_SELECT_FIELDS;
 
 const UNIQUE_SELECT_FIELDS = (fields = []) => [...new Set(fields.filter(Boolean))];
 const MINIMAL_WRITE_RETURN_FIELDS = ['id', 'tenant_id', 'created_date', 'updated_date'];
