@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { hasUserPermission } from '@/lib/userAccess';
 import { scopeToTenant } from '@/lib/identityAccess';
 import { identityService } from '@/services/auth/identityService';
+import { resellerPortalRedirect } from '@/lib/resellerAccess';
 
 const TenantContext = createContext();
 export const useTenant = () => {
@@ -28,6 +29,11 @@ export const TenantProvider = ({ children }) => {
     retry: false,
   });
   const tenantData = !error && data?.user?.id === user?.id ? data : null;
+
+  useEffect(() => {
+    const target = resellerPortalRedirect(tenantData, location.pathname);
+    if (target) navigate(target, { replace: true });
+  }, [tenantData, location.pathname, navigate]);
 
   useEffect(() => {
     if (tenantData?.role === 'delivery' && tenantData.status === 'active' && location.pathname !== '/DeliveryApp') {

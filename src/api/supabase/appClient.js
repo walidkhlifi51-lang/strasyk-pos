@@ -1,5 +1,6 @@
 import { getSupabaseBrowserClient } from '@/api/supabase/client';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
+import { RESELLER_COMMISSION_FIELDS, RESELLER_PAYOUT_FIELDS } from '@/lib/resellerPlatformReadModel';
 
 const ENTITY_TABLE_MAP = {
   Tenant: 'tenants',
@@ -107,8 +108,8 @@ const LEGACY_ENTITY_FIELDS = {
   ResellerBranding: ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'],
   ResellerPricingRule: ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'],
   ResellerTenant: ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'],
-  ResellerCommission: ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'],
-  ResellerPayout: ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'],
+  ResellerCommission: RESELLER_COMMISSION_FIELDS,
+  ResellerPayout: RESELLER_PAYOUT_FIELDS,
 };
 
 const UNIQUE_SELECT_FIELDS = (fields = []) => [...new Set(fields.filter(Boolean))];

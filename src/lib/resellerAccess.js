@@ -5,6 +5,13 @@ export const RESELLER_PERMISSION_KEYS = [
   'can_manage_domain', 'can_manage_subresellers',
 ];
 
+// Navigation only; Layout and server permissions still deny POS access.
+export const resellerPortalRedirect = (access, pathname) => (
+  access?.status === 'active' && access.isReseller === true
+    && access.isPlatformAdmin !== true && pathname !== '/ResellerPortal'
+    ? '/ResellerPortal' : null
+);
+
 export const getResellerPermissions = (reseller) => Object.fromEntries(
   RESELLER_PERMISSION_KEYS.map((key) => [key, reseller?.permissions?.[key] === true
     && (!['can_manage_branding', 'can_manage_domain', 'can_manage_subresellers'].includes(key)

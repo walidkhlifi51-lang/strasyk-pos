@@ -1,6 +1,11 @@
 ﻿import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appClient } from '@/api/appClient';
+import {
+  loadResellerPlatform, resellerReadErrorCode, RESELLER_RESOURCE_LABELS,
+  RESELLER_COMMISSION_FIELDS as RESELLER_PLATFORM_COMMISSION_FIELDS,
+  RESELLER_PAYOUT_FIELDS as RESELLER_PLATFORM_PAYOUT_FIELDS,
+} from '@/lib/resellerPlatformReadModel';
 import { useTenant } from '@/components/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -78,8 +83,6 @@ const RESELLER_PLATFORM_BRANDING_FIELDS = ['id', 'reseller_id', 'brand_name', 'l
 const RESELLER_PLATFORM_TENANT_LINK_FIELDS = ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_PRICING_FIELDS = ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'];
-const RESELLER_PLATFORM_COMMISSION_FIELDS = ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'];
-const RESELLER_PLATFORM_PAYOUT_FIELDS = ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'slug', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_INVOICE_FIELDS = ['id', 'tenant_id', 'reseller_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'issuer_type', 'issuer_id', 'recipient_type', 'recipient_id', 'issuer_snapshot', 'recipient_snapshot', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_REQUEST_FIELDS = ['id', 'nom_commercial', 'prenom_contact', 'nom_contact', 'email', 'adresse', 'telephone', 'type_commerce', 'formule_choisie', 'statut', 'message', 'created_date', 'updated_date'];
@@ -101,7 +104,7 @@ const classifyResellerRequest = (request) => {
   return 'a_qualifier';
 };
 
-const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
+const computeResellerStats = ({ resellers, resellerTenants, commissions, unavailable }) => {
   const activeLinks = resellerTenants.filter((item) => item.status === 'active').length;
   const pendingCommissions = commissions
     .filter((item) => item.status === 'pending')
@@ -122,13 +125,13 @@ const computeResellerStats = ({ resellers, resellerTenants, commissions }) => {
     },
     {
       title: 'Commerces rattaches',
-      value: activeLinks,
+      value: unavailable.has('resellerTenants') ? 'Indisponible' : activeLinks,
       icon: Store,
       accent: 'bg-emerald-600',
     },
     {
       title: 'Commissions en attente',
-      value: currency(pendingCommissions),
+      value: unavailable.has('commissions') ? 'Indisponible' : currency(pendingCommissions),
       icon: Euro,
       accent: 'bg-amber-500',
     },
@@ -176,49 +179,29 @@ export default function ResellersPlatform() {
   const [isUploadingBrandingLogo, setIsUploadingBrandingLogo] = React.useState(false);
   const [uploadingResellerDocument, setUploadingResellerDocument] = React.useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error: loadError, refetch } = useQuery({
     queryKey: ['resellers-platform'],
     queryFn: async () => {
-      const [
-        resellers,
-        resellerBranding,
-        resellerTenants,
-        resellerUsers,
-        pricingRules,
-        commissions,
-        payouts,
-        tenants,
-        invoices,
-        accessRequests,
-      ] = await Promise.all([
-        appClient.entities.Reseller.list('-created_date', undefined, { fields: RESELLER_PLATFORM_FIELDS }),
-        appClient.entities.ResellerBranding.list('-created_date', undefined, { fields: RESELLER_PLATFORM_BRANDING_FIELDS }),
-        appClient.entities.ResellerTenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_LINK_FIELDS }),
-        appClient.entities.ResellerUser.list('-created_date', undefined, { fields: RESELLER_PLATFORM_USER_FIELDS }),
-        appClient.entities.ResellerPricingRule.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PRICING_FIELDS }),
-        appClient.entities.ResellerCommission.list('-created_date', undefined, { fields: RESELLER_PLATFORM_COMMISSION_FIELDS }),
-        appClient.entities.ResellerPayout.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PAYOUT_FIELDS }),
-        appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_FIELDS }),
-        appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS }).catch(() => []),
-        appClient.entities.InscriptionRequest.list('-created_date', undefined, { fields: RESELLER_PLATFORM_REQUEST_FIELDS }).catch(() => []),
-      ]);
-
-      return {
-        resellers,
-        resellerBranding,
-        resellerTenants,
-        resellerUsers,
-        pricingRules,
-        commissions,
-        payouts,
-        tenants,
-        invoices,
-        accessRequests,
-      };
+      return loadResellerPlatform({
+        resellers: () => appClient.entities.Reseller.list('-created_date', undefined, { fields: RESELLER_PLATFORM_FIELDS }),
+        resellerBranding: () => appClient.entities.ResellerBranding.list('-created_date', undefined, { fields: RESELLER_PLATFORM_BRANDING_FIELDS }),
+        resellerTenants: () => appClient.entities.ResellerTenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_LINK_FIELDS }),
+        resellerUsers: () => appClient.entities.ResellerUser.list('-created_date', undefined, { fields: RESELLER_PLATFORM_USER_FIELDS }),
+        pricingRules: () => appClient.entities.ResellerPricingRule.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PRICING_FIELDS }),
+        commissions: () => appClient.entities.ResellerCommission.list('-created_date', undefined, { fields: RESELLER_PLATFORM_COMMISSION_FIELDS }),
+        payouts: () => appClient.entities.ResellerPayout.list('-created_date', undefined, { fields: RESELLER_PLATFORM_PAYOUT_FIELDS }),
+        tenants: () => appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PLATFORM_TENANT_FIELDS }),
+        invoices: () => appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PLATFORM_INVOICE_FIELDS }),
+        accessRequests: () => appClient.entities.InscriptionRequest.list('-created_date', undefined, { fields: RESELLER_PLATFORM_REQUEST_FIELDS }),
+      });
     },
     enabled: isPlatformAdmin,
     staleTime: 30000,
+    retry: false,
   });
+
+  const loadErrors = data?.loadErrors || [];
+  const unavailable = new Set(loadErrors.map((entry) => entry.resource));
 
   const resellers = data?.resellers || [];
   const resellerBranding = data?.resellerBranding || [];
@@ -337,7 +320,7 @@ A bientot.`;
     return currentActiveLink.reseller_id === selectedResellerId;
   });
 
-  const statsCards = computeResellerStats({ resellers, resellerTenants, commissions });
+  const statsCards = computeResellerStats({ resellers, resellerTenants, commissions, unavailable });
 
   const copyTenantOwnerInvite = React.useCallback(async (tenant) => {
     if (!tenant?.id || !tenant?.owner_email) {
@@ -1053,8 +1036,30 @@ A bientot.`;
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="p-6 md:p-8" role="alert">
+        <h1 className="text-xl font-semibold">Chargement des revendeurs impossible</h1>
+        <p className="mt-2">La liste est indisponible. Cela ne signifie pas que les revendeurs ont ete supprimes.</p>
+        <p className="mt-2 text-sm">Code : {resellerReadErrorCode(loadError)}</p>
+        <Button className="mt-4" onClick={() => refetch()}>Reessayer</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-8 space-y-6">
+      {loadErrors.length > 0 && (
+        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <p className="font-semibold">Certaines sections sont indisponibles. La liste des revendeurs reste affichee.</p>
+          <ul className="mt-2 list-inside list-disc text-sm">
+            {loadErrors.map(({ resource, code }) => (
+              <li key={resource}>{RESELLER_RESOURCE_LABELS[resource]} : {code}</li>
+            ))}
+          </ul>
+          <Button className="mt-3" variant="outline" onClick={() => refetch()}>Recharger les sections</Button>
+        </div>
+      )}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Revendeurs</h1>
         <p className="text-gray-600 mt-1">
@@ -1268,7 +1273,7 @@ A bientot.`;
                         </div>
                         <div>
                           <p className="uppercase tracking-wide text-gray-400">Commissions pending</p>
-                          <p className="font-semibold text-gray-800 mt-1">{currency(pendingAmount)}</p>
+                          <p className="font-semibold text-gray-800 mt-1">{unavailable.has('commissions') ? 'Indisponible' : currency(pendingAmount)}</p>
                         </div>
                       </div>
                     </button>
@@ -1323,7 +1328,7 @@ A bientot.`;
                     <Card className="border border-gray-200 shadow-none">
                       <CardContent className="pt-6">
                         <p className="text-xs uppercase tracking-wide text-gray-500">Commissions pending</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{currency(selectedPipelineStats.pendingCommissions)}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{unavailable.has('commissions') ? 'Indisponible' : currency(selectedPipelineStats.pendingCommissions)}</p>
                       </CardContent>
                     </Card>
                   </div>
@@ -2296,7 +2301,7 @@ A bientot.`;
                       </CardHeader>
                       <CardContent className="space-y-2 text-sm text-gray-700">
                         <p>Cette vue est maintenant basee sur les factures revendeur et les charges plateforme reelles.</p>
-                        <p>Payouts manuels enregistres: {selectedPayouts.length}</p>
+                        <p>Payouts manuels enregistres: {unavailable.has('payouts') ? 'Indisponible' : selectedPayouts.length}</p>
                         <p>Commissions manuelles enregistrees: {selectedCommissions.length}</p>
                       </CardContent>
                     </Card>
