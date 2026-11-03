@@ -102,7 +102,7 @@ const LEGACY_ENTITY_FIELDS = {
   TenantInvoice: ['id', 'tenant_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'lignes_materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'created_date', 'updated_date'],
   UserAccess: ['id', 'tenant_id', 'user_email', 'role', 'is_active', 'created_date', 'updated_date'],
   PlatformAdminAccess: ['id', 'user_email', 'is_active', 'created_date', 'updated_date'],
-  Reseller: ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'company_name', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'],
+  Reseller: ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'],
   ResellerUser: ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'],
   ResellerBranding: ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'],
   ResellerPricingRule: ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'],
@@ -502,18 +502,16 @@ export const supabaseAppClient = {
         id: data.user.id,
         email: data.user.email || '',
         full_name: data.user.user_metadata?.full_name || '',
-        role: data.user.app_metadata?.role || 'user',
-        tenant_id: data.user.user_metadata?.tenant_id || null,
+        role: 'user',
+        tenant_id: null,
       };
     },
     async updateMe(data = {}) {
       const supabase = getSupabaseBrowserClient();
-      const current = await this.me();
-      const mergedMetadata = {
-        full_name: current?.full_name || '',
-        tenant_id: current?.tenant_id || null,
-        ...data,
-      };
+      if (Object.keys(data).some((key) => key !== 'full_name')) {
+        throw new Error('IDENTITY_FIELDS_SERVER_ONLY');
+      }
+      const mergedMetadata = { full_name: String(data.full_name || '') };
       const { data: updated, error } = await supabase.auth.updateUser({
         data: mergedMetadata,
       });
@@ -522,8 +520,8 @@ export const supabaseAppClient = {
         id: updated.user.id,
         email: updated.user.email || '',
         full_name: updated.user.user_metadata?.full_name || '',
-        role: updated.user.app_metadata?.role || 'user',
-        tenant_id: updated.user.user_metadata?.tenant_id || null,
+        role: 'user',
+        tenant_id: null,
       };
     },
     async logout() {

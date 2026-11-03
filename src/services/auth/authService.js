@@ -1,9 +1,9 @@
 import { appClient } from '@/api/appClient';
 import { ENABLE_TECHNICAL_ROUTES } from '@/config/env';
-import { normalizeEmail, tenantService } from '@/services/tenant/tenantService';
+import { isSupabaseMode } from '@/config/env';
+import { identityService } from '@/services/auth/identityService';
 
 const importMetaEnv = /** @type {any} */ (import.meta);
-const PLATFORM_ADMIN_ACCESS_FIELDS = ['id', 'user_email', 'is_active'];
 
 export const TECHNICAL_PAGE_KEYS = new Set([
   'AuditTenant',
@@ -24,7 +24,6 @@ export const isTechnicalRoutesEnabled = () => {
 export const isTechnicalRoutesExposed = () => isTechnicalRoutesEnabled();
 
 export const canAccessTechnicalPages = (user = null) => {
-  if (typeof import.meta !== 'undefined' && importMetaEnv.env?.DEV) return true;
   return user?.isPlatformAdmin === true;
 };
 
@@ -39,6 +38,7 @@ export const authService = {
     return appClient.auth.updateMe(data);
   },
   updateCurrentUserTenant(tenantId) {
+    if (isSupabaseMode) throw new Error('TENANT_ASSIGNMENT_SERVER_ONLY');
     return appClient.auth.updateMe({ tenant_id: tenantId });
   },
   logout(...args) {
@@ -72,15 +72,11 @@ export const authService = {
     return appClient.auth.onAuthStateChange?.(callback);
   },
   async getTechnicalPageAccess(user = null) {
-    if (typeof import.meta !== 'undefined' && importMetaEnv.env?.DEV) return true;
-    if (!user?.email) return false;
+    if (!user?.id) return false;
 
     try {
-      const platformAdmins = await tenantService.listPlatformAdminAccess({
-        user_email: user.email,
-        is_active: true,
-      }, '-created_date', 5, { fields: PLATFORM_ADMIN_ACCESS_FIELDS });
-      return platformAdmins.some((entry) => normalizeEmail(entry.user_email) === normalizeEmail(user.email));
+      const access = await identityService.getAccess();
+      return access.user?.id === user.id && access.isPlatformAdmin === true;
     } catch (error) {
       console.warn('[authService] Technical page access check failed.', {
         code: error?.code || null,

@@ -1,7 +1,8 @@
 import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { resellerService } from '@/services/resellers/resellerService';
+import { getResellerPermissions, getResellerTabs } from '@/lib/resellerAccess';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { appClient } from '@/api/appClient';
 import { useTenant } from '@/components/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,6 @@ import {
   Euro,
   CreditCard,
   Palette,
-  Users,
   Plus,
   Copy,
   Loader2,
@@ -44,9 +44,6 @@ import {
 } from 'recharts';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
 import {
-  buildFinalInvoiceFromPaymentRequest,
-  buildPaymentRequestMetadata,
-  computeInvoiceStatusFromMonthlyPayments,
   computeInvoiceAmounts,
   createInvoiceForm,
   getInvoiceTypeLabel,
@@ -60,16 +57,11 @@ import {
   sortInvoicesByDateDesc,
 } from '@/lib/invoiceDocuments';
 import {
-  buildTenantOwnerInviteMessage,
-  createTenantAndResolve,
   normalizeEmail,
-  resolveTenantByOwnerEmail,
 } from '@/lib/tenantProvisioning';
-import { buildResellerIssuerSnapshot, buildTenantRecipientSnapshot } from '@/lib/invoiceSnapshots';
 import {
   RESELLER_PRODUCT_CATALOG,
   buildPricingRuleMap,
-  getEffectiveResellerChargeHT,
   getResellerPricingSummary,
 } from '@/lib/resellerPricing';
 
@@ -77,14 +69,6 @@ const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
 const RESELLER_STATS_COLORS = ['#2563eb', '#f97316', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4'];
 const getInvoiceBrandingColor = (invoice) => invoice?.issuer_snapshot?.primary_color || '#f97316';
 const getInvoiceIssuerName = (invoice) => invoice?.issuer_snapshot?.display_name || invoice?.issuer_snapshot?.legal_name || '';
-const RESELLER_PORTAL_TENANT_FIELDS = ['id', 'nom_commercial', 'owner_email', 'active', 'subscription_plan', 'slug', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_BRANDING_FIELDS = ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_TENANT_LINK_FIELDS = ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_PRICING_FIELDS = ['id', 'reseller_id', 'offer_code', 'billing_type', 'cost_price', 'reseller_price', 'public_price', 'commission_type', 'commission_value', 'active', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_COMMISSION_FIELDS = ['id', 'reseller_id', 'tenant_id', 'invoice_id', 'status', 'commission_amount', 'commission_rate', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_PAYOUT_FIELDS = ['id', 'reseller_id', 'status', 'amount', 'payout_date', 'notes', 'created_date', 'updated_date'];
-const RESELLER_PORTAL_INVOICE_FIELDS = ['id', 'tenant_id', 'reseller_id', 'numero_facture', 'montant', 'tva_taux', 'type', 'description', 'date_facturation', 'date_paiement', 'statut', 'metadata', 'is_devis', 'materiel', 'periode_debut', 'periode_fin', 'monthly_payments', 'issuer_type', 'issuer_id', 'recipient_type', 'recipient_id', 'issuer_snapshot', 'recipient_snapshot', 'created_date', 'updated_date'];
 
 const createInvoiceTotals = () => ({
   paid_ttc: 0,
@@ -119,22 +103,6 @@ const createClientForm = () => ({
   subscription_plan: 'basic',
 });
 
-const withTimeout = async (promise, message, timeoutMs = 20000) => {
-  let timeoutId;
-
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(new Error(message));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-};
-
 export default function ResellerPortal() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -145,46 +113,18 @@ export default function ResellerPortal() {
   const [submitFeedback, setSubmitFeedback] = React.useState({ type: '', message: '' });
   const [selectedClientId, setSelectedClientId] = React.useState('');
   const [clientInvoiceForm, setClientInvoiceForm] = React.useState(createInvoiceForm());
-  const allowedTabs = React.useMemo(() => new Set(['clients', 'stats', 'accounting', 'invoices', 'commissions', 'pricing', 'branding', 'team']), []);
+  const permissions = getResellerPermissions(currentReseller);
+  const canChangeInvoices = false; // M1: reading invoices never grants financial mutation rights.
+  const allowedTabs = React.useMemo(() => getResellerTabs(currentReseller), [currentReseller]);
   const requestedTab = React.useMemo(() => new URLSearchParams(location.search).get('tab') || 'clients', [location.search]);
   const [activeTab, setActiveTab] = React.useState(allowedTabs.has(requestedTab) ? requestedTab : 'clients');
 
-  const canManageClients = ['owner', 'manager', 'sales'].includes(resellerRole);
+  const canManageClients = permissions.can_create_tenant && currentReseller?.server_actions?.includes('create_tenant')
+    && ['owner', 'manager', 'sales'].includes(resellerRole);
 
   const { data, isLoading } = useQuery({
     queryKey: ['reseller-portal', currentReseller?.id],
-    queryFn: async () => {
-      const [
-        resellerTenants,
-        tenants,
-        brandingList,
-        commissions,
-        payouts,
-        resellerUsers,
-        pricingRules,
-        invoices,
-      ] = await Promise.all([
-        appClient.entities.ResellerTenant.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_TENANT_LINK_FIELDS }),
-        appClient.entities.Tenant.list('-created_date', undefined, { fields: RESELLER_PORTAL_TENANT_FIELDS }),
-        appClient.entities.ResellerBranding.filter({ reseller_id: currentReseller.id }, '-created_date', 5, { fields: RESELLER_PORTAL_BRANDING_FIELDS }),
-        appClient.entities.ResellerCommission.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_COMMISSION_FIELDS }),
-        appClient.entities.ResellerPayout.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_PAYOUT_FIELDS }),
-        appClient.entities.ResellerUser.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_USER_FIELDS }),
-        appClient.entities.ResellerPricingRule.filter({ reseller_id: currentReseller.id }, '-created_date', undefined, { fields: RESELLER_PORTAL_PRICING_FIELDS }),
-        appClient.entities.TenantInvoice.list('-date_facturation', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS }).catch(() => []),
-      ]);
-
-      return {
-        resellerTenants,
-        tenants,
-        branding: brandingList[0] || null,
-        commissions,
-        payouts,
-        resellerUsers,
-        pricingRules,
-        invoices,
-      };
-    },
+    queryFn: () => resellerService.getPortalContext(),
     enabled: !!currentReseller?.id && isReseller,
     staleTime: 30000,
   });
@@ -281,8 +221,10 @@ export default function ResellerPortal() {
   const cards = [
     { title: 'Commerces actifs', value: linkedTenants.filter((item) => item.assignment.status === 'active').length, icon: Store, accent: 'bg-blue-600' },
     { title: 'Crees par vous', value: createdByPortalCount, icon: Plus, accent: 'bg-orange-500' },
-    { title: 'Charges plateforme en attente', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
-    { title: 'Charges plateforme payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
+    ...(permissions.can_view_commercial_invoices ? [
+      { title: 'Charges plateforme en attente', value: currency(pendingCommissions), icon: Euro, accent: 'bg-amber-500' },
+      { title: 'Charges plateforme payees', value: currency(paidCommissions), icon: CreditCard, accent: 'bg-emerald-600' },
+    ] : []),
   ];
 
   React.useEffect(() => {
@@ -300,87 +242,20 @@ export default function ResellerPortal() {
     }
   }, [linkedTenants, selectedClientId]);
 
-  const upsertResellerTenantLink = React.useCallback(async ({ tenantId, subscriptionPlan }) => {
-    const existingAssignment = resellerTenants.find((item) => item.tenant_id === tenantId && item.reseller_id === currentReseller.id);
-
-    if (existingAssignment?.id) {
-      await appClient.entities.ResellerTenant.update(existingAssignment.id, {
-        status: 'active',
-        acquisition_channel: existingAssignment.acquisition_channel || 'reseller_portal',
-        subscription_plan: subscriptionPlan,
-        started_at: existingAssignment.started_at || new Date().toISOString(),
-      });
-      return 'updated';
-    }
-
-    await appClient.entities.ResellerTenant.create({
-      reseller_id: currentReseller.id,
-      tenant_id: tenantId,
-      acquisition_channel: 'reseller_portal',
-      subscription_plan: subscriptionPlan,
-      status: 'active',
-      started_at: new Date().toISOString(),
-    });
-
-    return 'created';
-  }, [currentReseller.id, resellerTenants]);
-
-  const copyOwnerInvite = React.useCallback(async ({ tenantId, email, label }) => {
-    const message = buildTenantOwnerInviteMessage({ tenantId, email, label });
-    if (!navigator?.clipboard?.writeText) {
-      throw new Error('Le presse-papiers n est pas disponible sur ce navigateur.');
-    }
-    await navigator.clipboard.writeText(message);
-    toast({
-      title: 'Invitation client copiee',
-      description: 'Le lien d activation proprietaire a ete copie.',
-    });
+  const copyOwnerInvite = React.useCallback(async ({ tenantId }) => {
+    const invitation = await resellerService.executeAction('create_owner_invitation', { tenant_id: tenantId });
+    if (!invitation?.message || !navigator?.clipboard?.writeText) throw new Error('Invitation indisponible');
+    await navigator.clipboard.writeText(invitation.message);
+    toast({ title: 'Invitation copiee' });
   }, [toast]);
 
   const createClientMutation = useMutation({
-    mutationFn: async () => {
-      if (!currentReseller?.id) {
-        throw new Error('Revendeur introuvable.');
-      }
-
-      if (!canManageClients) {
-        throw new Error('Votre role revendeur ne permet pas de creer un commerce.');
-      }
-
-      if (!newClientForm.nom_commercial.trim() || !newClientForm.owner_email.trim() || !newClientForm.telephone.trim() || !newClientForm.adresse.trim()) {
-        throw new Error('Tous les champs commerce sont obligatoires.');
-      }
-
-      const ownerEmail = normalizeEmail(newClientForm.owner_email);
-      const existingTenant = await withTimeout(
-        resolveTenantByOwnerEmail(ownerEmail),
-        'La verification du commerce existant prend trop de temps. Reessayez.'
-      );
-      if (existingTenant) {
-        throw new Error('Ce commerce existe deja. Merci de me contacter pour le rattachement.');
-      }
-
-      const { tenant, profile } = await withTimeout(
-        createTenantAndResolve({
-          nomCommercial: newClientForm.nom_commercial.trim(),
-          ownerEmail,
-          subscriptionPlan: newClientForm.subscription_plan,
-          adresse: newClientForm.adresse.trim(),
-          telephone: newClientForm.telephone.trim(),
-        }),
-        'La creation du commerce prend trop de temps. Verifiez Supabase ou reessayez.'
-      );
-
-      await withTimeout(
-        upsertResellerTenantLink({
-          tenantId: tenant.id,
-          subscriptionPlan: newClientForm.subscription_plan,
-        }),
-        'Le rattachement du commerce prend trop de temps. Verifiez les droits revendeur.'
-      );
-
-      return { tenant, profile, ownerEmail, mode: 'created' };
-    },
+    mutationFn: async () => resellerService.executeAction('create_tenant', {
+      nom_commercial: newClientForm.nom_commercial.trim(),
+      owner_email: normalizeEmail(newClientForm.owner_email),
+      subscription_plan: newClientForm.subscription_plan,
+      adresse: newClientForm.adresse.trim(), telephone: newClientForm.telephone.trim(),
+    }),
     onMutate: () => {
       setSubmitFeedback({
         type: 'loading',
@@ -429,172 +304,9 @@ export default function ResellerPortal() {
   });
 
   const createClientInvoiceMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedClient?.tenant?.id) {
-        throw new Error('Selectionnez un client commerce.');
-      }
-      const selectedType = document.getElementById('client-invoice-type')?.value || clientInvoiceForm.type;
-      if (!selectedType) {
-        throw new Error('Choisissez un type de facture.');
-      }
-      if (!clientInvoiceForm.montant || Number.isNaN(Number(clientInvoiceForm.montant))) {
-        throw new Error('Montant facture requis.');
-      }
-
-      const montantHT = parseFloat(clientInvoiceForm.montant);
-      const tauxTVA = parseFloat(clientInvoiceForm.tva_taux) || 0;
-      const montantMensuelTTC = parseFloat((montantHT * (1 + tauxTVA / 100)).toFixed(2));
-      const montantMensuelTVA = parseFloat((montantMensuelTTC - montantHT).toFixed(2));
-      const duree = Number(clientInvoiceForm.duree_mois || 12);
-      const isRecurring = selectedType === 'abonnement' || selectedType === 'frais_de_maintenance';
-      const montantTotalTTC = isRecurring && clientInvoiceForm.periode_debut ? montantMensuelTTC * duree : montantMensuelTTC;
-      const montantTotalHT = isRecurring && clientInvoiceForm.periode_debut ? montantHT * duree : montantHT;
-      const montantTotalTVA = isRecurring && clientInvoiceForm.periode_debut ? montantMensuelTVA * duree : montantMensuelTVA;
-
-      const invoiceData = {
-        tenant_id: selectedClient.tenant.id,
-        reseller_id: currentReseller.id,
-        numero_facture: `FAC-${Date.now()}`,
-        montant: parseFloat(montantTotalTTC.toFixed(2)),
-        tva_taux: tauxTVA,
-        type: selectedType,
-        description: clientInvoiceForm.description || null,
-        date_facturation: clientInvoiceForm.date_facturation,
-        statut: 'en_attente',
-        issuer_type: 'reseller',
-        issuer_id: currentReseller.id,
-        recipient_type: 'tenant',
-        recipient_id: selectedClient.tenant.id,
-        issuer_snapshot: buildResellerIssuerSnapshot({ reseller: currentReseller, branding }),
-        recipient_snapshot: buildTenantRecipientSnapshot(selectedClient.tenant),
-        metadata: buildPaymentRequestMetadata({
-          amountHT: parseFloat(montantTotalHT.toFixed(2)),
-          amountTVA: parseFloat(montantTotalTVA.toFixed(2)),
-          amountTTC: parseFloat(montantTotalTTC.toFixed(2)),
-          monthlyAmountHT: parseFloat(montantHT.toFixed(2)),
-          monthlyAmountTVA: parseFloat(montantMensuelTVA.toFixed(2)),
-          monthlyAmountTTC: parseFloat(montantMensuelTTC.toFixed(2)),
-        }),
-      };
-
-      if (clientInvoiceForm.is_devis) {
-        invoiceData.is_devis = true;
-      }
-
-      if ((clientInvoiceForm.materiel || '').trim()) {
-        invoiceData.materiel = clientInvoiceForm.materiel.trim();
-      }
-
-      if (isRecurring && clientInvoiceForm.periode_debut) {
-        const debut = new Date(clientInvoiceForm.periode_debut);
-        const monthlyPayments = {};
-
-        for (let i = 0; i < duree; i += 1) {
-          const moisDate = new Date(debut);
-          moisDate.setMonth(debut.getMonth() + i);
-          const moisKey = moisDate.toISOString().split('T')[0];
-          monthlyPayments[moisKey] = {
-            montant: montantMensuelTTC,
-            paye: false,
-            date_paiement: null,
-          };
-        }
-
-        const fin = new Date(debut);
-        fin.setMonth(debut.getMonth() + duree);
-        invoiceData.periode_debut = clientInvoiceForm.periode_debut;
-        invoiceData.periode_fin = fin.toISOString().split('T')[0];
-        invoiceData.monthly_payments = monthlyPayments;
-      }
-
-      const createdClientInvoice = await appClient.entities.TenantInvoice.create(invoiceData);
-
-      try {
-        const pricingRule = pricingRuleMap[selectedType];
-        if (pricingRule?.active && !clientInvoiceForm.is_devis) {
-          const chargeMonthlyHT = getEffectiveResellerChargeHT({
-            rule: pricingRule,
-            saleAmountHT: montantHT,
-          });
-          const chargeMonthlyTVA = Number((chargeMonthlyHT * (tauxTVA / 100)).toFixed(2));
-          const chargeMonthlyTTC = Number((chargeMonthlyHT + chargeMonthlyTVA).toFixed(2));
-          const chargeTotalHT = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyHT * duree : chargeMonthlyHT;
-          const chargeTotalTVA = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTVA * duree : chargeMonthlyTVA;
-          const chargeTotalTTC = isRecurring && clientInvoiceForm.periode_debut ? chargeMonthlyTTC * duree : chargeMonthlyTTC;
-
-          const platformPaymentRequest = {
-            reseller_id: currentReseller.id,
-            numero_facture: `FAC-${Date.now() + 1}`,
-            montant: Number(chargeTotalTTC.toFixed(2)),
-            tva_taux: tauxTVA,
-            type: selectedType,
-            description: `Facturation plateforme auto - ${selectedClient.tenant.nom_commercial} - ${getInvoiceTypeLabel(selectedType)}`,
-            date_facturation: clientInvoiceForm.date_facturation,
-            statut: 'en_attente',
-            issuer_type: 'platform',
-            issuer_id: null,
-            recipient_type: 'reseller',
-            recipient_id: currentReseller.id,
-            issuer_snapshot: {
-              type: 'platform',
-              legal_name: 'Strasyk POS',
-              email: 'contact@strasyk.com',
-              phone: null,
-              address: null,
-            },
-            recipient_snapshot: {
-              type: 'reseller',
-              name: currentReseller.name,
-              contact_email: currentReseller.contact_email || null,
-              phone: currentReseller.contact_phone || null,
-            },
-            metadata: {
-              ...buildPaymentRequestMetadata({
-                amountHT: Number(chargeTotalHT.toFixed(2)),
-                amountTVA: Number(chargeTotalTVA.toFixed(2)),
-                amountTTC: Number(chargeTotalTTC.toFixed(2)),
-                monthlyAmountHT: Number(chargeMonthlyHT.toFixed(2)),
-                monthlyAmountTVA: Number(chargeMonthlyTVA.toFixed(2)),
-                monthlyAmountTTC: Number(chargeMonthlyTTC.toFixed(2)),
-              }),
-              source_reseller_invoice_id: createdClientInvoice.id,
-              source_tenant_id: selectedClient.tenant.id,
-              source_pricing_rule_id: pricingRule.id,
-              auto_generated_from_reseller_sale: true,
-            },
-          };
-
-          if (isRecurring && clientInvoiceForm.periode_debut) {
-            const debut = new Date(clientInvoiceForm.periode_debut);
-            const monthlyPayments = {};
-            for (let i = 0; i < duree; i += 1) {
-              const moisDate = new Date(debut);
-              moisDate.setMonth(debut.getMonth() + i);
-              const moisKey = moisDate.toISOString().split('T')[0];
-              monthlyPayments[moisKey] = {
-                montant: chargeMonthlyTTC,
-                paye: false,
-                date_paiement: null,
-              };
-            }
-            const fin = new Date(debut);
-            fin.setMonth(debut.getMonth() + duree);
-            platformPaymentRequest.periode_debut = clientInvoiceForm.periode_debut;
-            platformPaymentRequest.periode_fin = fin.toISOString().split('T')[0];
-            platformPaymentRequest.monthly_payments = monthlyPayments;
-          }
-
-          await appClient.entities.TenantInvoice.create(platformPaymentRequest);
-        }
-
-        return createdClientInvoice;
-      } catch (error) {
-        if (createdClientInvoice?.id) {
-          await appClient.entities.TenantInvoice.delete(createdClientInvoice.id).catch(() => null);
-        }
-        throw error;
-      }
-    },
+    mutationFn: async () => resellerService.executeAction('create_invoice', {
+      tenant_id: selectedClientId, invoice_draft: clientInvoiceForm,
+    }),
     onSuccess: async () => {
       toast({ title: '✅ Facture client creee' });
       setClientInvoiceForm(createInvoiceForm());
@@ -606,32 +318,7 @@ export default function ResellerPortal() {
   });
 
   const markInvoicePaidMutation = useMutation({
-    mutationFn: async (invoice) => {
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS });
-      const existingFinalInvoice = allInvoices.find((item) => (
-        isFinalInvoice(item)
-        && item.metadata?.linked_payment_request_id === invoice.id
-        && !item.metadata?.paid_month
-      ));
-      const finalInvoice = existingFinalInvoice || buildFinalInvoiceFromPaymentRequest(invoice);
-      let createdFinalInvoice = null;
-
-      try {
-        if (!existingFinalInvoice) {
-          createdFinalInvoice = await appClient.entities.TenantInvoice.create(finalInvoice);
-        }
-
-        return await appClient.entities.TenantInvoice.update(invoice.id, {
-          statut: 'payee',
-          date_paiement: finalInvoice.date_paiement,
-        });
-      } catch (error) {
-        if (!existingFinalInvoice && createdFinalInvoice?.id) {
-          await appClient.entities.TenantInvoice.delete(createdFinalInvoice.id).catch(() => null);
-        }
-        throw error;
-      }
-    },
+    mutationFn: async (invoice) => resellerService.executeAction('mark_invoice_paid', { invoice_id: invoice.id }),
     onSuccess: async () => {
       toast({ title: '✅ Paiement valide' });
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
@@ -642,43 +329,9 @@ export default function ResellerPortal() {
   });
 
   const toggleMonthlyPaymentMutation = useMutation({
-    mutationFn: async ({ invoice, monthKey }) => {
-      const updatedPayments = { ...(invoice.monthly_payments || {}) };
-      const currentPayment = updatedPayments[monthKey] || {};
-      const isBecomingPaid = !currentPayment.paye;
-      updatedPayments[monthKey] = {
-        ...currentPayment,
-        paye: isBecomingPaid,
-        date_paiement: isBecomingPaid ? new Date().toISOString().split('T')[0] : null,
-      };
-      const nextStatus = computeInvoiceStatusFromMonthlyPayments(updatedPayments);
-
-      const allInvoices = await appClient.entities.TenantInvoice.list('-created_date', undefined, { fields: RESELLER_PORTAL_INVOICE_FIELDS });
-      const existingFinalInvoice = allInvoices.find((item) => (
-        isFinalInvoice(item)
-        && item.metadata?.linked_payment_request_id === invoice.id
-        && item.metadata?.paid_month === monthKey
-      ));
-
-      if (isBecomingPaid && !existingFinalInvoice) {
-        await appClient.entities.TenantInvoice.create(
-          buildFinalInvoiceFromPaymentRequest({
-            ...invoice,
-            monthly_payments: updatedPayments,
-          }, monthKey),
-        );
-      }
-
-      if (!isBecomingPaid && existingFinalInvoice?.id) {
-        await appClient.entities.TenantInvoice.delete(existingFinalInvoice.id);
-      }
-
-      return appClient.entities.TenantInvoice.update(invoice.id, {
-        monthly_payments: updatedPayments,
-        statut: nextStatus,
-        date_paiement: nextStatus === 'payee' ? new Date().toISOString().split('T')[0] : null,
-      });
-    },
+    mutationFn: async ({ invoice, monthKey }) => resellerService.executeAction('toggle_monthly_payment', {
+      invoice_id: invoice.id, month_key: monthKey,
+    }),
     onSuccess: async () => {
       toast({ title: '✅ Paiement mensuel mis a jour' });
       await queryClient.invalidateQueries({ queryKey: ['reseller-portal'] });
@@ -766,6 +419,7 @@ export default function ResellerPortal() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
+          if (!allowedTabs.has(value)) return;
           setActiveTab(value);
           const searchParams = new URLSearchParams(location.search);
           searchParams.set('tab', value);
@@ -773,15 +427,15 @@ export default function ResellerPortal() {
         }}
         className="w-full"
       >
-        <TabsList className="grid w-full grid-cols-8">
-          <TabsTrigger value="clients">Clients</TabsTrigger>
-          <TabsTrigger value="stats">Statistiques</TabsTrigger>
-          <TabsTrigger value="accounting">Comptabilite</TabsTrigger>
-          <TabsTrigger value="invoices">Factures</TabsTrigger>
-          <TabsTrigger value="commissions">Commissions</TabsTrigger>
-          <TabsTrigger value="pricing">Tarifs</TabsTrigger>
-          <TabsTrigger value="branding">Branding</TabsTrigger>
-          <TabsTrigger value="team">Equipe</TabsTrigger>
+        <TabsList className="flex w-full flex-wrap">
+          {allowedTabs.has('clients') && <TabsTrigger value="clients">Clients</TabsTrigger>}
+          {allowedTabs.has('stats') && <TabsTrigger value="stats">Statistiques</TabsTrigger>}
+          {allowedTabs.has('accounting') && <TabsTrigger value="accounting">Comptabilite</TabsTrigger>}
+          {allowedTabs.has('invoices') && <TabsTrigger value="invoices">Factures</TabsTrigger>}
+          {allowedTabs.has('commissions') && <TabsTrigger value="commissions">Commissions</TabsTrigger>}
+          {allowedTabs.has('pricing') && <TabsTrigger value="pricing">Tarifs</TabsTrigger>}
+          {allowedTabs.has('branding') && <TabsTrigger value="branding">Branding</TabsTrigger>}
+          {allowedTabs.has('team') && <TabsTrigger value="team">Equipe</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="clients" className="mt-4 space-y-4">
@@ -792,7 +446,7 @@ export default function ResellerPortal() {
             <CardContent className="space-y-4">
               {!canManageClients ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  Votre role revendeur actuel ne permet pas de creer un commerce. Demandez a un owner ou manager revendeur.
+                  La creation de commerces doit etre autorisee individuellement par STRASYK.
                 </div>
               ) : (
                 <>
@@ -904,6 +558,7 @@ export default function ResellerPortal() {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={!canManageClients || !currentReseller?.server_actions?.includes('create_owner_invitation')}
                       onClick={() => {
                         setSelectedClientId(tenant.id);
                         copyOwnerInvite({ tenantId: tenant.id, email: tenant.owner_email, label: tenant.nom_commercial });
@@ -1055,7 +710,7 @@ export default function ResellerPortal() {
                                 placeholder="Optionnel"
                               />
                             </div>
-                            <Button onClick={() => createClientInvoiceMutation.mutate()} disabled={createClientInvoiceMutation.isPending}>
+                            <Button onClick={() => createClientInvoiceMutation.mutate()} disabled={!canChangeInvoices || createClientInvoiceMutation.isPending}>
                               <FileText className="w-4 h-4 mr-2" />
                               Creer la facture
                             </Button>
@@ -1116,6 +771,7 @@ export default function ResellerPortal() {
                                             <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
                                             <button
                                               onClick={() => toggleMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
+                                              disabled={!canChangeInvoices}
                                               className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
                                             >
                                               {payment.paye ? '✓' : '×'}
@@ -1137,7 +793,7 @@ export default function ResellerPortal() {
                                     <Button
                                       size="sm"
                                       onClick={() => markInvoicePaidMutation.mutate(invoice)}
-                                      disabled={markInvoicePaidMutation.isPending}
+                                      disabled={!canChangeInvoices || markInvoicePaidMutation.isPending}
                                       className="bg-green-600 hover:bg-green-700"
                                     >
                                       <CheckCircle className="w-4 h-4 mr-2" />
@@ -1491,6 +1147,7 @@ export default function ResellerPortal() {
                               <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
                               <button
                                 onClick={() => toggleMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
+                                              disabled={!canChangeInvoices}
                                 className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
                               >
                                 {payment.paye ? '✓' : '×'}
@@ -1512,7 +1169,7 @@ export default function ResellerPortal() {
                       <Button
                         size="sm"
                         onClick={() => markInvoicePaidMutation.mutate(invoice)}
-                        disabled={markInvoicePaidMutation.isPending}
+                        disabled={!canChangeInvoices || markInvoicePaidMutation.isPending}
                         className="bg-green-600 hover:bg-green-700"
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
@@ -1593,6 +1250,7 @@ export default function ResellerPortal() {
                                 <p>{Number(payment.montant || 0).toFixed(2)} EUR</p>
                                 <button
                                   onClick={() => toggleMonthlyPaymentMutation.mutate({ invoice, monthKey: month })}
+                                              disabled={!canChangeInvoices}
                                   className={`mt-2 w-6 h-6 rounded flex items-center justify-center ${payment.paye ? 'bg-green-500 text-white' : 'bg-gray-300 hover:bg-gray-400'}`}
                                 >
                                   {payment.paye ? '✓' : '×'}
@@ -1614,7 +1272,7 @@ export default function ResellerPortal() {
                         <Button
                           size="sm"
                           onClick={() => markInvoicePaidMutation.mutate(invoice)}
-                          disabled={markInvoicePaidMutation.isPending}
+                          disabled={!canChangeInvoices || markInvoicePaidMutation.isPending}
                           className="bg-green-600 hover:bg-green-700"
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />

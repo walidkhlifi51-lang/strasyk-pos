@@ -86,7 +86,7 @@ export const createTenantAndResolve = async ({
     slug: buildTenantSlug(nomCommercial),
     owner_email: normalizedEmail,
     subscription_plan: subscriptionPlan,
-    active: true,
+    active: false,
   });
 
   const resolvedTenant = createdTenant?.id

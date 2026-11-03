@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import TenantSelector from '@/components/auth/TenantSelector';
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -223,6 +224,7 @@ const SidebarShell = ({
       </div>
     )}
 
+    <TenantSelector />
     <div className="flex flex-1 flex-col overflow-y-auto">
       <nav className="p-4">
         <ul>
@@ -356,6 +358,7 @@ const AppLayout = ({ children, currentPageName }) => {
           <p className="mb-6 text-gray-600">
             Votre abonnement est suspendu. Veuillez contacter le support pour regulariser votre situation.
           </p>
+          <TenantSelector />
           <button
             onClick={async () => {
               await appClient.auth.logout();
@@ -371,7 +374,11 @@ const AppLayout = ({ children, currentPageName }) => {
     );
   }
 
-  if (status === "error" || status === "no_access" || status === "tenant_not_found") {
+  if (status === "error") {
+    return <AccessDenied title="Verification des acces indisponible" description="La verification de vos acces a echoue. Reessayez ou contactez STRASYK." />;
+  }
+
+  if (status === "no_access" || status === "tenant_not_found") {
     if (currentPageName !== "RequestAccess") {
       window.location.href = createPageUrl("RequestAccess");
       return null;
@@ -379,7 +386,11 @@ const AppLayout = ({ children, currentPageName }) => {
     return <WaitingForAccess />;
   }
 
-  const isPureSuperAdmin = isPlatformAdmin && !currentTenant && !currentReseller && !userRole;
+  if (isReseller && currentPageName !== 'ResellerPortal') {
+    return <AccessDenied description="Votre compte distributeur donne acces uniquement a votre portail commercial." />;
+  }
+
+  const isPureSuperAdmin = isPlatformAdmin && !currentTenant && !currentReseller;
   const hasCurrentPageAccess = isPlatformAdmin && PLATFORM_ADMIN_ALLOWED_PAGES.has(currentPageName)
     ? true
     : !pagePermissionMap[currentPageName] || hasModuleAccess(pagePermissionMap[currentPageName]);

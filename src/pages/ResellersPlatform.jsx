@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, FileText, Download, CheckCircle, Trash2, Loader2, Upload, Clock3 } from 'lucide-react';
+import { Building2, Handshake, Palette, Store, Euro, Plus, Link as LinkIcon, Unlink, ShieldAlert, Download, CheckCircle, Trash2, Loader2, Upload, Clock3 } from 'lucide-react';
 import { buildAbsoluteAppUrl } from '@/lib/appUrls';
 import { buildTenantOwnerInviteMessage } from '@/lib/tenantProvisioning';
 import { generateInvoicePDF } from '@/components/admin/InvoicePDFGenerator';
@@ -44,7 +44,6 @@ const createEmptyResellerForm = () => ({
   status: 'active',
   contact_email: '',
   contact_phone: '',
-  company_name: '',
   address: '',
   siret: '',
   vat_number: '',
@@ -74,7 +73,7 @@ const isEmbeddedImageUrl = (value) => `${value || ''}`.startsWith('data:image/')
 const isEmbeddedFileUrl = (value) => `${value || ''}`.startsWith('data:');
 
 const currency = (value) => `${Number(value || 0).toFixed(2)} EUR`;
-const RESELLER_PLATFORM_FIELDS = ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'company_name', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'];
+const RESELLER_PLATFORM_FIELDS = ['id', 'name', 'type', 'status', 'contact_email', 'contact_phone', 'address', 'siret', 'vat_number', 'kbis_document_url', 'identity_document_url', 'other_document_url', 'notes', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_BRANDING_FIELDS = ['id', 'reseller_id', 'brand_name', 'logo_url', 'primary_color', 'secondary_color', 'support_email', 'support_phone', 'custom_domain', 'domain_verified', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_TENANT_LINK_FIELDS = ['id', 'reseller_id', 'tenant_id', 'acquisition_channel', 'subscription_plan', 'status', 'started_at', 'created_date', 'updated_date'];
 const RESELLER_PLATFORM_USER_FIELDS = ['id', 'reseller_id', 'user_email', 'role', 'status', 'created_date', 'updated_date'];
@@ -383,7 +382,6 @@ A bientot.`;
       status: selectedReseller.status || 'active',
       contact_email: selectedReseller.contact_email || '',
       contact_phone: selectedReseller.contact_phone || '',
-      company_name: selectedReseller.company_name || '',
       address: selectedReseller.address || '',
       siret: selectedReseller.siret || '',
       vat_number: selectedReseller.vat_number || '',
@@ -442,7 +440,6 @@ A bientot.`;
         status: newResellerForm.status,
         contact_email: newResellerForm.contact_email.trim() || null,
         contact_phone: newResellerForm.contact_phone.trim() || null,
-        company_name: newResellerForm.company_name.trim() || null,
         address: newResellerForm.address.trim() || null,
         siret: newResellerForm.siret.trim() || null,
         vat_number: newResellerForm.vat_number.trim() || null,
@@ -483,7 +480,6 @@ A bientot.`;
         status: resellerForm.status,
         contact_email: resellerForm.contact_email.trim() || null,
         contact_phone: resellerForm.contact_phone.trim() || null,
-        company_name: resellerForm.company_name.trim() || null,
         address: resellerForm.address.trim() || null,
         siret: resellerForm.siret.trim() || null,
         vat_number: resellerForm.vat_number.trim() || null,
@@ -565,7 +561,6 @@ A bientot.`;
           status: 'active',
           contact_email: request.email.trim(),
           contact_phone: request.telephone?.trim() || null,
-          company_name: request.nom_commercial.trim(),
           address: request.adresse?.trim() || null,
           notes: [
             request.message?.trim(),
@@ -1335,7 +1330,7 @@ A bientot.`;
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Nom revendeur</Label>
+                      <Label>Nom / raison sociale du revendeur</Label>
                       <Input value={resellerForm.name} onChange={(event) => setResellerForm((prev) => ({ ...prev, name: event.target.value }))} />
                     </div>
                     <div className="space-y-2">
